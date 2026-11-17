@@ -1,0 +1,90 @@
+# MASTER PLAN — Pi 4 (8 GB) local AI receptionist
+Version 1.1 · 2026-11-17 · Owner Alex · Independent QA Ramona
+
+**This file is canonical for sprint ordering, scope, dependencies, and release gates.** Agents first read `AGENTS.md` and their role file. Research/long-form requirements: https://docs.google.com/document/d/1pw6pMB9rPBjglflAK-l1i4pcpTMXr65xeBihhxzsJ6M/edit. Architecture/contracts: `docs/contracts.md`. Pi/Tailscale hands-on guide: `docs/PI_TAILSCALE_RUNBOOK.md`. Live status: `docs/CURRENT_STATE.md`. No model, speech, Pi latency or Twilio claims are accepted without real evidence.
+
+## 0 — User outcome and explicit definition of done
+A Raspberry Pi 4 Model B 8GB powers a **local inference** AI receptionist for a single business. A caller can ask common business questions, find a free appointment, request or change a time, explicitly confirm, and receive a truthful spoken result. The model interprets; **code with validation and an atomic calendar transaction decides**. Local speech and model runtime execute on Pi. Twilio later supplies PSTN number, HTTPS webhook and bidirectional WSS audio (not cloud AI inference).
+Remote development: Alex + Ramona on **two different laptops, each with their own GitHub and Tailscale identity**, can access their own clone and reach a Pi test environment through the private tailnet. One agent owns implementation; the other writes independent TDD and adversarial tests. GitHub CI and reviews prevent unchecked changes from reaching main.
+Definition of done for production: all critical G0–G9 green with raw evidence, audited exposure and permissions, a real Twilio call, verified customer consent/retention and human escalation behavior, restore demonstration and a sustainable cost/ops model. Until then call it a prototype or demo.
+
+## 1 — Architectural constraints and interfaces
+System: Twilio PSTN → /twilio/voice TwiML <Connect><Stream> → per-call WSS (inbound G.711 μ-law 8k) → decode/VAD/ASR → model intent/FAQ extraction → validated finite-state dialogue → SQLite booking policy/transaction → response text → local TTS → μ-law frames/media+mark over same WSS; interruptions trigger clear and generation cancellation.
+One **bidirectional** WSS stream per call, two independent WSS connections for two callers. At first support **one active on-Pi inference**, with bounded queue or graceful busy/handoff for second; test two-call **safety/isolation** regardless of throughput. Never infer the Pi can simultaneously infer at low latency without measuring.
+Resource constraints: Pi4 8GB ARM64; quantized candidates only after actual runtime compatibility proof (FunctionGemma 270M, LFM2.5 350M, Qwen3 0.6B), no fabricated comparisons. Read-only model assets and pinned binary+model hashes; never load whole model per audio chunk. Use non-blocking WebSocket I/O, bounded audio queues and watchdog. No public development mode.
+Data: UTC at rest, IANA local time for business/customer, configurable business hours and service duration, BEGIN IMMEDIATE overlap checks, unique idempotency key. Cancellation/rescheduling requires secure verification; bearer reference alone **is not sufficient for production**. Confirm only after DB commit. Handle DST nonexistent/ambiguous time and correction/handoff explicitly. Transcript/recording opt-in and minimal retention.
+See `docs/contracts.md` for the currently **implemented starter** interface. It is v0.1, not the aspirational typed interface in the research Doc. Contract migration must be tested and acknowledged by both owners before code switches.
+
+## 2 — Pair workflow (make it run on just a name)
+At each coding session user says "You are Laptop 1 Alex" or "You are Laptop 2 Ramona. Read AGENTS.md and begin next unlocked task." Both agent runtimes should inspect the actual repo and Git history, not assume another tool's previous answer is current. Both need separate GitHub auth, checkout and optional authenticated Google Drive access. Copy of specs in GitHub is sufficient if Google access isn't connected.
+Branch ownership: Alex `feat/receptionist-core`; Ramona `test/evaluation-harness`; main integration only. Use small PRs and review. Rebase/merge main carefully when doc changes land. If one PR adds a dependency, the other agent can continue independent red tests rather than conflict.
+TDD locks are **procedural** until branch protection and automated required checks are set by an admin. RED (failing behavior) → GREEN (same test passes) → REFACTOR (full suite remains green); do not count skips or mocks as actual hardware evidence. Lock only clears with evidence and reviewer acknowledgement. Pi and live Twilio credentials require physical/account owner action; no need to block laptop mocks.
+
+## 3 — Sprint map (ordered by dependencies, not arbitrary dates)
+
+### S0 — Agent bootstrap, contracts and CI [BOTH; prerequisite to everything]
+Alex deliver: immutable starting contract documentation, testable local setup, dependency review, .env.example, baseline smoke and CI. Ramona deliver: independent baseline run, pytest discovery, secrets scan, role-branch checks, contract snapshots. Check root AGENTS/CLAUDE instructions and both roles resolve. Preserve starter tests.
+**RED:** environment missing, auth or import failure, test cannot find code. **GREEN:** each laptop clones checkout, `python -m pip install -e ".[dev]"`, `python -m pytest -q`; GitHub Actions green on 3.11/3.12, explicit output SHA. **G0** blocked until witnessed on both laptops and CI (prior standalone 9 tests are only partial evidence). **Freeze:** repo-wide conventions.
+
+### S1 — PI FIRST: reproducible 64-bit OS, repo clone, Tailscale & dual-laptop SSH [ALEX infrastructure; RAMONA acceptance]
+This sprint happens **before live model/voice optimization**; it is not postponed until Twilio. Hardware owner installs Raspberry Pi OS 64-bit to valid SD/USB boot media, boots with fan and stable PSU, updates apt with approval, enables appropriate SSH. Use supported Tailscale installation per official docs, then `sudo tailscale up --hostname=lex-receptionist-pi` (device owner completes browser auth), optionally `sudo tailscale set --ssh` ONLY with verified tailnet SSH policies. Invite/share access with Ramona's *distinct* Tailscale identity and define least-privilege ACL/SSH user policy; no shared login or router port forwards. Tailscale cannot provide SSH by itself; either authorized Tailscale SSH or conventional SSH daemon + keys on the tailnet.
+Both laptops: install/login Tailscale; `tailscale status` shows Pi; `tailscale ping lex-receptionist-pi` (or IP); `ssh <approved-user>@lex-receptionist-pi`; execute authorized read-only hardware proof. Create separate Pi checkouts/venvs (no shared mutable working tree); Alex's isolated preview process only on 127.0.0.1. Use `ssh -L 8000:127.0.0.1:8000 ...` from laptop for private `/healthz`, not a public dev service. Pi clones repo via `git clone` (or pulls reviewed main), installs `pip install -e ".[dev]"` in a venv, runs pytest, records git SHA, model and RAM, checked commands. `scripts/pi_preflight.sh` and `scripts/pi_smoke.sh` are starter commands, require human review, and should be improved by agent TDD.
+**RED:** automated preflight fails on non-Pi/x86 or missing Tailscale; no signed-off dual-account SSH; health not reachable; partial sample logs missing SHA. **GREEN:** both independent logins connect to same Pi, `uname -m=aarch64`, physical model asserts Raspberry Pi 4 Model B and ~8GB memory, `pytest -q` on Pi, local `/healthz` via private SSH tunnel, service survives controlled restart, no DEV_ALLOW_UNSIGNED public URL. Ramona stores anonymized evidence with device/software SHA, counts and ACL tests. **G1:** pass ONLY with actual Pi+two-laptop evidence; otherwise BLOCKED. Do **not** install cloud tunnel or expose Twilio yet. **Freeze:** networking/access/run commands.
+
+### S2 — Deterministic booking, verified caller, state machine [ALEX implementation; RAMONA RED/QA]
+Interface migration to typed `IntentEnvelope/Reply` if mutually approved. CRUD in SQLite WAL with BEGIN IMMEDIATE, per-resource overlap, idempotency conflict rejection; atomic rescheduling, verification for cancellation, business hours, DST gaps/folds, no/yes/corrections and session isolation. Store UTC and compare overlap `existing_start < new_end AND existing_end > new_start`.
+**RED:** two SQLite connections racing identical slot; wrong session confirms, partial/invalid/no confirmation, two-step reschedule rollback, repeated idempotency with changed payload, security bypass, timezone edge case. **GREEN:** deterministic tests with 1000 seeded critical concurrency attempts, zero overlaps or false confirmations; handling and no prompt-based writes. **G2** lock on any safety regression. Preproduction stronger verification required regardless of starter UUID cancellation.
+
+### S3 — Local NLU/model and FAQ truthfulness [ALEX implementation; RAMONA independent eval]
+Abstract inference engine including mock baseline + llama.cpp-compatible quantized model after verified architecture/runtime. Strict schema validation, compact prompt, dates correction, uncertainty fallback, retrieval of curated FAQs (100+ supported); never hallucinate business hours/prices. Basic intent classes book, availability, cancel, reschedule, faq, human, unknown. Keep full model inference on Pi; dev fixtures may use rules for regression.
+**RED:** malformed JSON, wrong intent, ambiguous dates, bad duration, FAQ answer unsupported, refusal/handoff. Ramona builds >=200 dev and >=200 **sealed** held-out utterances, defines strict all-fields match and per-field scores. **GREEN:** held-out report with exact counts, confusion matrix and configuration hashes; aspiration ≥98% structured extraction accuracy **is a target, not a pass without evidence**. **G3** independent evaluation.
+
+### S4 — Local ASR, VAD, TTS & audible turn-taking [ALEX implementation; RAMONA test/fixtures]
+Use license-appropriate local whisper.cpp or Pi-compatible ASR and Piper or compatible Pi TTS with pinned versions, quantization and voice files. Codecs 8k μ-law → PCM16/resampling → ASR; stream response with full duplex I/O and cancellable TTS. Correct endpointing including barge-in, background noise, accents/real consented speech. Strict timeout and bounded queues.
+**RED:** wrong rates/headers, malformed bytes, silence/voice boundaries, dropped/jittery chunks, stale TTS after interruption, unreadable Piper output. **GREEN:** repeatable speech fixture is transcribed into an action and audible synthesized reply on Pi, known codec/frame tests, no hanging tasks; memory bound. **G4** audible signal and raw proof, not silent MockTTS.
+
+### S5 — Two-way Twilio protocol simulator + TWO CALL streams [ALEX implementation; RAMONA adversarial test]
+Keep /twilio/voice and WS /twilio/media protocol. **One bidirectional WS per call**, server emits media/mark/clear; receives connected/start/media/mark/stop. For simultaneous two callers, two independent callSid/streamSid and queues. Test T1 inbound/outbound simultaneously; T2 barge-in clear and stale audio cancellation; T3 two callers no cross-talk; T4 same-slot race exactly one commit; T5 frame loss/replay and late mark; T6 bad JSON/base64 and streamSid spoof; T7 slow model/backpressure; T8 hangup cleanup; T9 reconnect; T10 bounded soak. No real Twilio key needed for deterministic mock.
+**RED:** wrong stream IDs/frame schema, old media after clear, infinite queues, shared data across calls, unauthenticated public ingress. **GREEN:** all simulated protocol/dual-session tests with clean redacted trace and stream isolation; **G5** simulator verified, still not live transport tested.
+
+### S6 — Pi4 scientific benchmarks & latency optimization [ALEX tuning; RAMONA reproducible evidence]
+Requires S1/S3/S4 and applicable S5. Benchmark actual Pi4/8GB, capture machine identity and software/model SHA, prompt, thread count, quant, run temperature and throttling, RSS, swap, ASR and TTS phase times, TTFT, tokens/sec, p50/p95 caller end-of-speech to first audible reply. Min 3 warmups + 30 valid fixed-workload full calls/config, temperature controls and exclusion counts; use fixed held-out set for final evaluation and new configs only dev set. Optimize threads, batch, context, cache, pipeline overlap under memory/heat budget. Never substitute laptop speeds or fabricated samples.
+**GREEN G6:** persistent raw JSONL/CSV + reproducible command + regression comparison + honest p95 verdict; 1.5 s target must actually be reached or marked FAILED with bottleneck. Minimum one robust live local call; second caller safely queued/busy without overwriting first.
+
+### S7 — Twilio phone number, signed HTTPS/WSS, live tests [ALEX integration; RAMONA witnessing]
+Blocked until real Twilio account SID/token/number, official webhook and public WSS ingress provisioned. Twilio is a telephony transport and billed; don't put auth in repo/Google Doc. Real HTTPS POST /twilio/voice signature with exact externally-visible request URL, WSS handshake signature verification, <Connect><Stream> and 8k μ-law media, secure reverse proxy TLS, call limits, retention/consent/transfer. Do not use Tailscale Serve as substitute for public Twilio ingress; Tailscale Serve remains tailnet-only, Funnel/public reverse proxy requires separate security review.
+**RED:** signature mismatch, wrong URL/scheme, bad headers, incomplete hangup, bill surprise, missing human fallback. **GREEN G7:** witnessed phone conversation with inbound/outbound speech, corrected booking, two simultaneous callers, interruption, cancel+verification, timeout, cost/consent. If keys missing: **BLOCKED**, not "simulation pass."
+
+### S8 — Production-grade ops, threat model and reliability [BOTH]
+systemd unit with dedicated unprivileged service user, auto-restart, safe boot dependencies/health, capacity/handoff, immutable config snapshots, backup+restore, secret redaction and least-privilege API keys, log retention, minimal PII, overtemp and out-of-disk behavior, rollback and patch policy. Soak, reboot, temp and power failure tests; no silent appointment success after crash. **G8:** outage/restart and restore proof, bounded memory, no public dev bypass.
+
+### S9 — Controlled business pilot & release decision [BOTH]
+Known service catalog and business-specific FAQ, consent/recording policies, booking confirmation wording, actual caller identity proof, fallback operator, latency+accuracy/race reports, Twilio ongoing costs, PSU/storage/Pi cost, maintenance economics, pre-sale pilot scope. **G9:** all mandatory gates PASS with evidence, staged launch signed off by owner. Final state MUST be **DEMO-ONLY / CONDITIONAL / PRODUCTION-READY** with explicit reasons. A conditional release may not bypass critical safety/authentication.
+
+## 4 — Gate policy / critical non-negotiables
+| Gate | Pass evidence | Block if missing |
+|---|---|---|
+| G0 | Two local environments + real CI green | Access/CI not verified |
+| G1 | Pi4+8GB verified; both Tailscale logins have authorized SSH; Pi pytest and private health PASS | Pi absent/offline/unapproved ACL |
+| G2 | 0 overlapping/false-confirmation critical cases, rollback, identity checks | Any unsafe write |
+| G3 | Versioned held-out accuracy with evidence | No real local model evaluation |
+| G4 | Real audible Pi TTS/ASR and codec tests | Only mock silence |
+| G5 | Simulated duplex and dual-call isolation suite | Any caller leakage/protocol abuse |
+| G6 | Fixed raw Pi4 performance report | Laptop/synthetic timing only |
+| G7 | Signed live Twilio calls and billing cap | No keys/public WSS or missing auth |
+| G8 | Restart/backup/privacy/robustness | Loss/PII/secrets/unsafe restart |
+| G9 | Human acceptance, policy and economics | No independently reviewed release |
+
+## 5 — Testing and evidence protocol
+Every PR includes task/sprint, "RED" before screenshot/log of purposeful failure, "GREEN" focused+full command/output, changed contracts, QA sign-off and evidence artifact under `docs/evidence/` when small and sanitized (raw customer data remains private/off-repo). Assertions always distinguish MOCK, LAPTOP, PI4, LIVE TWILIO. Store reproducibility metadata: timestamp, SHA, model binary/weights SHA256, Python version, arch, Pi model/RAM, packages, test count, number skipped, env mode, test seed, relevant temperatures. Never mark safety tests as xfail/skip or change expectations to pass. Manual control currently: do not claim automated GitHub required branch protections are configured until verified.
+
+## 6 — Daily sprint protocol
+1. Each agent reads role/task ledger and checks origin/main; synchronize without overwriting work.
+2. Alex identifies next implementation API and asks Ramona to write RED test; Ramona can work ahead on unaffected tests.
+3. Review failing tests; Alex fixes on role branch, Ramona independently re-runs and triages; each opens role PR.
+4. Do not simultaneously modify shared files in separate branches. Conflict-prone files must have designated owner. Full PR review by other identity before merging.
+5. Start Pi tests only by permission, holding mutually coordinated exclusive benchmark lock; backup/restore test state separate from live booking store. No production data in tests.
+6. Update `docs/CURRENT_STATE.md` via reviewed PR with SHA and gate evidence.
+
+## 7 — Fastest useful 48-hour route (does NOT imply full production in 48 hours)
+Phase A: make both agents recognize roles; verify local starter tests/CI. Phase B: Pi OS+Tailscale+both SSH + remote `pytest` and private health. Phase C: Ramona expands booking and duplex stress tests while Alex implements fixes and minimal local-model support. Phase D: report each gate honestly, keeping live Twilio blocked. Favor durable reproducible infrastructure over unvalidated "fully working" claims.
