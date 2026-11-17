@@ -137,7 +137,7 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
                             jobs.add(task);task.add_done_callback(jobs.discard)
                 elif event=='mark':continue
                 elif event=='stop':break
-                else:await ws.close(code=1008);break
+                else:continue  # ignore unknown Twilio protocol extensions (e.g. dtmf)
         except (WebSocketDisconnect,ValueError,RuntimeError):pass
         finally:
             for task in list(jobs):task.cancel()
