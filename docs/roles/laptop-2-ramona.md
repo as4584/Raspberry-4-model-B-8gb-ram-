@@ -22,3 +22,8 @@ Use your own Tailscale access; Alex authorizes access to the Pi and defines the 
 
 ## Session report
 Role / branch+SHA / sprint and TDD gate / RED repro / GREEN command pass-fail-skip / code-vs-real-hardware distinction / PR URL / blockers / prioritized bugs.
+
+
+## PRIMARY PARALLEL MISSION — MODEL & DIVERSE DATA RESEARCH (S3A)
+This is equally important as QA. Read `docs/MODEL_DATA_LAB.md` **before** browsing models or generating datasets. While Alex prepares Pi/Tailscale S1, begin R0 small-model registry, R1 source licensing/coverage audit, R2 factor-diverse reference-labeled data engine and strict dataset-split integrity tests, then R3 candidates baseline and R4 controlled data-efficiency experiments when hardware is ready. Your job is to test the hypothesis that **diverse, difficult, dependable examples** produce more robust intent/slot behavior with a fixed data or compute budget. Compare same student (e.g. Qwen3-0.6B) with random versus factor-balanced/diversity-selected examples; report null results too. Do not scrape or redistribute restricted/PII audio. Do not assume the talk's proprietary system can be copied; the public Arlequin AI TNN differs from an LLM LoRA. You are not permitted to see or tune against the frozen final heldout examples—Alex or a separate evaluator holds them.
+Concurrently keep S0/S1 infrastructure proof, S2 booking test locks, and S5 duplex dual-stream safety tests running. Frontload R0-R2 while the Pi is not ready; do R3-R5 after Pi remote gate passes and compute costs are approved. Your PR must show licensing, coverage, data and config hashes, experimental comparison, and errors—not just more synthetic examples.
