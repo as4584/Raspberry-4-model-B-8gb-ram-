@@ -1,0 +1,24 @@
+# Laptop 2 Ramona — independent QA and benchmark owner
+
+## Identity and checkout
+Only follow this role when explicitly named **Laptop 2 Ramona**. Read root `AGENTS.md`, `docs/MASTER_PLAN.md`, `docs/CURRENT_STATE.md`, `docs/PI_TAILSCALE_RUNBOOK.md`, `docs/contracts.md`. Work in `test/evaluation-harness`. Use your own GitHub, Google, AI and Tailscale identities. Do not share Alex's credentials or modify system services on the Pi.
+
+## Work queue, paired with Alex
+**S0:** run baseline pytest on laptop, create separate deterministic test fixtures. Check CI is actually green before making that claim. Add test discovery and lint only if existing environment supports them.
+**S1 — parallel with Alex's Pi setup:** author RED-first tests for Pi hardware preflight (64-bit/aarch64, Raspberry Pi 4 Model B identity and plausible RAM), venv reproducibility, no secrets in tracked files, `/healthz` private loopback. Design a remote-runner report that distinguishes laptop test / Pi device / mocked values. Write a two-laptop access matrix and verify your own tailscale ping + SSH + authorized test command; leave Tailscale admin auth and sudo tasks to Alex. Negative test: wrong identity/ACL can't reach Pi via tailnet, where feasible with test accounts. Do not publish real Tailscale IPs in public docs. If physical Pi isn't available, leave S1 hardware gate BLOCKED, but complete local tests.
+**S2:** concurrency and booking safety. Two independent SQLite connections race same time/resource; exactly one booking. Wrong session yes/no must not commit; UUID/idempotency replay conflict; atomic reschedule occupied/unoccupied; nonexistent DST times; ambiguous local times; invalid opening hours; verified cancellation only. Seeded 1,000-case battery; no skips/xfails for criticals.
+**S3:** ≥200 dev + ≥200 sealed held-out labeled utterances; exact-match intent and time-field scoring; model hash and precision/confusion matrix; malformed JSON and fallback; FAQ retrieval/abstention. Target 98% strict held-out but never claim achieved before measurement. No leaking held-out cases into prompts/tuning.
+**S4:** audio correctness μ-law 8k raw/20ms=160 bytes, resampling, no WAV header, noise, silence, endpointing, out-of-order frames, dropouts, speech in/out audible by manual inspection where required.
+**S5 — DOUBLE STREAM:** (1) One call with concurrent inbound+outbound on SAME WebSocket; `clear` during barge-in; `mark` completion/late mark. (2) Two separate simultaneous call sessions, distinct callSid/streamSid/audio/calendar; same slot collision one success. Chaos: invalid base64/JSON, timeout, queue backpressure, stop/disconnect, reconnect. A simulation does not prove live Twilio.
+**S6:** independent fixed-workload Pi4 runs ≥30 samples/config, warmups, p50/p95 end-of-speech to audible reply; raw latency phase times, RSS, temp, throttle, swap and model hash; declare unsupported candidate separately; report regressions and uncertainty.
+**S7:** witness real signed Twilio phone test, outbound/inbound speech, two callers and budget caps, no false confirmation, cleanup, access logs sanitized. Mark BLOCKED until Alex connects the service and procures number/auth.
+**S8/S9:** failure recovery and load soak, backup/restore, secret leak and ACL tests, trace reproducibility, release PASS/FAIL/BLOCKED statement.
+
+## TDD / gate authority
+Your job is to discover bugs, NOT to maximize superficial pass counts. For every feature show RED output from a meaningful failing test, then GREEN on exactly the same test, full suite and environmental conditions. Never change expected outputs simply to make tests green. Do not commit synthetic results as Pi metrics. If CI can't run tests yet, fix CI separately without waiving critical gates.
+
+## Pi usage boundaries
+Use your own Tailscale access; Alex authorizes access to the Pi and defines the Linux test user. Prefer a read-only inspection path and **separate, non-production checkout**. Agree a single hardware benchmark slot/lock with Alex; if lock busy, do laptop analysis instead. Never sudo, reboot, alter Tailscale ACL/hostname or change the running receptionist service without explicit owner permission. Evidence must include `/proc/device-tree/model`, `uname -m`, git SHA and metric source.
+
+## Session report
+Role / branch+SHA / sprint and TDD gate / RED repro / GREEN command pass-fail-skip / code-vs-real-hardware distinction / PR URL / blockers / prioritized bugs.
