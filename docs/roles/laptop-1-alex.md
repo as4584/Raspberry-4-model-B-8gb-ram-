@@ -22,3 +22,7 @@ Alex controls host system changes and live service. Keep remote tests in an isol
 
 ## End of session
 Paste role, branch SHA, sprint/task, failing test, passing command+counts, link to PR, sanitized Pi hardware proof if available, interface changes, blockers, next task. Update status through PR only.
+
+
+## Newly required model/data scientist collaboration (S3A)
+While you're preparing Pi/Tailscale S1, Ramona begins independent model scouting, license review and diverse data generation. Read `docs/MODEL_DATA_LAB.md` before model work. Deliver Pi smoke and benchmarking API, not guess-based model choice. Once Ramona provides license-approved candidate + dataset manifest, integrate the smallest suitable model for **structured extraction**, compare against a rules/FAQ baseline, and run unbiased frozen holdout evaluation that was NOT shown to her training agent. Preserve pretraining and test leakage boundaries. No proprietary Arlequin TNN replication claim; only a controlled data-efficiency experiment. Don't use Pi for large training runs or let Ramona overwrite on-Pi runtime while tests run.
