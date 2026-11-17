@@ -14,7 +14,7 @@ This is a **reviewed sprint status ledger**, not a live task tracker; update it 
 | ID | Sprint | Owner | Status on 2026-11-17 | Unlock evidence |
 |---|---|---|---|---|
 | S0 | Project instructions + branch/CI baseline | Both | PARTIAL | Both laptops run tests, role bootstrap, CI green |
-| S1 | Raspberry Pi + Tailscale remote development | Alex + Ramona QA | NOT STARTED | Pi 4/8GB preflight, own-account SSH from both laptops, Pi test run, private health check |
+| S1 | Raspberry Pi + Tailscale remote development | Alex + Ramona QA | IN PROGRESS: USB kit + bootstrap ready (fixture-tested only); hardware untested, issues #2 #3 | Pi 4/8GB preflight, own-account SSH from both laptops, Pi test run, private health check |
 | S2 | Atomic booking + identity safety | Alex + Ramona QA | PARTIAL | Race/reschedule/DST/cancel tests green |
 | S3 | Local LLM and FAQ/JSON correctness | Alex + Ramona QA | NOT STARTED | Held-out extraction report + safe fallback |
 | S4 | On-device ASR/VAD/TTS | Alex + Ramona QA | NOT STARTED | Audible local speech test + codec/endpointing checks |
