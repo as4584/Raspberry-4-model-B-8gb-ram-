@@ -33,3 +33,7 @@ Alex owns `feat/receptionist-core` and runtime modules. Ramona owns `test/evalua
 ## Release status
 
 G0 bootstrap: working locally after `pytest`; G1 booking: partial (concurrency and deterministic confirmation covered); G2 real LLM extraction: BLOCKED; G3 local speech: NOT VALIDATED ON PI; G4 simulated media protocol: partially tested; G5 Pi benchmarks: BLOCKED; G6 live Twilio: BLOCKED. Not yet a deployable 1.5-second fully local receptionist.
+
+
+## Agent entry point (two laptops, one repository)
+Start by telling either coding agent **"You are Laptop 1 Alex"** or **"You are Laptop 2 Ramona. Read AGENTS.md and begin the next unlocked sprint."** Each agent reads `AGENTS.md` → `docs/MASTER_PLAN.md` → `docs/CURRENT_STATE.md` → its `docs/roles/` file. Alex handles Pi Tailscale deployment and receptionist implementation. Ramona researches tiny models and **diversity-optimized training data** plus adversarial tests. The physical Pi must be set up by a human once; agents cannot establish Tailscale identity/auth without the user's authorized sign-in. See `docs/PI_TAILSCALE_RUNBOOK.md` and `docs/MODEL_DATA_LAB.md`.
