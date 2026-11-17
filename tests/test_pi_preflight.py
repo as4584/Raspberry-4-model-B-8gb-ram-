@@ -22,8 +22,30 @@ pytestmark = pytest.mark.skipif(BASH is None, reason="bash required for shell pr
 
 def _stub(bindir: Path, name: str, body: str) -> None:
     p = bindir / name
-    p.write_text("#!/usr/bin/env bash\n" + body + "\n", newline="\n")
+    # POSIX sandbox PATH has no bash, so use an absolute shebang there.
+    # Git Bash's core dir does contain bash (its path has spaces).
+    shebang = "/usr/bin/env bash" if os.name == "nt" else BASH
+    p.write_text(f"#!{shebang}\n{body}\n", newline="\n")
     p.chmod(0o755)
+
+
+CORE_UTILS = ("awk", "tr", "date")
+OPTIONAL_STUBS = ("git", "tailscale")  # tests may omit these
+
+
+def _core_utils_dir(tmp_path: Path) -> Path:
+    """A PATH dir exposing only core utils, so real git/tailscale can't leak in."""
+    if os.name != "nt":
+        core = tmp_path / "core"
+        core.mkdir()
+        for name in CORE_UTILS:
+            (core / name).symlink_to(shutil.which(name))
+        return core
+    # Git Bash: msys tools can't be copied/symlinked away from their DLLs.
+    core = Path(shutil.which("awk")).parent
+    leaked = [n for n in OPTIONAL_STUBS if (core / n).exists() or (core / f"{n}.exe").exists()]
+    assert not leaked, f"real {leaked} in {core} would defeat fixture isolation"
+    return core
 
 
 def run_preflight(tmp_path, *, arch="aarch64", model=PI4, mem_kb=MEM_8GB_KB,
@@ -43,9 +65,7 @@ def run_preflight(tmp_path, *, arch="aarch64", model=PI4, mem_kb=MEM_8GB_KB,
         _stub(bindir, "tailscale", 'echo "100.64.0.1"')
     elif tailscale == "logged_out":
         _stub(bindir, "tailscale", "exit 1")
-    # Only the stub dir plus the dir holding bash's core utils (tr, awk, printf).
-    core = Path(shutil.which("awk")).parent
-    env = {**os.environ, "PATH": f"{bindir}{os.pathsep}{core}",
+    env = {**os.environ, "PATH": f"{bindir}{os.pathsep}{_core_utils_dir(tmp_path)}",
            "PREFLIGHT_ROOT": str(root)}
     return subprocess.run([BASH, str(SCRIPT)], env=env, capture_output=True,
                           text=True, cwd=ROOT, timeout=30)
