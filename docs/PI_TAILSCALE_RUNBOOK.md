@@ -1,6 +1,7 @@
 # Raspberry Pi 4 — Tailscale, GitHub deploy, 2-laptop remote test runbook
 Version 1.1 · 2026-11-17 · Sprint S1 · Owners Alex (infrastructure) / Ramona (independent verification)
 Follow official docs: https://tailscale.com/docs/install/linux ; https://tailscale.com/docs/features/tailscale-ssh ; https://tailscale.com/docs/how-to/connect-to-devices
+**Fastest path:** flash + stage + one-command bootstrap in `docs/USB_BOOT_SETUP.md`.
 **Nothing in this file asserts that the user's Pi is already connected.** Commands marked PI run on physical Raspberry Pi OS terminal. Don't run an unreviewed internet pipe-to-shell installer, expose SSH to router WAN, or store auth tokens in git.
 
 ## 1. Prerequisites: do this before agents claim S1 pass
