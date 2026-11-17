@@ -43,3 +43,7 @@ Next action and owner:
 - Raspberry Pi OS and storage boot/SSH, local credentials, Tailscale installation/login.
 - Invite Ramona's **own Tailscale identity** to the tailnet or share the Pi device with narrowly-scoped permissions. No credential sharing.
 - Pi system package installation, service registration, public ingress, and adding real Twilio credentials.
+
+
+## New parallel research task — USER PRIORITY
+User explicitly requested one machine to discover tiny Pi models and build **complex heterogeneous training data**, experimentally testing whether a compact model can learn more per unit of compute. Assigned **Laptop 2 Ramona** as the primary Model & Data Lab researcher (S3A), while she retains independent test responsibility. Begin with **R0** models and license/compatibility shortlist, then **R1** source audit and factor taxonomy, then **R2** diverse synthetic generator with deterministic oracle and leakage guards. Research specification: `docs/MODEL_DATA_LAB.md`. Alex remains S1 Pi/Tailscale implementation owner and runs independent blind final evaluation. S3A is NOT STARTED. No candidate has yet been benchmarked on the user's Pi or trained for this project.
