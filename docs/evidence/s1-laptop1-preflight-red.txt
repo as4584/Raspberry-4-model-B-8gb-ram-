@@ -1,0 +1,15 @@
+E       assert 11 == 17
+E        +  where 11 = CompletedProcess(args=['C:\\Program Files\\Git\\usr\\bin\\bash.EXE', 'C:\\Users\\AlexS\\Projects\\rpi4\\scripts\\pi_preflight.sh'], returncode=11, stdout='architecture=aarch64\n', stderr='FAIL: no physical device tree model\n').returncode
+
+tests\test_pi_preflight.py:76: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_pi_preflight.py::test_genuine_pi4_8gb_profile_passes - Asse...
+FAILED tests/test_pi_preflight.py::test_wrong_environment_is_rejected_with_distinct_code[kwargs3-12]
+FAILED tests/test_pi_preflight.py::test_wrong_environment_is_rejected_with_distinct_code[kwargs4-12]
+FAILED tests/test_pi_preflight.py::test_wrong_environment_is_rejected_with_distinct_code[kwargs5-13]
+FAILED tests/test_pi_preflight.py::test_wrong_environment_is_rejected_with_distinct_code[kwargs6-13]
+FAILED tests/test_pi_preflight.py::test_wrong_environment_is_rejected_with_distinct_code[kwargs7-18]
+FAILED tests/test_pi_preflight.py::test_wrong_environment_is_rejected_with_distinct_code[kwargs8-15]
+FAILED tests/test_pi_preflight.py::test_wrong_environment_is_rejected_with_distinct_code[kwargs9-16]
+FAILED tests/test_pi_preflight.py::test_wrong_environment_is_rejected_with_distinct_code[kwargs10-17]
+9 failed, 3 passed in 0.92s
