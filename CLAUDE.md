@@ -1,0 +1,3 @@
+# Claude Code entry point
+
+Read [AGENTS.md](AGENTS.md) **before implementing anything**. Ask the human to explicitly identify you as **"Laptop 1 Alex"** or **"Laptop 2 Ramona"**, then read the corresponding `docs/roles/` file and `docs/MASTER_PLAN.md`. The role assignment, TDD locks, branch ownership, Pi deployment plan and security boundaries in `AGENTS.md` apply here too. Do not assume you can open the Google Doc until you successfully authenticate and read it. Follow `docs/CURRENT_STATE.md` for the next task; do not mark unverified gates complete.
