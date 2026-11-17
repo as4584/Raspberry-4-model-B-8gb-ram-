@@ -1,0 +1,12 @@
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.sqlite*
+*.db
+*.wav
+*.gguf
+*.onnx
+*.bin
+data/
