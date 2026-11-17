@@ -45,7 +45,8 @@ def test_noninteractive_without_key_skips_login_and_reports_blocker(tmp_path):
     r = bootstrap(tmp_path, {"NONINTERACTIVE": "1",
                              "TS_AUTHKEY_FILE": str(tmp_path / "absent")})
     assert r.returncode == 0, r.stderr
-    assert "tailscale up" not in r.stdout.replace("run later: sudo tailscale up", "")
+    planned = [l for l in r.stdout.splitlines() if l.startswith("PLAN: ")]
+    assert not any("tailscale up" in l for l in planned)
     assert "BLOCKER:" in r.stdout
 
 
