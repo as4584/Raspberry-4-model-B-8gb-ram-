@@ -1,0 +1,4 @@
+model_id,publisher,source_url,parameters_m,license_status,format,pi4_runtime_status,structured_extraction_accuracy,pi_ttft_ms,pi_tokens_per_sec,decision,notes
+Qwen/Qwen3-0.6B-GGUF,Qwen,https://huggingface.co/Qwen/Qwen3-0.6B-GGUF,600,verified_apache-2.0,GGUF,unverified_on_user_pi,unmeasured,unmeasured,unmeasured,RESEARCH,Official GGUF exists; measure structured booking and latency on Pi
+google/functiongemma-270m,Google,https://huggingface.co/google/functiongemma-270m,270,needs_full_model_card_review,verify_conversion,unverified_on_user_pi,unmeasured,unmeasured,unmeasured,RESEARCH,Tool-specialized candidate; check exact distribution terms and architecture
+LiquidAI/LFM2.5-350M,LiquidAI,https://huggingface.co/LiquidAI,350,needs_exact_repository_and_license,verify_conversion,unverified_on_user_pi,unmeasured,unmeasured,unmeasured,RESEARCH,Verify exact model ID and runtime compatibility before downloading
