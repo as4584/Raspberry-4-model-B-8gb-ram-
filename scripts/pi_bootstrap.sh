@@ -40,9 +40,10 @@ step() {  # step "<shell command>"
 }
 have() { [[ "$dry" != "1" ]] && command -v "$1" >/dev/null 2>&1; }
 
+export DEBIAN_FRONTEND=noninteractive
 echo "== 1/6 base packages"
 step "sudo apt-get update"
-step "sudo apt-get install -y git python3-venv python3-pip curl"
+step "sudo DEBIAN_FRONTEND=noninteractive apt-get install -y git python3-venv python3-pip curl"
 
 echo "== 2/6 tailscale (official signed apt repo)"
 if have tailscale; then
@@ -56,11 +57,19 @@ else
   step "sudo apt-get install -y tailscale"
 fi
 
-echo "== 3/6 tailscale login (owner approves URL in browser)"
+echo "== 3/6 tailscale login"
+# Unattended: a one-off pre-auth key staged on the USB is moved here (root, 600)
+# by firstboot_install.sh, passed by file reference, then destroyed.
+authkey="${TS_AUTHKEY_FILE:-/etc/pi-receptionist/tailscale.authkey}"
 if [[ "${SKIP_TAILSCALE_UP:-0}" == "1" ]]; then
   echo "SKIP_TAILSCALE_UP=1: run later: sudo tailscale up --hostname=$TS_HOSTNAME"
 elif have tailscale && [[ -n "$(tailscale ip -4 2>/dev/null || true)" ]]; then
   echo "tailscale already connected"
+elif [[ -e "$authkey" ]]; then
+  step "sudo tailscale up --hostname=$TS_HOSTNAME --auth-key=file:$authkey"
+  step "sudo shred -u $authkey"
+elif [[ "${NONINTERACTIVE:-0}" == "1" ]]; then
+  echo "BLOCKER: no Tailscale auth key staged; owner runs: sudo tailscale up --hostname=$TS_HOSTNAME"
 else
   step "sudo tailscale up --hostname=$TS_HOSTNAME"
 fi
@@ -81,5 +90,6 @@ step "cd '$checkout' && .venv/bin/python -m pytest -q"
 
 echo "== 6/6 hardware preflight"
 step "cd '$checkout' && bash scripts/pi_preflight.sh"
+step "sudo mkdir -p /var/lib/pi-receptionist && sudo touch /var/lib/pi-receptionist/bootstrapped"
 
 echo "BOOTSTRAP_DONE: attach $log (sanitized) to GitHub issue #2"
