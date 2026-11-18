@@ -1,0 +1,21 @@
+{
+  "split": "dev",
+  "seed": 20261118,
+  "mode": "diverse",
+  "count": 600,
+  "sha256": "d9afc6e095021653c884db9a1cacf12f6014eb62ed8d51424cce7977efba5b28",
+  "families": [
+    "availability:5",
+    "book:5",
+    "cancel:5",
+    "emergency:5",
+    "faq:5",
+    "faq_unknown:5",
+    "human:5",
+    "injection:5",
+    "reschedule:5"
+  ],
+  "pairwise_coverage": 1.0,
+  "near_duplicate_rate_j90": 0.1875,
+  "generator_sha256": "21a0c5a9a5abd1a09836bc82a360b818118d2b1528a3035322e0a3efdb8c09e0"
+}
