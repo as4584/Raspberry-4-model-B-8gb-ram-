@@ -1,0 +1,61 @@
+# Coverage dev/diverse/seed 20261118
+
+- examples: 600
+- pairwise coverage: 760/760 = 1.000
+
+| factor=value | count |
+|---|---|
+| correction=date | 49 |
+| correction=duration | 44 |
+| correction=none | 180 |
+| correction=time | 44 |
+| date_style=day_after_tomorrow | 42 |
+| date_style=day_month | 52 |
+| date_style=in_n_days | 45 |
+| date_style=iso | 40 |
+| date_style=missing | 16 |
+| date_style=month_day | 43 |
+| date_style=next_weekday | 15 |
+| date_style=tomorrow | 30 |
+| date_style=weekday | 34 |
+| duration_style=minutes | 114 |
+| duration_style=unspecified | 88 |
+| duration_style=words | 115 |
+| edge=closed_day | 34 |
+| edge=dst | 24 |
+| edge=normal | 218 |
+| edge=out_of_hours | 23 |
+| edge=past | 18 |
+| expected=answer_faq | 57 |
+| expected=ask_clarification | 193 |
+| expected=book_appointment | 61 |
+| expected=cancel_appointment | 49 |
+| expected=check_availability | 52 |
+| expected=handoff_to_human | 161 |
+| expected=reschedule_appointment | 27 |
+| intent=availability | 89 |
+| intent=book | 126 |
+| intent=cancel | 65 |
+| intent=emergency | 30 |
+| intent=faq | 57 |
+| intent=faq_unknown | 47 |
+| intent=human | 24 |
+| intent=injection | 60 |
+| intent=reschedule | 102 |
+| noise=asr | 106 |
+| noise=clean | 228 |
+| noise=fillers | 78 |
+| noise=stutter | 92 |
+| noise=typo | 96 |
+| reference=missing | 52 |
+| reference=present | 115 |
+| register=casual | 147 |
+| register=code_switch | 154 |
+| register=formal | 163 |
+| register=terse | 136 |
+| time_style=bare_ambiguous | 27 |
+| time_style=h12 | 62 |
+| time_style=h12min | 65 |
+| time_style=h24 | 64 |
+| time_style=missing | 34 |
+| time_style=words | 65 |

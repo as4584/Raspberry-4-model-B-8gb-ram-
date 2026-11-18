@@ -1,0 +1,12 @@
+# Desktop-only training/eval deps (WSL + CUDA). NOT part of the package, CI or the Pi.
+# Exact resolved versions are recorded per run in the desktop freeze.txt and in reports.
+torch
+transformers
+peft
+trl
+datasets
+accelerate
+gguf
+sentencepiece
+safetensors
+protobuf
