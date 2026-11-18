@@ -143,7 +143,8 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
     async def asterisk_media(ws:WebSocket):
         # Asterisk runs on this host and the service binds 127.0.0.1 only, so the media
         # socket is reachable solely from local processes (Asterisk, SIPp tests).
-        await ws.accept()
+        # chan_websocket asks for the "media" sub-protocol; echo it or the handshake fails.
+        await ws.accept(subprotocol='media' if 'media' in ws.scope.get('subprotocols',[]) else None)
         engine=CallEngine(store,asr=asr_factory(),tts=tts,require_caller_id=settings.require_caller_id)
         try:await engine.run(AsteriskWebSocketTransport(ws))
         except (WebSocketDisconnect,ValueError,RuntimeError):pass
