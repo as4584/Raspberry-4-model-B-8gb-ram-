@@ -92,3 +92,91 @@ def test_service_durations_configurable(store):
 def test_default_durations_unchanged(d):
     r = d.handle("book 2027-12-10 10:00 45", "s")
     assert (r.action, r.text) == ("invalid", "Please choose a duration of 15, 30 or 60 minutes.")
+
+
+# ---- 2. reschedule through Dialogue -------------------------------------------------
+
+def _book(d, text="book 2027-12-10 10:00", session="s", **kw):
+    d.handle(text, session, **kw)
+    r = d.handle("yes", session, **kw)
+    assert r.action == "booked"
+    return r.committed_id
+
+
+def test_reschedule_requires_confirmation_then_moves(d, store):
+    ref = _book(d)
+    r = d.handle(f"reschedule {ref} 2027-12-13 11:00", "s")
+    assert r.action == "confirm_required" and r.committed_id is None
+    assert r.text == "Please confirm moving your appointment to Monday, December 13 at 11:00 AM for 30 minutes. Say yes or no."
+    (row,) = store.active()
+    assert row["id"] == ref                       # nothing moved before yes
+    r = d.handle("yes", "s")
+    assert r.action == "rescheduled" and r.committed_id not in (None, ref)
+    assert r.text == f"Rescheduled to 2027-12-13 11:00 AM. Your new reference is {r.committed_id}."
+    (row,) = store.active()
+    assert (row["id"], row["starts"], row["ends"]) == (
+        r.committed_id, "2027-12-13T16:00:00+00:00", "2027-12-13T16:30:00+00:00")
+
+
+def test_reschedule_with_duration(d, store):
+    ref = _book(d)
+    assert d.handle(f"reschedule {ref} 2027-12-13 11:00 60", "s").text.endswith("for 60 minutes. Say yes or no.")
+    d.handle("yes", "s")
+    (row,) = store.active()
+    assert row["ends"] == "2027-12-13T17:00:00+00:00"
+
+
+def test_reschedule_declined_keeps_original(d, store):
+    ref = _book(d)
+    d.handle(f"reschedule {ref} 2027-12-13 11:00", "s")
+    r = d.handle("no", "s")
+    assert r.text == "Okay, your appointment was not changed."
+    assert d.handle("yes", "s").text == "There is no pending booking to confirm."
+    (row,) = store.active()
+    assert row["id"] == ref
+
+
+def test_reschedule_pending_is_per_session(d, store):
+    ref = _book(d)
+    d.handle(f"reschedule {ref} 2027-12-13 11:00", "s")
+    assert d.handle("yes", "other").text == "There is no pending booking to confirm."
+    assert d.handle("yes", "s").action == "rescheduled"
+
+
+def test_reschedule_outside_hours_rejected(d, store):
+    ref = _book(d)
+    r = d.handle(f"reschedule {ref} 2027-12-11 11:00", "s")
+    assert (r.action, r.text) == ("closed", CLOSED)
+    assert d.handle("yes", "s").text == "There is no pending booking to confirm."
+
+
+def test_reschedule_past_and_bad_duration_rejected(d):
+    ref = _book(d)
+    assert d.handle(f"reschedule {ref} 2020-01-06 10:00", "s").text == "Please choose a future appointment time."
+    assert d.handle(f"reschedule {ref} 2027-12-13 10:00 45", "s").action == "invalid"
+    assert d.handle("yes", "s").text == "There is no pending booking to confirm."
+
+
+def test_reschedule_unknown_reference(d):
+    d.handle("reschedule 00000000-0000-4000-8000-000000000000 2027-12-13 11:00", "s")
+    r = d.handle("yes", "s")
+    assert (r.action, r.text, r.committed_id) == (
+        "not_found", "I couldn't find an active appointment with that reference.", None)
+
+
+def test_reschedule_into_taken_slot(d, store):
+    ref = _book(d)
+    _book(d, "book 2027-12-13 11:00", session="x")
+    d.handle(f"reschedule {ref} 2027-12-13 11:00", "s")
+    r = d.handle("yes", "s")
+    assert (r.action, r.text) == ("slot_taken", "That time was just taken. Please choose another slot.")
+    assert ref in [b["id"] for b in store.active()]
+
+
+def test_reschedule_then_cancel_new_reference(d, store):
+    ref = _book(d)
+    d.handle(f"reschedule {ref} 2027-12-13 11:00", "s")
+    new = d.handle("yes", "s").committed_id
+    assert d.handle(f"cancel {ref}", "s").action == "not_found"
+    assert d.handle(f"cancel {new}", "s").action == "cancelled"
+    assert store.active() == []
