@@ -186,10 +186,18 @@ def _slot_buckets(slot: str | None, utterance: str, intent: str) -> set[str]:
     low = utterance.lower()
     if intent == "cancel" or "-0000-" in utterance or "00000000-" in utterance:
         buckets.add("reference_present")
+    # explicit duration ("... 14:00 60", "... for 60 minutes")
+    import re as _re
+    if (_re.search(r"\d{1,2}:\d{2}\s+(15|30|60)\b", utterance)
+            or _re.search(r"\b(15|30|60)\s*min", low)):
+        buckets.add("duration_explicit")
     if not slot:
         return buckets
+    parts = slot.split()
+    if len(parts) < 2:
+        return buckets
+    date, time_ = parts[0], parts[1]
     try:
-        date, time_ = slot.split()
         hh, mm = (int(x) for x in time_.split(":"))
     except ValueError:
         return buckets
@@ -218,10 +226,7 @@ def _slot_buckets(slot: str | None, utterance: str, intent: str) -> set[str]:
         buckets.add("date_weekend" if wd >= 5 else "date_weekday")
     except ValueError:
         pass
-    # duration
-    if len(slot.split()) >= 3:
-        buckets.add("duration_explicit")
-    else:
+    if "duration_explicit" not in buckets:
         buckets.add("duration_default")
     return buckets
 
