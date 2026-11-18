@@ -1,0 +1,8 @@
+PI4 evidence 2026-11-18 ~00:10 EST: pi-receptionist.service deployed at ca64fe6 via scripts/pi_install_service.sh
+listen: 127.0.0.1:8000 only | process user: receptionist (nologin, system)
+systemd-analyze security: overall exposure 4.3 OK
+service user writing /opt/pi-receptionist/app: Permission denied (code is root-owned)
+kill -9 MainPID 3816 -> new PID 3987, /healthz ok after ~5 s, NRestarts=1
+data: /var/lib/pi-receptionist/data (drwxr-x--- receptionist), receptionist.sqlite
+enabled at boot: yes
+power: vcgencmd get_throttled=0x50005 during install (under-voltage; PSU fix pending), so no timing claims

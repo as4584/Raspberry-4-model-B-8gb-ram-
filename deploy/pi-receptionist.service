@@ -1,0 +1,39 @@
+[Unit]
+Description=Pi local AI receptionist (loopback only; public ingress is a separate S7 review)
+Wants=network.target
+After=network.target
+
+[Service]
+Type=simple
+User=receptionist
+Group=receptionist
+WorkingDirectory=/opt/pi-receptionist/app
+Environment=RECEPTIONIST_DB=/var/lib/pi-receptionist/data/receptionist.sqlite
+Environment=DEV_ALLOW_UNSIGNED=0
+Environment=VOICE_BACKEND=mock
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/pi-receptionist/app/.venv/bin/python -m uvicorn receptionist.server:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=3
+KillSignal=SIGTERM
+TimeoutStopSec=15
+
+# Least privilege: no capabilities, read-only system, writable data dir only.
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+ReadWritePaths=/var/lib/pi-receptionist/data
+MemoryMax=1500M
+
+[Install]
+WantedBy=multi-user.target
