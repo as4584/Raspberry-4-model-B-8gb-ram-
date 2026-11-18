@@ -277,3 +277,65 @@ def test_migration_adds_caller_id_to_existing_db(tmp_path):
     assert (row["id"], row["caller_id"]) == ("old", None)
     assert store.cancel("old", caller_id=ALICE) is False   # legacy row: no owner to match
     assert store.cancel("old") is True
+
+
+# ---- 4. DST through the reschedule path ---------------------------------------------
+ALL_DAY = {day: (time(0), time(23, 59)) for day in range(7)}
+DST_MSG = ("invalid", "Please choose an unambiguous date and time. "
+           "Ambiguous or nonexistent local time due to daylight saving time")
+
+
+@pytest.mark.parametrize("book,move,old_utc,new_utc", [
+    # fall back: Fri 10:00 EDT -> Mon 10:00 EST
+    ("book 2027-11-05 10:00", "2027-11-08 10:00", "2027-11-05T14:00:00+00:00", "2027-11-08T15:00:00+00:00"),
+    # spring forward: Fri 10:00 EST -> Mon 10:00 EDT
+    ("book 2027-03-12 10:00", "2027-03-15 10:00", "2027-03-12T15:00:00+00:00", "2027-03-15T14:00:00+00:00"),
+    # and back again across the same change
+    ("book 2027-11-08 10:00", "2027-11-05 10:00", "2027-11-08T15:00:00+00:00", "2027-11-05T14:00:00+00:00"),
+])
+def test_reschedule_across_dst_keeps_local_wall_time(d, store, book, move, old_utc, new_utc):
+    ref = _book(d, book)
+    assert store.active()[0]["starts"] == old_utc
+    d.handle(f"reschedule {ref} {move}", "s")
+    assert d.handle("yes", "s").action == "rescheduled"
+    (row,) = store.active()
+    assert row["starts"] == new_utc
+
+
+@pytest.mark.parametrize("when", ["2027-11-07 01:30", "2027-11-07 01:00", "2027-11-07 01:59",
+                                  "2027-03-14 02:30", "2027-03-14 02:00", "2027-03-14 02:59"])
+def test_reschedule_into_fold_or_gap_refused_and_original_kept(store, when):
+    d = Dialogue(store, hours=ALL_DAY)
+    ref = _book(d, "book 2027-11-05 10:00")
+    r = d.handle(f"reschedule {ref} {when}", "s")
+    assert (r.action, r.text) == DST_MSG
+    assert d.handle("yes", "s").text == "There is no pending booking to confirm."
+    (row,) = store.active()
+    assert (row["id"], row["starts"]) == (ref, "2027-11-05T14:00:00+00:00")
+
+
+@pytest.mark.parametrize("when,starts,ends", [
+    ("2027-11-07 00:30 60", "2027-11-07T04:30:00+00:00", "2027-11-07T05:30:00+00:00"),  # ends in the fold
+    ("2027-11-07 00:59 60", "2027-11-07T04:59:00+00:00", "2027-11-07T05:59:00+00:00"),
+    ("2027-11-07 02:00", "2027-11-07T07:00:00+00:00", "2027-11-07T07:30:00+00:00"),     # just after the fold
+    ("2027-03-14 01:30 60", "2027-03-14T06:30:00+00:00", "2027-03-14T07:30:00+00:00"),  # spans the gap
+    ("2027-03-14 01:45 30", "2027-03-14T06:45:00+00:00", "2027-03-14T07:15:00+00:00"),
+    ("2027-03-14 03:00", "2027-03-14T07:00:00+00:00", "2027-03-14T07:30:00+00:00"),     # just after the gap
+])
+def test_reschedule_spanning_dst_uses_real_elapsed_minutes(store, when, starts, ends):
+    d = Dialogue(store, hours=ALL_DAY)
+    ref = _book(d, "book 2027-11-05 10:00")
+    assert d.handle(f"reschedule {ref} {when}", "s").action == "confirm_required"
+    r = d.handle("yes", "s")
+    assert r.action == "rescheduled"
+    (row,) = store.active()
+    assert (row["starts"], row["ends"]) == (starts, ends)
+
+
+def test_book_spanning_gap_and_fold_directly(store):
+    d = Dialogue(store, hours=ALL_DAY)
+    _book(d, "book 2027-03-14 01:30 60")
+    _book(d, "book 2027-11-07 00:30 60")
+    assert [(b["starts"], b["ends"]) for b in store.active()] == [
+        ("2027-03-14T06:30:00+00:00", "2027-03-14T07:30:00+00:00"),
+        ("2027-11-07T04:30:00+00:00", "2027-11-07T05:30:00+00:00")]
