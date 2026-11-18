@@ -17,3 +17,12 @@ include = ["receptionist*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.mutmut]
+# Safety-critical core: booking transactions and the confirmation state machine.
+paths_to_mutate = ["receptionist/booking.py", "receptionist/dialogue.py"]
+tests_dir = ["tests/"]
+also_copy = ["scripts/", ".github/", "docs/", ".env.example", ".gitignore"]
+# Booking/dialogue tests only; the 8-process race is too slow to run per mutant
+# (it still runs in the pytest job).
+pytest_add_cli_args_test_selection = ["tests/test_booking.py", "tests/test_booking_safety.py", "-k", "not across_processes"]
