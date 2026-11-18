@@ -47,5 +47,6 @@ def test_piper_output_is_audible_8k_mulaw_of_plausible_duration(spoken):
 
 def test_whisper_transcribes_piper_mulaw_fixture(asr, spoken):
     text = asyncio.run(asr.transcribe(spoken)).lower()
-    for word in ('book', 'december', 'two'):
-        assert word in text, text
+    # whisper normalises numbers ("10th at 2 p.m."), so accept digits or words.
+    assert 'book' in text and 'december' in text, text
+    assert ('10th' in text or 'tenth' in text) and (' 2' in text or 'two' in text), text
