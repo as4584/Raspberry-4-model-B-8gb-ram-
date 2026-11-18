@@ -87,7 +87,8 @@ class Dialogue:
 
     def handle(self, utterance: str, session_id: str, caller_id: str | None = None) -> Reply:
         turn=self._turns[session_id]=self._turns.get(session_id,0)+1
-        s=utterance.strip().lower()
+        # ASR punctuates ("Yes.", "Cancel that."): drop trailing punctuation before matching.
+        s=re.sub(r"[\s.!?,;]+$","",utterance.strip().lower())
         if self.require_caller_id and not caller_id and re.match(r"(book|cancel|reschedule) ",s):
             self._pending.pop(session_id,None)
             return Reply("I need the number you are calling from before I can do that. Please call from your own phone.","verification_required")
