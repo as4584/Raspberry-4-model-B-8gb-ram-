@@ -24,3 +24,9 @@ def test_spoken_when(dt, expect):
 def test_spoken_when_converts_to_business_timezone():
     utc = datetime(2026, 12, 10, 19, 0, tzinfo=ZoneInfo("UTC"))
     assert spoken_when(utc, NY) == "Thursday, December tenth at two p m"
+
+
+@pytest.mark.parametrize("n,expect", [(15, "fifteen"), (30, "thirty"), (60, "sixty"), (90, "ninety"), (45, "forty five")])
+def test_durations_are_spoken(n, expect):
+    from receptionist.speech_format import _cardinal
+    assert _cardinal(n) == expect
