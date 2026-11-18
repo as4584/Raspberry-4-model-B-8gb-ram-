@@ -60,6 +60,7 @@ def valid_signature(url:str, params:dict[str,str], actual:str|None, token:str) -
     return hmac.compare_digest(sig,actual)
 
 MAX_SIM_SESSIONS=1000
+MAX_UTTERANCE_BYTES=160000   # 20 s of 8 kHz u-law per transcription chunk
 
 def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None=None, tts:object|None=None, max_sessions:int=MAX_SIM_SESSIONS) -> FastAPI:
     settings=settings or Settings()
@@ -196,7 +197,12 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
                             for task in list(jobs):task.cancel()
                             if stream_id:await send({'event':'clear','streamSid':stream_id})
                         heard_speech=True;silence_ms=0;spoken_ms+=ms
-                        if len(audio)>160000:await ws.close(code=1009);break
+                        if len(audio)+len(data)>MAX_UTTERANCE_BYTES:
+                            # A long unbroken talker is a normal caller: transcribe what we
+                            # have (bounded memory) and keep listening instead of hanging up.
+                            task=asyncio.create_task(process(bytes(audio),generation))
+                            jobs.add(task);task.add_done_callback(jobs.discard)
+                            audio.clear()
                         audio.extend(data)
                     elif heard_speech:
                         silence_ms+=ms
