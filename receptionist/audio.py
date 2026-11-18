@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import asyncio
 import math
+import re
 import struct
 import subprocess
 import sys
@@ -91,7 +92,24 @@ def clean_whisper_output(stdout: str) -> str:
     for line in stdout.splitlines():
         line=line.replace('[BLANK_AUDIO]','').strip()
         if line:words.append(line)
-    return ' '.join(words)
+    return _collapse_repeats(' '.join(words))
+
+def _collapse_repeats(text: str) -> str:
+    """Drop whisper's repetition hallucination (seen on the PI4 with a short
+    encoder window): consecutive identical sentences, or a word sequence that
+    is the same phrase repeated 2-4 times, collapse to one copy."""
+    key=lambda s:' '.join(s.lower().split())
+    out=[]
+    for sentence in re.split(r'(?<=[.!?])\s+',text.strip()):
+        if sentence and (not out or key(sentence)!=key(out[-1])):out.append(sentence)
+    text=' '.join(out)
+    w=text.split()
+    for k in (4,3,2):
+        if w and len(w)%k==0:
+            n=len(w)//k
+            if all(key(' '.join(w[i*n:(i+1)*n]))==key(' '.join(w[:n])) for i in range(k)):
+                return ' '.join(w[:n])
+    return text
 
 def audio_ctx_for(seconds: float) -> int:
     """whisper encoder context for an utterance: 50 frames/s + 64 margin, 128..1500.
