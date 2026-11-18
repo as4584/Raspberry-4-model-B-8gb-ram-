@@ -28,7 +28,7 @@ from lab.eval import prompt  # noqa: E402
 
 HP = {"lora_r": 16, "lora_alpha": 32, "lora_dropout": 0.05,
       "target_modules": ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
-      "lr": 2e-4, "epochs": 2, "batch": 16, "warmup_ratio": 0.05, "weight_decay": 0.0, "max_len": 2048}
+      "lr": 2e-4, "epochs": 2, "batch": 16, "micro_batch": 2, "warmup_ratio": 0.05, "weight_decay": 0.0, "max_len": 2048}
 
 
 def encode(tok, rec, model_id):
@@ -100,8 +100,17 @@ def main():
                 ids[j, : len(x)] = torch.tensor(x)
                 lab[j, : len(y)] = torch.tensor(y)
                 att[j, : len(x)] = 1
-            loss = model(input_ids=ids.cuda(), attention_mask=att.cuda(), labels=lab.cuda()).loss
-            loss.backward()
+            mb, n_sup = HP["micro_batch"], int((lab != -100).sum())
+            loss_val = 0.0
+            for k in range(0, len(batch), mb):  # grad accumulation; token-weighted mean over the batch
+                sl = slice(k, k + mb)
+                logits = model(input_ids=ids[sl].cuda(), attention_mask=att[sl].cuda()).logits[:, :-1].float()
+                tgt = lab[sl, 1:].cuda()
+                l = torch.nn.functional.cross_entropy(logits.reshape(-1, logits.size(-1)), tgt.reshape(-1),
+                                                      ignore_index=-100, reduction="sum") / n_sup
+                l.backward()
+                loss_val += l.item()
+            loss = torch.tensor(loss_val)
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             opt.step()
             sched.step()
