@@ -161,11 +161,11 @@ class WhisperCppASR:
 
 class WhisperDaemonASR:
     """Resident whisper (native/whisper_daemon.cpp): model loaded once, short encoder
-    window, greedy, no fallback, decode capped at ~6 tokens per second of audio.
+    window, greedy, no fallback, decode capped at ~8 tokens per second of audio + 10.
     Pi (#28): 32/40 exact, p50 0.72 s, max 0.89 s vs 7.1 s for whisper-cli.
     One utterance at a time; a cancelled (barged-in) decode kills the process and
     the next call respawns it (~0.25 s), so a stale answer can never be read."""
-    def __init__(self, argv: list[str], timeout: float=10.0, tokens_per_s: int=6, extra_tokens: int=4):
+    def __init__(self, argv: list[str], timeout: float=10.0, tokens_per_s: int=8, extra_tokens: int=10):
         self.argv,self.timeout=list(argv),timeout
         self.tokens_per_s,self.extra_tokens=tokens_per_s,extra_tokens
         self._proc=None;self._lock=None
