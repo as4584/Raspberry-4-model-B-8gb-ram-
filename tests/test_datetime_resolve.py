@@ -43,7 +43,7 @@ def test_resolves_spoken_dates(phrase, expect):
     "today at 8 am",                  # already past
     "book something nice",
     "",
-    "march 8 2027 at 2:30 am",        # DST gap in New York: nonexistent
+    "march 14 2027 at 2:30 am",       # DST gap in New York (2nd Sunday of March 2027): nonexistent
 ])
 def test_refuses_ambiguous_or_impossible(phrase):
     assert resolve(phrase, NOW) is None
