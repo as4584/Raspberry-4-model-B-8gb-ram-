@@ -180,3 +180,100 @@ def test_reschedule_then_cancel_new_reference(d, store):
     assert d.handle(f"cancel {ref}", "s").action == "not_found"
     assert d.handle(f"cancel {new}", "s").action == "cancelled"
     assert store.active() == []
+
+
+# ---- 3. caller verification for cancel / reschedule ---------------------------------
+import sqlite3
+from datetime import datetime, timedelta, timezone
+
+from receptionist.booking import InvalidBooking
+
+NOT_FOUND = ("not_found", "I couldn't find an active appointment with that reference.")
+ALICE, MALLORY = "+15550000001", "+15550000002"
+T1 = datetime(2027, 12, 10, 15, tzinfo=timezone.utc)
+
+
+def test_store_records_caller_id(store):
+    row = store.book("r", T1, T1 + timedelta(minutes=30), "k", caller_id=ALICE)
+    assert row["caller_id"] == ALICE
+    assert store.book("r", T1 + timedelta(hours=1), T1 + timedelta(hours=2), "k2")["caller_id"] is None
+
+
+def test_store_cancel_requires_same_caller(store):
+    ref = store.book("r", T1, T1 + timedelta(minutes=30), "k", caller_id=ALICE)["id"]
+    assert store.cancel(ref, caller_id=MALLORY) is False
+    assert store.cancel(ref) is False
+    assert [b["id"] for b in store.active()] == [ref]
+    assert store.cancel(ref, caller_id=ALICE) is True
+    assert store.active() == []
+
+
+def test_store_reschedule_requires_same_caller_and_keeps_owner(store):
+    ref = store.book("r", T1, T1 + timedelta(minutes=30), "k", caller_id=ALICE)["id"]
+    later = T1 + timedelta(hours=1)
+    for who in (MALLORY, None):
+        with pytest.raises(InvalidBooking, match="^No active booking with that reference$"):
+            store.reschedule(ref, later, later + timedelta(minutes=30), f"rs-{who}", caller_id=who)
+    assert [b["id"] for b in store.active()] == [ref]
+    new = store.reschedule(ref, later, later + timedelta(minutes=30), "rs", caller_id=ALICE)
+    assert new["caller_id"] == ALICE
+    assert store.cancel(new["id"], caller_id=ALICE) is True
+
+
+def test_dialogue_cancel_by_other_caller_is_indistinguishable_from_unknown(d, store):
+    ref = _book(d, caller_id=ALICE)
+    assert store.active()[0]["caller_id"] == ALICE
+    r = d.handle(f"cancel {ref}", "m", caller_id=MALLORY)
+    assert (r.action, r.text) == NOT_FOUND
+    r2 = d.handle("cancel 00000000-0000-4000-8000-000000000000", "m", caller_id=MALLORY)
+    assert (r2.action, r2.text) == (r.action, r.text)
+    assert [b["id"] for b in store.active()] == [ref]
+    r = d.handle(f"cancel {ref}", "a2", caller_id=ALICE)     # same phone, new call
+    assert r.action == "cancelled"
+
+
+def test_dialogue_reschedule_by_other_caller_refused(d, store):
+    ref = _book(d, caller_id=ALICE)
+    d.handle(f"reschedule {ref} 2027-12-13 11:00", "m", caller_id=MALLORY)
+    assert (lambda r: (r.action, r.text))(d.handle("yes", "m", caller_id=MALLORY)) == NOT_FOUND
+    assert [b["id"] for b in store.active()] == [ref]
+    d.handle(f"reschedule {ref} 2027-12-13 11:00", "a", caller_id=ALICE)
+    r = d.handle("yes", "a", caller_id=ALICE)
+    assert r.action == "rescheduled"
+    assert store.active()[0]["caller_id"] == ALICE
+
+
+@pytest.mark.parametrize("text", ["book 2027-12-10 10:00",
+                                  "cancel 00000000-0000-4000-8000-000000000000",
+                                  "reschedule 00000000-0000-4000-8000-000000000000 2027-12-13 11:00"])
+def test_require_caller_id_refuses_anonymous_writes(store, text):
+    d = Dialogue(store, require_caller_id=True)
+    r = d.handle(text, "s")
+    assert (r.action, r.text, r.committed_id) == (
+        "verification_required",
+        "I need the number you are calling from before I can do that. Please call from your own phone.",
+        None)
+    assert d.handle("yes", "s").text == "There is no pending booking to confirm."
+    assert d.handle(text, "s", caller_id=ALICE).action != "verification_required"
+
+
+def test_require_caller_id_defaults_off(d):
+    assert d.handle("book 2027-12-10 10:00", "s").action == "confirm_required"
+
+
+def test_migration_adds_caller_id_to_existing_db(tmp_path):
+    path = str(tmp_path / "old.sqlite")
+    db = sqlite3.connect(path)
+    db.execute("""CREATE TABLE bookings (id TEXT PRIMARY KEY, resource TEXT NOT NULL, starts TEXT NOT NULL,
+        ends TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active',
+        idem_key TEXT UNIQUE NOT NULL, payload_key TEXT NOT NULL)""")
+    db.execute("INSERT INTO bookings VALUES('old','r','2027-12-10T15:00:00+00:00','2027-12-10T15:30:00+00:00','active','k','p')")
+    db.commit(); db.close()
+    store = BookingStore(path)
+    BookingStore(path)                                    # re-opening is idempotent
+    cols = [r[1] for r in sqlite3.connect(path).execute("PRAGMA table_info(bookings)")]
+    assert cols[-1] == "caller_id" and cols.count("caller_id") == 1
+    (row,) = store.active()
+    assert (row["id"], row["caller_id"]) == ("old", None)
+    assert store.cancel("old", caller_id=ALICE) is False   # legacy row: no owner to match
+    assert store.cancel("old") is True
