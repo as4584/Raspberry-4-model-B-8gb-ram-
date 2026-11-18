@@ -18,7 +18,7 @@ here="$(cd "$(dirname "$0")/.." && pwd)"
 step() { echo "PLAN: $1"; [[ "$dry" == "1" ]] || bash -c "$1"; }
 
 if [[ "${1:-}" == "--uninstall" ]]; then
-  step "sudo systemctl disable --now pi-receptionist.service || true"
+  step "sudo systemctl disable --now pi-receptionist.service pi-receptionist-backup.timer || true"
   step "sudo rm -f $unit && sudo systemctl daemon-reload"
   echo "UNINSTALLED (bookings kept)"
   exit 0
@@ -33,7 +33,10 @@ step "sudo git -C $app fetch -q origin && sudo git -C $app checkout --detach $sh
 step "sudo python3 -m venv $app/.venv && sudo $app/.venv/bin/python -m pip install -q $app"
 step "sudo chown -R root:root /opt/pi-receptionist/app"
 step "sudo install -d -o receptionist -g receptionist -m 750 $data"
+step "sudo install -d -o receptionist -g receptionist -m 750 /var/backups/pi-receptionist"
 step "sudo install -m 644 $here/deploy/pi-receptionist.service $unit && sudo systemctl daemon-reload"
+step "sudo install -m 644 $here/deploy/pi-receptionist-backup.service $here/deploy/pi-receptionist-backup.timer /etc/systemd/system/ && sudo systemctl daemon-reload"
+step "sudo systemctl enable --now pi-receptionist-backup.timer"
 step "sudo systemctl enable --now pi-receptionist.service && sudo systemctl restart pi-receptionist.service"
 step "for i in \$(seq 30); do curl -fsS http://127.0.0.1:8000/healthz && exit 0; sleep 1; done; exit 1"
 echo

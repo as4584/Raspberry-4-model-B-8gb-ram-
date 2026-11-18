@@ -1,0 +1,17 @@
+[Unit]
+Description=Nightly online backup of the receptionist bookings DB
+
+[Service]
+Type=oneshot
+User=receptionist
+Group=receptionist
+WorkingDirectory=/opt/pi-receptionist/app
+ExecStart=/opt/pi-receptionist/app/.venv/bin/python -m receptionist.backup backup /var/lib/pi-receptionist/data/receptionist.sqlite /var/backups/pi-receptionist --keep 14
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+RestrictAddressFamilies=AF_UNIX
+ReadWritePaths=/var/lib/pi-receptionist/data /var/backups/pi-receptionist
