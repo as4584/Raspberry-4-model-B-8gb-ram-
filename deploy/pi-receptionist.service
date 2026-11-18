@@ -11,6 +11,8 @@ WorkingDirectory=/opt/pi-receptionist/app
 Environment=RECEPTIONIST_DB=/var/lib/pi-receptionist/data/receptionist.sqlite
 Environment=DEV_ALLOW_UNSIGNED=0
 Environment=VOICE_BACKEND=mock
+# Real speech: scripts/pi_install_voice.sh writes this file; it overrides the mock default.
+EnvironmentFile=-/etc/pi-receptionist/voice.env
 # Anonymous callers may ask questions but cannot book, cancel or reschedule.
 Environment=REQUIRE_CALLER_ID=1
 Environment=PYTHONUNBUFFERED=1
