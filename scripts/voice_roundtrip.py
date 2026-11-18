@@ -55,8 +55,9 @@ def main(argv):
     import multiprocessing as mp
     from websockets.sync.client import connect
     from receptionist.audio import PiperTTS, WhisperCppASR
-    line = argv[1] if len(argv) > 1 else "book december tenth at two pm"
-    caller = asyncio.run(PiperTTS(os.environ["PIPER_CLI"], os.environ["PIPER_MODEL"]).synthesize(line))
+    lines = argv[1:] or ["book december tenth at two pm"]
+    piper = PiperTTS(os.environ["PIPER_CLI"], os.environ["PIPER_MODEL"])
+    asr = WhisperCppASR(os.environ["WHISPER_CLI"], os.environ["WHISPER_MODEL"])
     s = socket.socket(); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()
     db = os.path.join(tempfile.mkdtemp(prefix="voice-"), "v.sqlite")
     ctx = mp.get_context("spawn")
@@ -66,35 +67,35 @@ def main(argv):
     if not ready.wait(60):
         proc.kill()
         raise SystemExit("server did not start")
-    reply = bytearray()
+    turns = []
     try:
         with connect(f"ws://127.0.0.1:{port}/twilio/media", open_timeout=10) as ws:
             ws.send(json.dumps({"event": "start", "streamSid": "MV", "start": {"callSid": "CV",
                                 "customParameters": {"callerId": "+15550000001"}}}))
-            frames = [caller[i:i + 160] for i in range(0, len(caller), 160)] + [SILENCE] * 25
-            for f in frames:
-                ws.send(json.dumps({"event": "media", "streamSid": "MV", "media": {"payload": base64.b64encode(f).decode()}}))
-            t_end = time.monotonic()
-            t_first = None
-            while True:
-                evt = json.loads(ws.recv(timeout=180))
-                if evt["event"] == "media":
-                    t_first = t_first or time.monotonic()
-                    reply += base64.b64decode(evt["media"]["payload"])
-                elif evt["event"] == "mark":
-                    break
+            for line in lines:                       # one call, several spoken turns
+                caller = asyncio.run(piper.synthesize(line))
+                frames = [caller[i:i + 160] for i in range(0, len(caller), 160)] + [SILENCE] * 25
+                for f in frames:
+                    ws.send(json.dumps({"event": "media", "streamSid": "MV", "media": {"payload": base64.b64encode(f).decode()}}))
+                t_end, t_first, reply = time.monotonic(), None, bytearray()
+                while True:
+                    evt = json.loads(ws.recv(timeout=240))
+                    if evt["event"] == "media":
+                        t_first = t_first or time.monotonic()
+                        reply += base64.b64decode(evt["media"]["payload"])
+                    elif evt["event"] == "mark":
+                        break
+                turns.append({"caller_line": line, "whisper_heard_reply": asyncio.run(asr.transcribe(bytes(reply))),
+                              "reply_audio_s": round(len(reply) / 8000, 2),
+                              "end_of_speech_to_first_reply_audio_s": round(t_first - t_end, 2) if t_first else None})
             ws.send(json.dumps({"event": "stop", "streamSid": "MV"}))
     finally:
         proc.kill()
-    heard_caller = asyncio.run(WhisperCppASR(os.environ["WHISPER_CLI"], os.environ["WHISPER_MODEL"]).transcribe(caller))
-    heard_reply = asyncio.run(WhisperCppASR(os.environ["WHISPER_CLI"], os.environ["WHISPER_MODEL"]).transcribe(bytes(reply)))
-    result = {"caller_line": line, "caller_audio_s": round(len(caller) / 8000, 2),
-              "whisper_heard_caller": heard_caller, "reply_audio_s": round(len(reply) / 8000, 2),
-              "whisper_heard_reply": heard_reply,
-              "end_of_speech_to_first_reply_audio_s": round(t_first - t_end, 2) if t_first else None,
-              "throttled": throttled()}
+    import sqlite3
+    rows = sqlite3.connect(db).execute("SELECT starts, ends, caller_id, status FROM bookings").fetchall()
+    result = {"turns": turns, "bookings_in_db": rows, "throttled": throttled()}
     print(json.dumps(result, indent=1))
-    ok = len(reply) > 8000 and bool(heard_reply.strip())
+    ok = bool(turns) and all(t["reply_audio_s"] > 1 and t["whisper_heard_reply"].strip() for t in turns)
     print("VOICE_ROUNDTRIP_OK" if ok else "VOICE_ROUNDTRIP_FAIL")
     return 0 if ok else 1
 
