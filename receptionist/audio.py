@@ -120,12 +120,15 @@ def audio_ctx_for(seconds: float) -> int:
 
 class WhisperCppASR:
     """whisper.cpp `whisper-cli` (pinned v1.9.5): -m model -f wav -t N -l en -nt -np."""
-    def __init__(self, executable: str, model: str, timeout: int=40, threads: int=4, adaptive_ctx: bool=False):
+    def __init__(self, executable: str, model: str, timeout: int=40, threads: int=4, adaptive_ctx: bool=False,
+                 greedy: bool=True):
         self.executable,self.model,self.timeout,self.threads=executable,model,timeout,threads
-        self.adaptive_ctx=adaptive_ctx
+        self.adaptive_ctx,self.greedy=adaptive_ctx,greedy
     def args(self, wav: str, seconds: float|None=None) -> list[str]:
         a=[self.executable,'-m',self.model,'-f',wav,'-t',str(self.threads),'-l','en','-nt','-np']
         if self.adaptive_ctx and seconds is not None:a+=['-ac',str(audio_ctx_for(seconds))]
+        # #28 sweep: greedy matched beam-5 accuracy on every model, 0 runaways, and is faster.
+        if self.greedy:a+=['-bs','1','-bo','1']
         return a
     async def transcribe(self, mulaw: bytes) -> str:
         if not Path(self.model).is_file():raise FileNotFoundError('WHISPER_MODEL missing')
