@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from html import escape
 from urllib.parse import parse_qsl
 import asyncio
+import re
 import threading
 import base64
 import binascii
@@ -33,6 +34,15 @@ class Settings:
         self.wss_url=wss_url or os.getenv('PUBLIC_WSS_URL','wss://example.invalid/twilio/media')
         self.public_url=public_url or os.getenv('PUBLIC_BASE_URL','https://example.invalid')
         self.auth_token=auth_token if auth_token is not None else os.getenv('TWILIO_AUTH_TOKEN','')
+        # Production sets REQUIRE_CALLER_ID=1: anonymous callers can't book/cancel/reschedule.
+        self.require_caller_id=os.getenv('REQUIRE_CALLER_ID','0')=='1'
+
+# A caller number we accept as an identity: optional +, 5-15 digits (E.164-ish).
+# Anything else (blocked/"anonymous", injection attempts) is treated as no number.
+CALLER_RE=re.compile(r'\+?[0-9]{5,15}')
+
+def caller_number(value:object)->str|None:
+    return value if isinstance(value,str) and CALLER_RE.fullmatch(value) else None
 
 def valid_signature(url:str, params:dict[str,str], actual:str|None, token:str) -> bool:
     if not token or not actual:return False
@@ -78,7 +88,9 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
         params=dict(parse_qsl(raw,keep_blank_values=True))
         if not settings.dev_allow_unsigned and not valid_signature(settings.public_url.rstrip('/')+'/twilio/voice',params,request.headers.get('X-Twilio-Signature'),settings.auth_token):
             raise HTTPException(403,'Invalid Twilio signature')
-        twiml=f'<Response><Connect><Stream url="{escape(settings.wss_url,quote=True)}" /></Connect></Response>'
+        caller=caller_number(params.get('From'))
+        param=f'<Parameter name="callerId" value="{escape(caller,quote=True)}" />' if caller else ''
+        twiml=f'<Response><Connect><Stream url="{escape(settings.wss_url,quote=True)}">{param}</Stream></Connect></Response>'
         return Response(twiml,media_type='application/xml')
 
     @app.websocket('/twilio/media')
@@ -95,8 +107,9 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
         # Serialises this call's dialogue across worker threads: a barge-in cancels the
         # awaiting task, but its thread keeps running until handle() returns.
         dialogue_lock=threading.Lock()
+        caller_id:str|None=None
         def handle_locked(text:str,session:str):
-            with dialogue_lock:return dialogue.handle(text,session)
+            with dialogue_lock:return dialogue.handle(text,session,caller_id=caller_id)
         jobs:set[asyncio.Task]=set()
         async def send(event:dict):
             async with send_lock:await ws.send_json(event)
@@ -133,7 +146,9 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
                     if (stream_id or not isinstance(start,dict) or not isinstance(evt.get('streamSid'),str) or not evt['streamSid']
                             or not isinstance(start.get('callSid'),str) or not start['callSid']):
                         await ws.close(code=1008);break
-                    stream_id=evt['streamSid'];call_id=start['callSid'];dialogue=Dialogue(store)
+                    stream_id=evt['streamSid'];call_id=start['callSid'];dialogue=Dialogue(store,require_caller_id=settings.require_caller_id)
+                    custom=start.get('customParameters')
+                    caller_id=caller_number(custom.get('callerId')) if isinstance(custom,dict) else None
                 elif event=='media':
                     if not stream_id or evt.get('streamSid')!=stream_id:await ws.close(code=1008);break
                     body=evt.get('media')

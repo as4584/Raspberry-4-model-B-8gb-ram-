@@ -11,6 +11,8 @@ WorkingDirectory=/opt/pi-receptionist/app
 Environment=RECEPTIONIST_DB=/var/lib/pi-receptionist/data/receptionist.sqlite
 Environment=DEV_ALLOW_UNSIGNED=0
 Environment=VOICE_BACKEND=mock
+# Anonymous callers may ask questions but cannot book, cancel or reschedule.
+Environment=REQUIRE_CALLER_ID=1
 Environment=PYTHONUNBUFFERED=1
 ExecStart=/opt/pi-receptionist/app/.venv/bin/python -m uvicorn receptionist.server:app --host 127.0.0.1 --port 8000
 Restart=on-failure
