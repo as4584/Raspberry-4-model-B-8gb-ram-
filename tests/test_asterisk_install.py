@@ -51,3 +51,9 @@ def test_unit_runs_unprivileged_and_restarts():
     u = UNIT.read_text()
     assert "-U asterisk -G asterisk" in u and "Restart=on-failure" in u
     assert "NoNewPrivileges=yes" in u and "ProtectHome=yes" in u
+
+
+@needs_bash
+def test_secrets_never_appear_in_output():
+    r, _ = plan({"TELNYX_SIP_USERNAME": "user-xyz", "TELNYX_SIP_PASSWORD": "S3cr3t-Value-91"})
+    assert "S3cr3t-Value-91" not in r.stdout + r.stderr
