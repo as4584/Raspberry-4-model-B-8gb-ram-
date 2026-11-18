@@ -54,9 +54,11 @@ def main(argv=None) -> Path:
     }
     Path(str(out) + ".manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     if a.coverage_report:
-        Path(a.coverage_report).write_text(coverage.report_markdown(records, f"Coverage {a.split}/{a.mode}/seed {a.seed}"),
+        seed_label = "sealed" if a.split == "holdout" else a.seed      # #33: never echo the holdout seed
+        Path(a.coverage_report).write_text(coverage.report_markdown(records, f"Coverage {a.split}/{a.mode}/seed {seed_label}"),
                                            encoding="utf-8")
-    print(json.dumps({k: v for k, v in manifest.items() if k != "families"}))
+    hidden = {"families"} | ({"seed"} if a.split == "holdout" else set())   # #33
+    print(json.dumps({k: v for k, v in manifest.items() if k not in hidden}))
     return out
 
 
