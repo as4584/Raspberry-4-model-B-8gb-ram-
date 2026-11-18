@@ -339,3 +339,51 @@ def test_book_spanning_gap_and_fold_directly(store):
     assert [(b["starts"], b["ends"]) for b in store.active()] == [
         ("2027-03-14T06:30:00+00:00", "2027-03-14T07:30:00+00:00"),
         ("2027-11-07T04:30:00+00:00", "2027-11-07T05:30:00+00:00")]
+
+
+# ---- 6. idempotency replay through Dialogue ------------------------------------------
+# A Dialogue rebuilt for the same session (process restart, server LRU eviction)
+# restarts its turn counter, so it reuses the same session:turn idempotency key.
+
+def test_exact_replay_after_restart_returns_same_booking(store):
+    first = _book(Dialogue(store), "book 2027-12-10 10:00")
+    again = Dialogue(store)
+    again.handle("book 2027-12-10 10:00", "s")
+    r = again.handle("yes", "s")
+    assert (r.action, r.committed_id) == ("booked", first)
+    assert [b["id"] for b in store.active()] == [first]
+
+
+def test_changed_payload_after_restart_is_a_new_booking_not_the_old_one(store):
+    first = _book(Dialogue(store), "book 2027-12-10 10:00")
+    again = Dialogue(store)
+    again.handle("book 2027-12-10 11:00", "s")
+    r = again.handle("yes", "s")
+    assert r.action == "booked" and r.committed_id not in (None, first)
+    assert r.text == f"Confirmed for 2027-12-10 11:00 AM. Your reference is {r.committed_id}."
+    assert [(b["id"], b["starts"]) for b in store.active()] == [
+        (first, "2027-12-10T15:00:00+00:00"), (r.committed_id, "2027-12-10T16:00:00+00:00")]
+
+
+def test_changed_payload_replay_for_reschedule_after_restart(store):
+    d = Dialogue(store)
+    a = _book(d, "book 2027-12-10 10:00", session="a")
+    b = _book(d, "book 2027-12-10 12:00", session="b")
+    d.handle(f"reschedule {a} 2027-12-13 10:00", "s")
+    moved_a = d.handle("yes", "s").committed_id
+    again = Dialogue(store)                       # same session "s", turn counter reset
+    again.handle(f"reschedule {b} 2027-12-13 11:00", "s")
+    r = again.handle("yes", "s")
+    assert r.action == "rescheduled" and r.committed_id not in (None, moved_a, b)
+    assert sorted(x["starts"] for x in store.active()) == [
+        "2027-12-13T15:00:00+00:00", "2027-12-13T16:00:00+00:00"]
+
+
+def test_booking_key_conflict_never_reports_another_booking(store, monkeypatch):
+    d = Dialogue(store)
+    keys = []
+    real = store.book
+    monkeypatch.setattr(store, "book", lambda *a, **k: keys.append(a[3]) or real(*a, **k))
+    _book(d, "book 2027-12-10 10:00")
+    _book(Dialogue(store), "book 2027-12-10 11:00")
+    assert keys[0] != keys[1] and all(k.startswith("s:2:") for k in keys)
