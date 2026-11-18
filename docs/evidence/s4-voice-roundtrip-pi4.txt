@@ -18,3 +18,8 @@ badly ("2026-12-0114-00") -> replies need spoken-friendly wording; (d) spoken bo
 
 S3 smoke (scripts/pi_llm_smoke.sh): llama.cpp b1b770d, Qwen2.5-0.5B-Instruct Q4_K_M (sha 74a4da8c...), 4 threads,
 throttled 0x50005 @ 600 MHz -> INVALID: prompt 64 tok 9.29 tok/s, generate 32 tok 5.06 tok/s, peak RSS 541,816 KB.
+
+PI4 spoken-booking round trip @ 5d18b3d (base.en-q5_1, throttled 0x50005, INVALID timing):
+  caller said "book december tenth at two pm" -> heard "Book December 10 at 2 p.m."
+  receptionist said: "Please confirm, Thursday, December 10 at 2.00pm for 30 minutes. Say yes or no."
+  asr 19.31 s for 1.44 s audio; first audio 6.39 s after ASR; end-of-speech -> first audio 25.69 s
