@@ -104,3 +104,30 @@ def test_two_callers_on_separate_sockets_never_cross(tmp_path):
                 for _ in range(4):                                     # clear, media, media, mark
                     seen[sid].add(ws.receive_json()["streamSid"])
     assert seen == {"M1": {"M1"}, "M2": {"M2"}}
+
+
+class RecordingASR(MockASR):
+    def __init__(self):
+        super().__init__([])
+        self.lengths = []
+
+    async def transcribe(self, mulaw):
+        self.lengths.append(len(mulaw))
+        return ""
+
+
+def test_long_continuous_speech_is_transcribed_not_hung_up(tmp_path):
+    # A caller talking 25 s without pausing is normal, not abuse: the server must
+    # transcribe what it has (bounded memory) and keep the call open.
+    asr = RecordingASR()
+    with make_client(tmp_path, asr=lambda: asr) as c, c.websocket_connect("/twilio/media") as ws:
+        ws.send_json(start())
+        for _ in range(25 * 50):                       # 25 s of loud 20 ms frames
+            ws.send_json(media(b"\x00" * 160))
+        for _ in range(30):                            # then 600 ms of silence
+            ws.send_json(media(b"\xff" * 160))
+        ws.send_json({"event": "mark", "streamSid": "M1", "mark": {"name": "ping"}})
+        ws.send_json({"event": "stop", "streamSid": "M1"})
+    assert len(asr.lengths) >= 2, "speech past the cap was dropped or the call was closed"
+    assert max(asr.lengths) <= 160000 + 160
+    assert sum(asr.lengths) == 25 * 8000
