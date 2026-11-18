@@ -220,3 +220,18 @@ def test_whisper_adaptive_window_is_opt_in(monkeypatch, model):
 ])
 def test_whisper_output_collapses_repeated_sentences(raw, expect):
     assert audio.clean_whisper_output(raw) == expect
+
+
+# #28 sweep, Pi at 1.8 GHz, 40 phrases x 3 models: greedy decoding had the same
+# WER/exact as beam-5 on every model with 0 runaways, and was ~0.5-0.9 s faster.
+def test_whisper_decodes_greedy_by_default(monkeypatch, model):
+    calls = capture_whisper(monkeypatch, 'x')
+    asyncio.run(WhisperCppASR('w', model).transcribe(b'\x00' * 160))
+    a = calls[0]['args']
+    assert a[a.index('-bs') + 1] == '1' and a[a.index('-bo') + 1] == '1'
+
+
+def test_whisper_beam_search_still_available(monkeypatch, model):
+    calls = capture_whisper(monkeypatch, 'x')
+    asyncio.run(WhisperCppASR('w', model, greedy=False).transcribe(b'\x00' * 160))
+    assert '-bs' not in calls[0]['args']
