@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, time, timedelta, timezone
 import re
 from zoneinfo import ZoneInfo
+from receptionist.datetime_resolve import resolve
 from receptionist.booking import BookingStore, SlotTaken, InvalidBooking, KeyConflict
 
 @dataclass
@@ -32,8 +33,10 @@ class Dialogue:
     def __init__(self, store: BookingStore, timezone_name: str = "America/New_York",
                  hours: dict[int,tuple[time,time]] | None = None,
                  durations: tuple[int,...] = (15,30,60), default_duration: int = 30,
-                 require_caller_id: bool = False):
+                 require_caller_id: bool = False, clock=None):
         self.store=store
+        # Injectable clock (tests); real time by default.
+        self._now=clock or (lambda: datetime.now(timezone.utc))
         self.tz=ZoneInfo(timezone_name)
         self.hours=DEFAULT_HOURS if hours is None else hours
         self.durations=durations
@@ -74,7 +77,7 @@ class Dialogue:
         duration=int(minutes or self.default_duration)
         if duration not in self.durations:
             return Reply(self._duration_text,"invalid")
-        if starts.astimezone(timezone.utc)<=datetime.now(timezone.utc):
+        if starts.astimezone(timezone.utc)<=self._now().astimezone(timezone.utc):
             return Reply("Please choose a future appointment time.")
         # Duration is real elapsed time, computed in UTC (DST-safe).
         ends=(starts.astimezone(timezone.utc)+timedelta(minutes=duration)).astimezone(self.tz)
@@ -124,6 +127,17 @@ class Dialogue:
             self._pending[session_id]=(reference,starts,ends)
             if reference:
                 return Reply(f"Please confirm moving your appointment to {starts:%A, %B %d at %I:%M %p} for {duration} minutes. Say yes or no.","confirm_required")
+            return Reply(f"Please confirm: {starts:%A, %B %d at %I:%M %p} for {duration} minutes. Say yes or no.","confirm_required")
+        if s=="book" or s.startswith("book "):
+            # Spoken request: the deterministic resolver decides the instant (or we ask).
+            when=resolve(s.removeprefix("book").strip(),self._now().astimezone(self.tz))
+            if when is None:
+                self._pending.pop(session_id,None)
+                return Reply("What day and time would you like? For example: December tenth at two p m.","clarify")
+            slot=self._slot(f"{when:%Y-%m-%d}",f"{when:%H:%M}",None,session_id)
+            if isinstance(slot,Reply):return slot
+            starts,ends,duration=slot
+            self._pending[session_id]=(None,starts,ends)
             return Reply(f"Please confirm: {starts:%A, %B %d at %I:%M %p} for {duration} minutes. Say yes or no.","confirm_required")
         if s.startswith("cancel "):
             self._pending.pop(session_id,None)
