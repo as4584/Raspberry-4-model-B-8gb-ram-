@@ -28,14 +28,13 @@ def _serve(db, port, ready):
     logging.basicConfig(level=logging.WARNING, format="SERVER %(message)s")
     logging.getLogger("receptionist.call").setLevel(logging.INFO)
     import uvicorn
-    from receptionist.audio import PiperTTS
-    from receptionist.server import Settings, create_app, select_asr_factory
+    from receptionist.server import Settings, create_app, select_asr_factory, select_tts
     # Same ASR choice as the service (resident whisper when WHISPER_DAEMON is set).
     factory, kind = select_asr_factory({**os.environ, "VOICE_BACKEND": "local"})
     logging.getLogger("receptionist.call").warning("asr=%s", kind)
     app = create_app(Settings(db_path=db, dev_allow_unsigned=True, wss_url="wss://localhost/twilio/media"),
                      asr_factory=factory,
-                     tts=PiperTTS(os.environ["PIPER_CLI"], os.environ["PIPER_MODEL"]))
+                     tts=select_tts({**os.environ, "VOICE_BACKEND": "local"})[0])
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
 
     def signal_ready():
