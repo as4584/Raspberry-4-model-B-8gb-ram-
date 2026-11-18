@@ -25,6 +25,8 @@ from pydantic import BaseModel
 from receptionist import health
 from receptionist.booking import BookingStore
 from receptionist.dialogue import Dialogue, OPENERS
+from receptionist.telephony import CALLER_RE, MAX_UTTERANCE_BYTES, CallEngine, caller_number, split_sentences  # noqa: F401
+from receptionist.twilio_transport import TwilioMediaStreamTransport
 from receptionist.audio import MockASR, MockTTS, WhisperCppASR, WhisperDaemonASR, PiperTTS, PiperDaemonTTS, CachingTTS, rms_mulaw
 
 class TextInput(BaseModel):
@@ -43,16 +45,8 @@ class Settings:
 
 # A caller number we accept as an identity: optional +, 5-15 digits (E.164-ish).
 # Anything else (blocked/"anonymous", injection attempts) is treated as no number.
-CALLER_RE=re.compile(r'\+?[0-9]{5,15}')
 
 log=logging.getLogger('receptionist.call')
-
-def split_sentences(text:str)->list[str]:
-    # Split only where punctuation is followed by whitespace, so "1.2.3" and times stay whole.
-    return [p for p in re.split(r'(?<=[.!?])\s+',text.strip()) if p]
-
-def caller_number(value:object)->str|None:
-    return value if isinstance(value,str) and CALLER_RE.fullmatch(value) else None
 
 def valid_signature(url:str, params:dict[str,str], actual:str|None, token:str) -> bool:
     if not token or not actual:return False
@@ -61,7 +55,6 @@ def valid_signature(url:str, params:dict[str,str], actual:str|None, token:str) -
     return hmac.compare_digest(sig,actual)
 
 MAX_SIM_SESSIONS=1000
-MAX_UTTERANCE_BYTES=160000   # 20 s of 8 kHz u-law per transcription chunk
 
 def select_asr_factory(env) -> tuple[Callable[[],object],str]:
     """ASR per environment: one shared resident whisper (WHISPER_DAEMON, ~0.7 s per turn on
@@ -150,114 +143,11 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
         if not settings.dev_allow_unsigned and not valid_signature(settings.wss_url,{},ws.headers.get('X-Twilio-Signature'),settings.auth_token):
             await ws.close(code=1008);return
         await ws.accept()
-        stream_id=None;call_id=None
-        dialogue=None
-        asr=asr_factory()
-        generation=0
-        audio=bytearray();heard_speech=False;silence_ms=0;spoken_ms=0
-        send_lock=asyncio.Lock()
-        # Serialises this call's dialogue across worker threads: a barge-in cancels the
-        # awaiting task, but its thread keeps running until handle() returns.
-        dialogue_lock=threading.Lock()
-        caller_id:str|None=None
-        def handle_locked(text:str,session:str):
-            with dialogue_lock:return dialogue.handle(text,session,caller_id=caller_id)
-        jobs:set[asyncio.Task]=set()
-        async def send(event:dict):
-            async with send_lock:await ws.send_json(event)
-        async def process(packet:bytes, this_generation:int):
-            try:
-                t0=time.monotonic()
-                utterance=await asr.transcribe(packet)
-                t_asr=time.monotonic()
-                log.info('call=%s gen=%d phase=asr audio_s=%.2f took_s=%.2f stale=%s',call_id,this_generation,len(packet)/8000,t_asr-t0,this_generation!=generation)
-                if this_generation!=generation or not utterance or not dialogue:return
-                # Booking does blocking SQLite I/O (busy waits up to 15 s); keep it off the
-                # event loop so other calls keep streaming.
-                reply=await asyncio.to_thread(handle_locked,utterance,call_id or 'invalid')
-                # Synthesise sentence k+1 while sentence k streams: the caller hears the first
-                # sentence without waiting for the whole reply (PI4: 8 s reply rendered up front).
-                words=reply.speech or reply.text   # phone wording when the dialogue provides it (#38)
-                parts=split_sentences(words) or [words]
-                pending=asyncio.create_task(tts.synthesize(parts[0]))
-                try:
-                    for k in range(len(parts)):
-                        outbound=await pending
-                        if k==0:log.info('call=%s gen=%d phase=first_audio_ready since_asr_done_s=%.2f',call_id,this_generation,time.monotonic()-t_asr)
-                        pending=asyncio.create_task(tts.synthesize(parts[k+1])) if k+1<len(parts) else None
-                        if this_generation!=generation:return
-                        for i in range(0,len(outbound),160):
-                            if generation!=this_generation:return
-                            payload=base64.b64encode(outbound[i:i+160]).decode()
-                            await send({'event':'media','streamSid':stream_id,'media':{'payload':payload}})
-                            await asyncio.sleep(0.02)
-                finally:
-                    if pending and not pending.done():pending.cancel()
-                if this_generation==generation:await send({'event':'mark','streamSid':stream_id,'mark':{'name':f'answer-{this_generation}'}})
-            except asyncio.CancelledError:raise
-            except Exception:
-                if this_generation==generation:
-                    # Avoid lying about booking success if ASR/TTS fails.
-                    await send({'event':'mark','streamSid':stream_id,'mark':{'name':'processing-error'}})
-        try:
-            while True:
-                # Untrusted input: anything that isn't a JSON object is a policy close, never a crash.
-                try:evt=await ws.receive_json()
-                except ValueError:await ws.close(code=1008);break
-                if not isinstance(evt,dict):await ws.close(code=1008);break
-                event=evt.get('event')
-                if event=='connected':continue
-                if event=='start':
-                    start=evt.get('start')
-                    if (stream_id or not isinstance(start,dict) or not isinstance(evt.get('streamSid'),str) or not evt['streamSid']
-                            or not isinstance(start.get('callSid'),str) or not start['callSid']):
-                        await ws.close(code=1008);break
-                    stream_id=evt['streamSid'];call_id=start['callSid'];dialogue=Dialogue(store,require_caller_id=settings.require_caller_id)
-                    custom=start.get('customParameters')
-                    caller_id=caller_number(custom.get('callerId')) if isinstance(custom,dict) else None
-                elif event=='media':
-                    if not stream_id or evt.get('streamSid')!=stream_id:await ws.close(code=1008);break
-                    body=evt.get('media')
-                    if not isinstance(body,dict):await ws.close(code=1008);break
-                    payload=body.get('payload','')
-                    if not isinstance(payload,str) or len(payload)>20000:await ws.close(code=1009);break
-                    try:data=base64.b64decode(payload,validate=True)
-                    except (binascii.Error,ValueError):await ws.close(code=1008);break
-                    if not data:continue
-                    # Simple VAD. Runs on speech+silence, leaving heavier ASR on a background task.
-                    rms=rms_mulaw(data)
-                    ms=1000*len(data)/8000
-                    if rms>650:
-                        if not heard_speech:
-                            generation+=1
-                            for task in list(jobs):task.cancel()
-                            if stream_id:await send({'event':'clear','streamSid':stream_id})
-                        heard_speech=True;silence_ms=0;spoken_ms+=ms
-                        if len(audio)+len(data)>MAX_UTTERANCE_BYTES:
-                            # A long unbroken talker is a normal caller: transcribe what we
-                            # have (bounded memory) and keep listening instead of hanging up.
-                            task=asyncio.create_task(process(bytes(audio),generation))
-                            jobs.add(task);task.add_done_callback(jobs.discard)
-                            audio.clear()
-                        audio.extend(data)
-                    elif heard_speech:
-                        # Keep quiet frames once speech started: soft consonants and short
-                        # gaps between words are part of the phrase (dropping them made whisper
-                        # hear choppy audio on the Pi). The trailing <300 ms of silence is harmless.
-                        if len(audio)+len(data)<=MAX_UTTERANCE_BYTES:audio.extend(data)
-                        silence_ms+=ms
-                        if silence_ms>=300 and spoken_ms>=80:
-                            snapshot=bytes(audio);ticket=generation
-                            audio.clear();heard_speech=False;silence_ms=0;spoken_ms=0
-                            task=asyncio.create_task(process(snapshot,ticket))
-                            jobs.add(task);task.add_done_callback(jobs.discard)
-                elif event=='mark':continue
-                elif event=='stop':break
-                else:await ws.close(code=1008);break
+        # One engine per call keeps per-call ASR (whisper-cli) instances independent; the
+        # resident daemon factory hands every call the same shared process.
+        engine=CallEngine(store,asr=asr_factory(),tts=tts,require_caller_id=settings.require_caller_id)
+        try:await engine.run(TwilioMediaStreamTransport(ws))
         except (WebSocketDisconnect,ValueError,RuntimeError):pass
-        finally:
-            for task in list(jobs):task.cancel()
-            if jobs:await asyncio.gather(*jobs,return_exceptions=True)
     return app
 
 app=create_app()
