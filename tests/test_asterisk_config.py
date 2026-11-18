@@ -15,7 +15,7 @@ def test_http_and_ari_listen_on_loopback_only():
     http = conf("http.conf")
     assert re.search(r"^bindaddr\s*=\s*127\.0\.0\.1$", http, re.M)
     assert "0.0.0.0" not in http and not re.search(r"^tlsenable\s*=\s*yes", http, re.M)
-    ari = conf("ari.conf")
+    ari = conf("ari.conf.tmpl")
     assert re.search(r"^enabled\s*=\s*yes", ari, re.M) and "${ARI_PASSWORD}" in ari
 
 
