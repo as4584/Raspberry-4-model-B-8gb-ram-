@@ -17,8 +17,9 @@ import threading
 from pathlib import Path
 from typing import Callable
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, HTTPException
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
+from receptionist import health
 from receptionist.booking import BookingStore
 from receptionist.dialogue import Dialogue
 from receptionist.audio import MockASR, MockTTS, WhisperCppASR, PiperTTS, rms_mulaw
@@ -68,6 +69,12 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
 
     @app.get('/healthz')
     def healthz():return {'status':'ok','voice_backend':os.getenv('VOICE_BACKEND','mock')}
+
+    @app.get('/readyz')
+    def readyz():
+        # Can this Pi take calls right now? (DB lock, disk, power, temperature)
+        result=health.readiness(settings.db_path,os.path.dirname(os.path.abspath(settings.db_path)))
+        return JSONResponse(result,status_code=200 if result['ready'] else 503)
 
     @app.post('/simulate/text')
     def simulate(x:TextInput):
