@@ -41,7 +41,7 @@ class Dialogue:
         allowed=", ".join(str(x) for x in durations[:-1])
         self._duration_text=f"Please choose a duration of {allowed} or {durations[-1]} minutes."
         # Per-session state: one caller's yes/no must never touch another's pending slot.
-        self._pending:dict[str,tuple[datetime,datetime]]={}
+        self._pending:dict[str,tuple[str|None,datetime,datetime]]={}  # (reschedule ref or None, starts, ends)
         self._turns:dict[str,int]={}
 
     def _parse_datetime(self, ymd: str, hm: str) -> datetime:
@@ -61,45 +61,63 @@ class Dialogue:
         if span is None or local_end.date()!=local_start.date():return False
         return span[0]<=local_start.time() and local_end.time()<=span[1]
 
+    def _slot(self, ymd: str, hm: str, minutes: str | None, session_id: str):
+        """Validate a requested slot; returns (starts, ends, duration) or a Reply refusal."""
+        self._pending.pop(session_id,None)
+        try:
+            starts=self._parse_datetime(ymd,hm)
+        except (ValueError,InvalidBooking) as exc:
+            return Reply(f"Please choose an unambiguous date and time. {exc}","invalid")
+        duration=int(minutes or self.default_duration)
+        if duration not in self.durations:
+            return Reply(self._duration_text,"invalid")
+        if starts.astimezone(timezone.utc)<=datetime.now(timezone.utc):
+            return Reply("Please choose a future appointment time.")
+        # Duration is real elapsed time, computed in UTC (DST-safe).
+        ends=(starts.astimezone(timezone.utc)+timedelta(minutes=duration)).astimezone(self.tz)
+        if not self._within_hours(starts,ends):
+            return Reply(self._closed_text,"closed")
+        return starts,ends,duration
+
     def handle(self, utterance: str, session_id: str) -> Reply:
         turn=self._turns[session_id]=self._turns.get(session_id,0)+1
         s=utterance.strip().lower()
         if s in ("no","never mind","cancel that"):
-            self._pending.pop(session_id,None)
+            pending=self._pending.pop(session_id,None)
+            if pending and pending[0]:
+                return Reply("Okay, your appointment was not changed.")
             return Reply("Okay, no appointment was created.")
         if s in ("yes","confirm"):
             pending=self._pending.pop(session_id,None)
             if not pending:
                 return Reply("There is no pending booking to confirm.")
-            starts,ends=pending
+            reference,starts,ends=pending
+            # Stable within a call/turn even if the network retries the same operation.
+            key=f"{session_id}:{turn}"
             try:
-                # Stable within a call/turn even if the network retries the same operation.
-                result=self.store.book("primary",starts,ends,f"{session_id}:{turn}")
-                return Reply(f"Confirmed for {starts.astimezone(self.tz):%Y-%m-%d %I:%M %p}. Your reference is {result['id']}.","booked",result['id'])
+                if reference:
+                    result=self.store.reschedule(reference,starts,ends,key)
+                    return Reply(f"Rescheduled to {starts:%Y-%m-%d %I:%M %p}. Your new reference is {result['id']}.","rescheduled",result['id'])
+                result=self.store.book("primary",starts,ends,key)
+                return Reply(f"Confirmed for {starts:%Y-%m-%d %I:%M %p}. Your reference is {result['id']}.","booked",result['id'])
             except SlotTaken:
                 return Reply("That time was just taken. Please choose another slot.","slot_taken")
-            except (InvalidBooking,KeyConflict):
+            except InvalidBooking:
+                if reference:
+                    return Reply("I couldn't find an active appointment with that reference.","not_found")
                 return Reply("I could not safely complete that appointment.","error")
-        match=re.fullmatch(r"book\s+(\d{4}-\d\d-\d\d)\s+(\d\d:\d\d)(?:\s+(\d{1,3}))?",s)
+            except KeyConflict:
+                return Reply("I could not safely complete that appointment.","error")
+        match=re.fullmatch(r"(book|reschedule\s+(\S+))\s+(\d{4}-\d\d-\d\d)\s+(\d\d:\d\d)(?:\s+(\d{1,3}))?",s)
         if match:
-            try:
-                starts=self._parse_datetime(match.group(1),match.group(2))
-                duration=int(match.group(3) or self.default_duration)
-                if duration not in self.durations:
-                    self._pending.pop(session_id,None)
-                    return Reply(self._duration_text,"invalid")
-                if starts.astimezone(timezone.utc)<=datetime.now(timezone.utc):
-                    return Reply("Please choose a future appointment time.")
-                # Duration is real elapsed time, computed in UTC (DST-safe).
-                ends=(starts.astimezone(timezone.utc)+timedelta(minutes=duration)).astimezone(self.tz)
-                if not self._within_hours(starts,ends):
-                    self._pending.pop(session_id,None)
-                    return Reply(self._closed_text,"closed")
-                self._pending[session_id]=(starts,ends)
-                return Reply(f"Please confirm: {starts:%A, %B %d at %I:%M %p} for {duration} minutes. Say yes or no.","confirm_required")
-            except (ValueError,InvalidBooking) as exc:
-                self._pending.pop(session_id,None)
-                return Reply(f"Please choose an unambiguous date and time. {exc}","invalid")
+            slot=self._slot(match.group(3),match.group(4),match.group(5),session_id)
+            if isinstance(slot,Reply):return slot
+            starts,ends,duration=slot
+            reference=match.group(2)
+            self._pending[session_id]=(reference,starts,ends)
+            if reference:
+                return Reply(f"Please confirm moving your appointment to {starts:%A, %B %d at %I:%M %p} for {duration} minutes. Say yes or no.","confirm_required")
+            return Reply(f"Please confirm: {starts:%A, %B %d at %I:%M %p} for {duration} minutes. Say yes or no.","confirm_required")
         if s.startswith("cancel "):
             self._pending.pop(session_id,None)
             reference=s.removeprefix("cancel ").strip()
