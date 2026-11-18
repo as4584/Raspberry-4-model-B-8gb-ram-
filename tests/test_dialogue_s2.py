@@ -272,7 +272,8 @@ def test_migration_adds_caller_id_to_existing_db(tmp_path):
     store = BookingStore(path)
     BookingStore(path)                                    # re-opening is idempotent
     cols = [r[1] for r in sqlite3.connect(path).execute("PRAGMA table_info(bookings)")]
-    assert cols[-1] == "caller_id" and cols.count("caller_id") == 1
+    # Exactly once each; later migrations (v0.4 "code") may append after caller_id.
+    assert cols.count("caller_id") == 1 and cols.count("code") == 1
     (row,) = store.active()
     assert (row["id"], row["caller_id"]) == ("old", None)
     assert store.cancel("old", caller_id=ALICE) is False   # legacy row: no owner to match
