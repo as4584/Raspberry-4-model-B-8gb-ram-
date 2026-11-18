@@ -1,0 +1,9 @@
+Off-device backup evidence 2026-11-18 (~02:20 EST)
+Pi: backupreader uid 997, groups backupreader+receptionist, sudo: not allowed;
+    authorized_keys: restrict,command="/usr/local/bin/pi-backup-export" ssh-ed25519 ... desktop-power-pi-backup
+Desktop (power): scripts/pull_pi_backup.ps1 ->
+    PULL_OK bookings-20261118T064922Z.sqlite sha256=07b5590976e668dd18e8d97bdd456c07790162324217ccf8038ad5c95b7fc4d3 -> C:\Users\AlexS\pi-backups
+Negative: key asked to run "id; cat /etc/shadow; echo PWNED" -> exit 0, 30720 bytes, tar members = the snapshot + sidecar only;
+    leaked_uid=False leaked_PWNED=False leaked_shadow=False
+PTY/port-forward denial: provided by sshd 'restrict'; not separately witnessed.
+Schedule: Windows task PiBookingsBackupPull daily 04:15 (runs while AlexS logged on); remove with schtasks /delete /tn PiBookingsBackupPull
