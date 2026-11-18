@@ -241,6 +241,10 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
                             audio.clear()
                         audio.extend(data)
                     elif heard_speech:
+                        # Keep quiet frames once speech started: soft consonants and short
+                        # gaps between words are part of the phrase (dropping them made whisper
+                        # hear choppy audio on the Pi). The trailing <300 ms of silence is harmless.
+                        if len(audio)+len(data)<=MAX_UTTERANCE_BYTES:audio.extend(data)
                         silence_ms+=ms
                         if silence_ms>=300 and spoken_ms>=80:
                             snapshot=bytes(audio);ticket=generation

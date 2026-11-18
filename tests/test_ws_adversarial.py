@@ -130,7 +130,7 @@ def test_long_continuous_speech_is_transcribed_not_hung_up(tmp_path):
         ws.send_json({"event": "stop", "streamSid": "M1"})
     assert len(asr.lengths) >= 2, "speech past the cap was dropped or the call was closed"
     assert max(asr.lengths) <= 160000 + 160
-    assert sum(asr.lengths) == 25 * 8000
+    assert 25 * 8000 <= sum(asr.lengths) <= 25 * 8000 + 300 * 8   # every voiced byte, plus the end-of-speech pause
 
 
 def test_quiet_frames_inside_speech_reach_asr(tmp_path):
