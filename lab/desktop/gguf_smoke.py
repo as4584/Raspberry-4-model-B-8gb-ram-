@@ -25,7 +25,7 @@ exe = next(p for p in (Path(bindir).rglob("llama-completion")) if p.is_file()) i
 env = dict(os.environ, LD_LIBRARY_PATH=f"{exe.parent}:{Path(torch.__file__).parent / 'lib'}")
 pairs = []
 for r in recs:
-    text = tok.apply_chat_template(prompt.messages(r), tools=prompt.tool_specs(), add_generation_prompt=True, tokenize=False)
+    text = tok.apply_chat_template(prompt.messages(r, layout=os.environ.get("PROMPT_LAYOUT", "v1")), tools=prompt.tool_specs(), add_generation_prompt=True, tokenize=False)
     with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as f:
         f.write(text)
     out = subprocess.run([str(exe), "-m", gguf, "-f", f.name, "-n", "120", "--temp", "0", "-no-cnv", "-c", "4096",

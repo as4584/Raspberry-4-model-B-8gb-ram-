@@ -31,11 +31,11 @@ HP = {"lora_r": 16, "lora_alpha": 32, "lora_dropout": 0.05,
       "lr": 2e-4, "epochs": 2, "batch": 16, "micro_batch": 2, "warmup_ratio": 0.05, "weight_decay": 0.0, "max_len": 2048}
 
 
-def encode(tok, rec, model_id):
+def encode(tok, rec, model_id, layout="v1"):
     kw = {"tools": prompt.tool_specs(), "tokenize": False}
     if "Qwen3" in model_id:
         kw["enable_thinking"] = False
-    msgs = prompt.messages(rec)
+    msgs = prompt.messages(rec, layout=layout)
     prefix = tok.apply_chat_template(msgs, add_generation_prompt=True, **kw)
     full = tok.apply_chat_template(msgs + [{"role": "assistant", "content": prompt.target(rec)}], **kw)
     assert full.startswith(prefix), "chat template prefix mismatch"
@@ -53,6 +53,7 @@ def main():
     ap.add_argument("--budget-tokens", type=int, required=True)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--prompt-layout", choices=prompt.LAYOUTS, default="v1")
     a = ap.parse_args()
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -65,7 +66,7 @@ def main():
     random.Random(a.seed).shuffle(recs)
     examples, used, total, sup = [], [], 0, 0
     for r in recs:
-        ids, labels = encode(tok, r, a.model)
+        ids, labels = encode(tok, r, a.model, a.prompt_layout)
         if total + len(ids) > a.budget_tokens:
             break
         examples.append((ids, labels))
@@ -126,7 +127,8 @@ def main():
             "seed": a.seed, "budget_tokens": a.budget_tokens, "trained_seq_tokens_per_epoch": total,
             "supervised_tokens_per_epoch": int(sup), "examples": len(examples), "steps": steps, "hp": HP,
             "used_ids_sha256": hashlib.sha256("\n".join(used).encode()).hexdigest(),
-            "prompt_sha256": prompt.prompt_hash(), "seconds": round(time.time() - t0, 1),
+            "prompt_sha256": prompt.prompt_hash(layout=a.prompt_layout),
+            "prompt_layout": a.prompt_layout, "seconds": round(time.time() - t0, 1),
             "peak_vram_gb": round(torch.cuda.max_memory_allocated() / 1e9, 2),
             "torch": torch.__version__, "transformers": transformers.__version__, "peft": peft.__version__}
     (out / "train_meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")

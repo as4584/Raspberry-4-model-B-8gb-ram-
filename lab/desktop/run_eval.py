@@ -60,6 +60,7 @@ def main():
     ap.add_argument("--shots", type=int, default=0)
     ap.add_argument("--batch", type=int, default=32)
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--prompt-layout", choices=prompt.LAYOUTS, default="v1")
     a = ap.parse_args()
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -77,7 +78,7 @@ def main():
     raws = []
     for i in range(0, len(data), a.batch):
         chunk = data[i:i + a.batch]
-        texts = [render(tok, prompt.messages(r, shots), a.model) for r in chunk]
+        texts = [render(tok, prompt.messages(r, shots, layout=a.prompt_layout), a.model) for r in chunk]
         enc = tok(texts, return_tensors="pt", padding=True).to("cuda")
         with torch.no_grad():
             gen = model.generate(**enc, **DECODING, pad_token_id=tok.pad_token_id)
@@ -93,7 +94,8 @@ def main():
         "model": a.model, "revision": a.revision, "adapter": a.adapter,
         "adapter_sha256": _dir_hash(a.adapter) if a.adapter else None,
         "data": a.data, "data_sha256": hashlib.sha256(Path(a.data).read_bytes()).hexdigest(), "n": len(data),
-        "shots": a.shots, "shot_ids": [x["id"] for x in shots], "prompt_sha256": prompt.prompt_hash(shots),
+        "shots": a.shots, "shot_ids": [x["id"] for x in shots], "prompt_sha256": prompt.prompt_hash(shots, layout=a.prompt_layout),
+        "prompt_layout": a.prompt_layout,
         "decoding": DECODING, "batch": a.batch, "dtype": "bfloat16", "seconds": round(elapsed, 1),
         "torch": torch.__version__, "transformers": transformers.__version__, "python": platform.python_version(),
         "gpu": torch.cuda.get_device_name(0),
