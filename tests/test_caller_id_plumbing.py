@@ -43,7 +43,10 @@ def _speak(ws, sid):
         ws.send_json({"event": "media", "streamSid": sid, "media": {"payload": base64.b64encode(bytes([0] * 160)).decode()}})
     for _ in range(16):
         ws.send_json({"event": "media", "streamSid": sid, "media": {"payload": base64.b64encode(bytes([255] * 160)).decode()}})
-    return [ws.receive_json() for _ in range(4)]
+    out = [ws.receive_json()]
+    while out[-1]["event"] != "mark":          # replies stream per sentence
+        out.append(ws.receive_json())
+    return out
 
 
 def _call(tmp_path, params, require=None):

@@ -77,8 +77,10 @@ def test_real_server_accepts_media_websocket_and_answers(tmp_path):
     with Server(make_app(tmp_path, [["book 2027-12-10 14:00"]])) as s, connect(s.port) as ws:
         send(ws, {"event": "start", "streamSid": "M1", "start": {"callSid": "C1"}})
         utterance(ws, "M1")
-        events = [recv(ws)["event"] for _ in range(4)]
-        assert events == ["clear", "media", "media", "mark"]
+        events = [recv(ws)["event"]]
+        while events[-1] != "mark":
+            events.append(recv(ws)["event"])
+        assert events[0] == "clear" and set(events[1:-1]) == {"media"} and len(events) >= 4
 
 
 def test_slow_booking_on_one_call_does_not_freeze_another(tmp_path, monkeypatch):
@@ -96,8 +98,8 @@ def test_slow_booking_on_one_call_does_not_freeze_another(tmp_path, monkeypatch)
         send(a, {"event": "start", "streamSid": "MA", "start": {"callSid": "CA"}})
         send(b, {"event": "start", "streamSid": "MB", "start": {"callSid": "CB"}})
         utterance(a, "MA")
-        for _ in range(4):
-            recv(a)                              # confirm prompt
+        while recv(a)["event"] != "mark":        # confirm prompt (streamed per sentence)
+            pass
         utterance(a, "MA")                       # "yes" -> slow book()
         assert started.wait(10), "booking never started"
         t0 = time.monotonic()

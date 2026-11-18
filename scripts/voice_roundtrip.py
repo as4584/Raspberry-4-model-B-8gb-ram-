@@ -24,6 +24,9 @@ SILENCE = bytes([0xFF]) * 160
 
 
 def _serve(db, port, ready):
+    import logging
+    logging.basicConfig(level=logging.WARNING, format="SERVER %(message)s")
+    logging.getLogger("receptionist.call").setLevel(logging.INFO)
     import uvicorn
     from receptionist.audio import PiperTTS, WhisperCppASR
     from receptionist.server import Settings, create_app

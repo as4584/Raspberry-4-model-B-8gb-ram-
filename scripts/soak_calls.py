@@ -81,8 +81,10 @@ def _call(port, n):
             for chunk in [LOUD] * 5 + [QUIET] * 16:
                 ws.send(json.dumps({"event": "media", "streamSid": sid,
                                     "media": {"payload": base64.b64encode(chunk).decode()}}))
-            events = [json.loads(ws.recv(timeout=30))["event"] for _ in range(4)]
-            if events != ["clear", "media", "media", "mark"]:
+            events = [json.loads(ws.recv(timeout=30))["event"]]
+            while events[-1] != "mark":
+                events.append(json.loads(ws.recv(timeout=30))["event"])
+            if events[0] != "clear" or set(events[1:-1]) != {"media"}:
                 raise RuntimeError(f"unexpected events {events}")
         ws.send(json.dumps({"event": "stop", "streamSid": sid}))
 
