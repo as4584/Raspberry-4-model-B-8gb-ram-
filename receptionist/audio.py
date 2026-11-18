@@ -106,7 +106,7 @@ class PiperTTS:
         def run():
             with tempfile.TemporaryDirectory(prefix='receptionist-tts-') as folder:
                 out=Path(folder)/'reply.wav'
-                subprocess.run([self.executable,'--model',self.model,'--output_file',str(out)],input=line+'\n',capture_output=True,timeout=self.timeout,check=True)
+                subprocess.run([self.executable,'--model',self.model,'--output_file',str(out)],input=(line+'\n').encode('utf-8'),capture_output=True,timeout=self.timeout,check=True)
                 with wave.open(str(out),'rb') as f:
                     if f.getnchannels()!=1 or f.getsampwidth()!=2:raise ValueError('Piper output must be mono PCM16')
                     raw=f.readframes(f.getnframes()); rate=f.getframerate()
