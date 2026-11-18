@@ -1,5 +1,7 @@
 # Agents: Start here — two-laptop Raspberry Pi receptionist project
 
+> **Team change 2026-11-17 (owner decision):** Ramona has left the project; her Pi user was removed and she was never added to the tailnet. **"Laptop 2" is now the owner's desktop (`power`, designation "Laptop 2 Desktop")**, using the non-root Pi user `laptop2` with its own SSH key; follow `docs/roles/laptop-2-desktop.md`. Both machines belong to the same person, so reviews are **not independent**: say so in every PR and never present Laptop 2 sign-off as third-party QA. Secrets: `docs/SECRETS.md`.
+
 You are working in the **Raspberry Pi 4 Model B 8 GB Local AI Receptionist** repository. **The repository is the canonical, executable source of truth.** The Google Doc is the research/long-form specification: https://docs.google.com/document/d/1pw6pMB9rPBjglflAK-l1i4pcpTMXr65xeBihhxzsJ6M/edit
 
 ## ZERO-AMBIGUITY BOOT SEQUENCE — every new agent/session
