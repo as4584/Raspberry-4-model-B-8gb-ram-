@@ -17,6 +17,7 @@ include = ["receptionist*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 
 [tool.mutmut]
 # Safety-critical core: booking transactions and the confirmation state machine.

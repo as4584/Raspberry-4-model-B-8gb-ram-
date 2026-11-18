@@ -14,3 +14,4 @@ data/
 .coverage
 mutants/
 .claude/
+lab/out/
