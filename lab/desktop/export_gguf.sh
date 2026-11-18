@@ -12,20 +12,21 @@ fi
 LLAMA_SHA=$(git -C "$LLAMA" rev-parse HEAD)
 if [ ! -x "$BIN/llama-quantize" ]; then
   mkdir -p "$BIN"
-  rel=$(curl -fsSL https://api.github.com/repos/ggml-org/llama.cpp/releases/latest)
-  url=$(echo "$rel" | grep -o 'https://[^"]*bin-ubuntu-x64.zip' | head -1)
-  curl -fsSL "$url" -o "$BIN/rel.zip"
-  "$PY" -c "import zipfile,sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$BIN/rel.zip" "$BIN"
+  REL="${LLAMA_REL:-b12502}"   # pinned official release (CPU x64 build)
+  url="https://github.com/ggml-org/llama.cpp/releases/download/$REL/llama-$REL-bin-ubuntu-x64.tar.gz"
+  curl -fsSL "$url" | tar -xz -C "$BIN"
   q=$(find "$BIN" -name llama-quantize -type f | head -1)
   ln -sf "$q" "$BIN/llama-quantize"
   chmod +x "$q"
   echo "$url" > "$BIN/SOURCE_URL"
 fi
 OUT="$LAB/gguf"; mkdir -p "$OUT"
-"$PY" "$LLAMA/convert_hf_to_gguf.py" "$MERGED" --outtype f16 --outfile "$OUT/$NAME-f16.gguf"
+[ -f "$OUT/$NAME-f16.gguf" ] || "$PY" "$LLAMA/convert_hf_to_gguf.py" "$MERGED" --outtype f16 --outfile "$OUT/$NAME-f16.gguf"
 QDIR=$(dirname "$(readlink -f "$BIN/llama-quantize")")
+# libgomp is not installed system-wide; reuse the copy bundled in the venv's torch wheel.
+TORCH_LIB="$("$PY" -c 'import os, torch; print(os.path.join(os.path.dirname(torch.__file__), "lib"))')"
 for q in Q8_0 Q4_K_M; do
-  LD_LIBRARY_PATH="$QDIR:${LD_LIBRARY_PATH:-}" "$BIN/llama-quantize" "$OUT/$NAME-f16.gguf" "$OUT/$NAME-$q.gguf" "$q"
+  LD_LIBRARY_PATH="$QDIR:$TORCH_LIB:${LD_LIBRARY_PATH:-}" "$BIN/llama-quantize" "$OUT/$NAME-f16.gguf" "$OUT/$NAME-$q.gguf" "$q"
 done
 {
   echo "llama.cpp convert source commit: $LLAMA_SHA"
