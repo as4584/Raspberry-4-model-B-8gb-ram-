@@ -113,13 +113,14 @@ def _collapse_repeats(text: str) -> str:
 
 def audio_ctx_for(seconds: float) -> int:
     """whisper encoder context for an utterance: 50 frames/s + 64 margin, 128..1500.
-    The default 1500 always encodes a 30 s window; on the PI4 a 2 s utterance
-    encoded in 11.65 s at 1500 vs 1.06 s at 160 with the same transcript."""
+    Opt-in only (WhisperCppASR(adaptive_ctx=True)): it cuts encode time ~10x, but
+    the PI4 sweep (#28, 320 runs) showed decoding runaways on 13-45% of phrases
+    with it and none with the full 1500 window."""
     return min(1500,max(128,math.ceil(seconds*50)+64))
 
 class WhisperCppASR:
     """whisper.cpp `whisper-cli` (pinned v1.9.5): -m model -f wav -t N -l en -nt -np."""
-    def __init__(self, executable: str, model: str, timeout: int=40, threads: int=4, adaptive_ctx: bool=True):
+    def __init__(self, executable: str, model: str, timeout: int=40, threads: int=4, adaptive_ctx: bool=False):
         self.executable,self.model,self.timeout,self.threads=executable,model,timeout,threads
         self.adaptive_ctx=adaptive_ctx
     def args(self, wav: str, seconds: float|None=None) -> list[str]:
