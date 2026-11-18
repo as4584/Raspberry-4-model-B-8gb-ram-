@@ -43,10 +43,12 @@ def test_kill_9_mid_stream_loses_no_confirmed_booking(tmp_path, delay):
     q = ctx.Queue()
     p = ctx.Process(target=_writer, args=(path, q))
     p.start()
-    time.sleep(delay + 1.5)          # spawn start-up + writing
+    # Wait for the first real commit (spawn start-up is slow on a throttled Pi),
+    # then let it write for `delay` before the crash.
+    confirmed = [q.get(timeout=60)]
+    time.sleep(delay)
     os.kill(p.pid, signal.SIGKILL)
     p.join(10)
-    confirmed = []
     while True:
         try:
             confirmed.append(q.get(timeout=0.5))

@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from html import escape
 from urllib.parse import parse_qsl
 import asyncio
+import threading
 import base64
 import binascii
 import hashlib
@@ -91,6 +92,11 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
         generation=0
         audio=bytearray();heard_speech=False;silence_ms=0;spoken_ms=0
         send_lock=asyncio.Lock()
+        # Serialises this call's dialogue across worker threads: a barge-in cancels the
+        # awaiting task, but its thread keeps running until handle() returns.
+        dialogue_lock=threading.Lock()
+        def handle_locked(text:str,session:str):
+            with dialogue_lock:return dialogue.handle(text,session)
         jobs:set[asyncio.Task]=set()
         async def send(event:dict):
             async with send_lock:await ws.send_json(event)
@@ -98,7 +104,9 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
             try:
                 utterance=await asr.transcribe(packet)
                 if this_generation!=generation or not utterance or not dialogue:return
-                reply=dialogue.handle(utterance,call_id or 'invalid')
+                # Booking does blocking SQLite I/O (busy waits up to 15 s); keep it off the
+                # event loop so other calls keep streaming.
+                reply=await asyncio.to_thread(handle_locked,utterance,call_id or 'invalid')
                 outbound=await tts.synthesize(reply.text)
                 if this_generation!=generation:return
                 for i in range(0,len(outbound),160):
@@ -114,17 +122,23 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
                     await send({'event':'mark','streamSid':stream_id,'mark':{'name':'processing-error'}})
         try:
             while True:
-                evt=await ws.receive_json()
+                # Untrusted input: anything that isn't a JSON object is a policy close, never a crash.
+                try:evt=await ws.receive_json()
+                except ValueError:await ws.close(code=1008);break
+                if not isinstance(evt,dict):await ws.close(code=1008);break
                 event=evt.get('event')
                 if event=='connected':continue
                 if event=='start':
-                    start=evt.get('start',{})
-                    if stream_id or not evt.get('streamSid') or not start.get('callSid'):
+                    start=evt.get('start')
+                    if (stream_id or not isinstance(start,dict) or not isinstance(evt.get('streamSid'),str) or not evt['streamSid']
+                            or not isinstance(start.get('callSid'),str) or not start['callSid']):
                         await ws.close(code=1008);break
                     stream_id=evt['streamSid'];call_id=start['callSid'];dialogue=Dialogue(store)
                 elif event=='media':
                     if not stream_id or evt.get('streamSid')!=stream_id:await ws.close(code=1008);break
-                    payload=evt.get('media',{}).get('payload','')
+                    body=evt.get('media')
+                    if not isinstance(body,dict):await ws.close(code=1008);break
+                    payload=body.get('payload','')
                     if not isinstance(payload,str) or len(payload)>20000:await ws.close(code=1009);break
                     try:data=base64.b64decode(payload,validate=True)
                     except (binascii.Error,ValueError):await ws.close(code=1008);break
