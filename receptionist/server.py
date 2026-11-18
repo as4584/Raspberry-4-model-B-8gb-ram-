@@ -1,5 +1,6 @@
 """Twilio Media Streams WebSocket endpoint with offline injectable speech adapters."""
 from __future__ import annotations
+from collections import OrderedDict
 from datetime import datetime, timezone
 from html import escape
 from urllib.parse import parse_qsl
@@ -10,6 +11,7 @@ import hashlib
 import hmac
 import json
 import os
+import threading
 from pathlib import Path
 from typing import Callable
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, HTTPException
@@ -37,7 +39,9 @@ def valid_signature(url:str, params:dict[str,str], actual:str|None, token:str) -
     sig=base64.b64encode(hmac.new(token.encode(),message.encode(),hashlib.sha1).digest()).decode()
     return hmac.compare_digest(sig,actual)
 
-def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None=None, tts:object|None=None) -> FastAPI:
+MAX_SIM_SESSIONS=1000
+
+def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None=None, tts:object|None=None, max_sessions:int=MAX_SIM_SESSIONS) -> FastAPI:
     settings=settings or Settings()
     store=BookingStore(settings.db_path)
     if asr_factory is None:
@@ -46,7 +50,10 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
         tts=PiperTTS(os.getenv('PIPER_CLI','piper'),os.environ['PIPER_MODEL']) if os.getenv('VOICE_BACKEND')=='local' and os.getenv('PIPER_MODEL') else MockTTS()
     app=FastAPI(title='Pi Local Receptionist',version='0.1.0')
     app.state.store=store
-    sessions:dict[str,Dialogue]={}
+    # Bounded LRU: an unbounded map of session_id -> Dialogue is a memory leak.
+    sessions:OrderedDict[str,Dialogue]=OrderedDict()
+    app.state.sessions=sessions
+    sessions_lock=threading.Lock()  # sync endpoints run on a thread pool
 
     @app.get('/healthz')
     def healthz():return {'status':'ok','voice_backend':os.getenv('VOICE_BACKEND','mock')}
@@ -55,7 +62,12 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
     def simulate(x:TextInput):
         # Dev endpoint is intentionally disabled except during an explicit local test run.
         if not settings.dev_allow_unsigned:raise HTTPException(404)
-        dialogue=sessions.setdefault(x.session_id,Dialogue(store))
+        with sessions_lock:
+            dialogue=sessions.get(x.session_id)
+            if dialogue is None:
+                dialogue=sessions[x.session_id]=Dialogue(store)
+                while len(sessions)>max_sessions:sessions.popitem(last=False)
+            else:sessions.move_to_end(x.session_id)
         result=dialogue.handle(x.text,x.session_id)
         return {'text':result.text,'action':result.action,'committed_id':result.committed_id}
 
