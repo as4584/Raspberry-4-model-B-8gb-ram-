@@ -79,7 +79,7 @@ fi
 
 echo "== 4/6 repo checkout"
 if [[ -d "$checkout/.git" ]]; then
-  [[ "$dry" == "1" || -z "$(git -C "$checkout" status --porcelain)" ]] \
+  [[ "$dry" == "1" || -z "$(git -C "$checkout" status --porcelain --untracked-files=no)" ]] \
     || { echo "FAIL: $checkout has local changes; not touching it" >&2; exit 23; }
   step "git -C '$checkout' fetch origin && git -C '$checkout' pull --ff-only"
 else

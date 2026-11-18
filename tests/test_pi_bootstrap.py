@@ -101,3 +101,17 @@ def test_waits_for_clock_sync_before_apt(tmp_path):
     sync = next(i for i, l in enumerate(p) if "NTPSynchronized" in l)
     apt = next(i for i, l in enumerate(p) if "apt-get update" in l)
     assert sync < apt
+
+
+def test_pip_editable_artifacts_are_gitignored():
+    """`pip install -e` writes *.egg-info into the checkout; if git sees it,
+    the bootstrap's dirty-checkout guard blocks every retry (seen on the Pi)."""
+    git = shutil.which("git")
+    r = subprocess.run([git, "check-ignore", "-q", "pi_local_receptionist.egg-info/PKG-INFO"],
+                       cwd=ROOT)
+    assert r.returncode == 0, "egg-info not ignored"
+
+
+def test_dirty_guard_ignores_untracked_build_output():
+    src = SCRIPT.read_text()
+    assert "status --porcelain --untracked-files=no" in src
