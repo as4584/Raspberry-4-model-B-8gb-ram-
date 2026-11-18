@@ -1,0 +1,20 @@
+PI4 real-voice round trips, 2026-11-18 ~03:00-03:30 EST, scripts/voice_roundtrip.py @ a3cddbe
+Pipeline: Piper caller line -> 8 kHz u-law frames -> uvicorn /twilio/media (VAD -> whisper.cpp tiny.en adaptive ctx
+-> Dialogue -> Piper) -> reply audio -> whisper transcribes the reply. All runs throttled=0x50005 (under-voltage):
+latency figures are INVALID as benchmarks.
+
+1) "book december tenth at two pm" (2.2 s)
+   heard caller: "Book December 10th at 2 p.m."  (before fix a3cddbe: sentence duplicated at -ac 256)
+   reply heard:  "To book, say, book 2026-12-0114-00. I will confirm before creating it."  (help reply: S3 NLU gap)
+   end of speech -> first reply audio: 20.82 s (earlier run 11.07 s)
+2) "I would like to speak to a human"
+   heard caller: "I would like to speak to a human."
+   reply heard:  "I can arrange a human callback. Please contact the business directly of urgent."  (correct handoff)
+   end of speech -> first reply audio: 17.26 s
+
+Findings: (a) whisper repetition at -ac 256 (deterministic; fixed by sentence collapse);
+(b) Piper synthesises the whole reply before the first frame is sent -> latency; (c) digits/ISO dates are spoken
+badly ("2026-12-0114-00") -> replies need spoken-friendly wording; (d) spoken booking needs S3 NLU.
+
+S3 smoke (scripts/pi_llm_smoke.sh): llama.cpp b1b770d, Qwen2.5-0.5B-Instruct Q4_K_M (sha 74a4da8c...), 4 threads,
+throttled 0x50005 @ 600 MHz -> INVALID: prompt 64 tok 9.29 tok/s, generate 32 tok 5.06 tok/s, peak RSS 541,816 KB.
