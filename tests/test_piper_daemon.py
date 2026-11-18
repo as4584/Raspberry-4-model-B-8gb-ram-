@@ -114,3 +114,16 @@ def test_cache_only_stores_short_fixed_phrases():
             await tts.synthesize("Your booking code is four seven two nine.")
     asyncio.run(go())
     assert len(inner.calls) == 2                                      # long/variable text never cached
+
+
+def test_server_selects_cached_resident_piper_and_prewarms_openers(monkeypatch, tmp_path):
+    from receptionist.dialogue import OPENERS
+    from receptionist.server import select_tts
+    tts, kind = select_tts({"VOICE_BACKEND": "local", "PIPER_MODEL": "/v.onnx", "PIPER_CLI": "/opt/piper",
+                            "PIPER_RESIDENT": "1"})
+    assert kind == "resident" and isinstance(tts, CachingTTS) and isinstance(tts.inner, PiperDaemonTTS)
+    assert tts.inner.argv == ["/opt/piper"] and tts.prewarm_phrases == OPENERS
+    _, kind = select_tts({"VOICE_BACKEND": "local", "PIPER_MODEL": "/v.onnx"})
+    assert kind == "cli"
+    _, kind = select_tts({})
+    assert kind == "mock"
