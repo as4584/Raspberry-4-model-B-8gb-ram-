@@ -24,4 +24,4 @@ source_paths = ["receptionist/booking.py", "receptionist/dialogue.py"]
 also_copy = ["scripts/", ".github/", "docs/", ".env.example", ".gitignore"]
 # Booking/dialogue tests only; the 8-process race is too slow to run per mutant
 # (it still runs in the pytest job).
-pytest_add_cli_args_test_selection = ["tests/test_booking.py", "tests/test_booking_safety.py", "tests/test_booking_edges.py", "tests/test_dialogue_contract.py", "-k", "not across_processes"]
+pytest_add_cli_args_test_selection = ["tests/test_booking.py", "tests/test_booking_safety.py", "tests/test_booking_edges.py", "tests/test_dialogue_contract.py", "tests/test_dialogue_s2.py", "-k", "not across_processes"]
