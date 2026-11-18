@@ -69,7 +69,7 @@ def test_phone_path_never_sends_a_uuid_to_tts(tmp_path, monkeypatch):
             while ws.receive_json()["event"] != "mark":
                 pass
     joined = " ".join(spoken)
-    assert "You're booked for Friday, December tenth at two p m." in joined
+    assert "Great, you're all set. Friday, December tenth at two p m." in joined
     assert not UUID.search(joined) and not re.search(r"\d{4}-\d\d-\d\d", joined)
 
 
