@@ -44,5 +44,9 @@ def test_prompt_hash_is_stable_and_sensitive():
     assert prompt.prompt_hash(shots=[REC]) != h
 
 
+def test_target_uses_qwen_name_first_order():
+    assert prompt.target(REC).startswith('<tool_call>\n{"name": "book_appointment", "arguments": {"date"')
+
+
 def test_json_compact_and_sorted():
     assert json.loads(prompt.target(REC)[len("<tool_call>\n"):-len("\n</tool_call>")]) == REC["expected"]

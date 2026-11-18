@@ -48,7 +48,9 @@ def system_prompt(rec: dict) -> str:
 
 
 def target(rec: dict) -> str:
-    return "<tool_call>\n" + json.dumps(rec["expected"], sort_keys=True, separators=(", ", ": ")) + "\n</tool_call>"
+    # Qwen's native order: name first, then arguments (argument keys sorted for determinism).
+    call = {"name": rec["expected"]["name"], "arguments": dict(sorted(rec["expected"]["arguments"].items()))}
+    return "<tool_call>\n" + json.dumps(call, separators=(", ", ": ")) + "\n</tool_call>"
 
 
 def messages(rec: dict, shots: list[dict] | None = None) -> list[dict]:
