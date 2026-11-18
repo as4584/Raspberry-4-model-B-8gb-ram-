@@ -65,3 +65,39 @@ def test_parse_helpers():
     assert health.parse_throttled("garbage") is None
     assert health.parse_temp("temp=48.3'C") == 48.3
     assert health.parse_temp("nope") is None
+
+
+# Inside the hardened service vcgencmd is unusable (PrivateDevices=yes): on the
+# PI4 /readyz said "unknown (no vcgencmd)" for power and temperature. The probes
+# must fall back to sysfs files the service user can read.
+def _hwmon(tmp_path, alarm):
+    h = tmp_path / "hwmon" / "hwmon1"
+    h.mkdir(parents=True)
+    (h / "name").write_text("rpi_volt\n")
+    (h / "in0_lcrit_alarm").write_text(f"{alarm}\n")
+    (tmp_path / "hwmon" / "hwmon0").mkdir()
+    (tmp_path / "hwmon" / "hwmon0" / "name").write_text("cpu_thermal\n")
+    return tmp_path / "hwmon"
+
+
+def test_power_falls_back_to_rpi_volt_alarm(tmp_path, monkeypatch):
+    monkeypatch.setattr(health, "_vcgencmd", lambda *a: "")
+    monkeypatch.setattr(health, "HWMON_ROOT", str(_hwmon(tmp_path, 1)))
+    c = health.check_power()
+    assert c["ok"] is False and "under-voltage now" in c["detail"]
+
+
+def test_power_alarm_clear_is_ok(tmp_path, monkeypatch):
+    monkeypatch.setattr(health, "_vcgencmd", lambda *a: "")
+    monkeypatch.setattr(health, "HWMON_ROOT", str(_hwmon(tmp_path, 0)))
+    c = health.check_power()
+    assert c["ok"] is True and "rpi_volt" in c["detail"]
+
+
+def test_temperature_falls_back_to_thermal_zone(tmp_path, monkeypatch):
+    monkeypatch.setattr(health, "_vcgencmd", lambda *a: "")
+    zone = tmp_path / "temp"
+    zone.write_text("81234\n")
+    monkeypatch.setattr(health, "THERMAL_ZONE", str(zone))
+    c = health.check_temperature()
+    assert c["ok"] is False and c["detail"].startswith("81.2 C")
