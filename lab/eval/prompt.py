@@ -42,9 +42,31 @@ def tool_specs() -> list[dict]:
     return specs
 
 
-def system_prompt(rec: dict) -> str:
+# v2 (cacheable): no per-call text in the system prompt, so system+tools is a constant
+# prefix llama-server can keep cached; the time travels in each user turn instead.
+SYSTEM_V2 = (SYSTEM.replace("Now: {now_human} ({tz}).\n", "")
+             .replace("against Now.", "against the Now line at the start of the caller's message.")
+             .replace("{{", "{").replace("}}", "}"))
+LAYOUTS = ("v1", "v2")
+
+
+def _now_line(rec: dict) -> tuple[str, str]:
     now = datetime.fromisoformat(rec["reference_now"])
-    return SYSTEM.format(now_human=f"{now:%A %Y-%m-%d %H:%M}", tz=rec.get("timezone", "America/New_York"))
+    return f"{now:%A %Y-%m-%d %H:%M}", rec.get("timezone", "America/New_York")
+
+
+def system_prompt(rec: dict, layout: str = "v1") -> str:
+    if layout == "v2":
+        return SYSTEM_V2
+    now_human, tz = _now_line(rec)
+    return SYSTEM.format(now_human=now_human, tz=tz)
+
+
+def _user(rec: dict, layout: str) -> str:
+    if layout == "v1":
+        return rec["text"]
+    now_human, tz = _now_line(rec)
+    return f"Now: {now_human} ({tz}).\nCaller: {rec['text']}"
 
 
 def target(rec: dict) -> str:
@@ -53,15 +75,19 @@ def target(rec: dict) -> str:
     return "<tool_call>\n" + json.dumps(call, separators=(", ", ": ")) + "\n</tool_call>"
 
 
-def messages(rec: dict, shots: list[dict] | None = None) -> list[dict]:
-    msgs = [{"role": "system", "content": system_prompt(rec)}]
+def messages(rec: dict, shots: list[dict] | None = None, layout: str = "v1") -> list[dict]:
+    if layout not in LAYOUTS:
+        raise ValueError(f"unknown prompt layout {layout!r}")
+    msgs = [{"role": "system", "content": system_prompt(rec, layout)}]
     for s in shots or []:
-        msgs += [{"role": "user", "content": s["text"]}, {"role": "assistant", "content": target(s)}]
-    msgs.append({"role": "user", "content": rec["text"]})
+        msgs += [{"role": "user", "content": _user(s, layout)}, {"role": "assistant", "content": target(s)}]
+    msgs.append({"role": "user", "content": _user(rec, layout)})
     return msgs
 
 
-def prompt_hash(shots: list[dict] | None = None) -> str:
-    payload = {"system": SYSTEM, "tools": tool_specs(),
+def prompt_hash(shots: list[dict] | None = None, layout: str = "v1") -> str:
+    payload = {"system": SYSTEM if layout == "v1" else SYSTEM_V2, "tools": tool_specs(),
                "shots": [(s["text"], target(s)) for s in (shots or [])]}
+    if layout != "v1":
+        payload["layout"] = layout
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()

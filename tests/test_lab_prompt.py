@@ -50,3 +50,46 @@ def test_target_uses_qwen_name_first_order():
 
 def test_json_compact_and_sorted():
     assert json.loads(prompt.target(REC)[len("<tool_call>\n"):-len("\n</tool_call>")]) == REC["expected"]
+
+
+# --- v2 layout: cacheable prefix (latency) -------------------------------------
+# v1 puts "Now: <minute>" on line 2 of the system prompt, so the ~1,100-token
+# system+tools prefix changes every minute and llama-server's prompt cache can
+# never reuse it. v2 moves Now into the user turn; the prefix is then constant.
+
+LATER = {**REC, "reference_now": "2027-03-02T16:45:00-05:00", "text": "cancel booking 4729"}
+
+
+def test_v2_system_prompt_is_identical_for_any_now():
+    a, b = prompt.messages(REC, layout="v2"), prompt.messages(LATER, layout="v2")
+    assert a[0] == b[0]
+    assert "Now:" not in a[0]["content"] and "2026" not in a[0]["content"]
+    for must in ("exactly one tool call", "never", "09:00", "17:00", "Sunday", "handoff_to_human", "ask_clarification"):
+        assert must in a[0]["content"], must
+
+
+def test_v2_user_turn_carries_now_then_caller_text():
+    msgs = prompt.messages(REC, layout="v2")
+    assert [m["role"] for m in msgs] == ["system", "user"]
+    assert msgs[1]["content"] == "Now: Wednesday 2026-11-18 10:00 (America/New_York).\nCaller: book me tomorrow at 3pm"
+
+
+def test_v2_shots_each_carry_their_own_now():
+    msgs = prompt.messages(REC, shots=[LATER], layout="v2")
+    assert msgs[1]["content"].startswith("Now: Tuesday 2027-03-02 16:45")
+    assert msgs[3]["content"].startswith("Now: Wednesday 2026-11-18 10:00")
+
+
+def test_v1_is_default_and_unchanged():
+    assert prompt.messages(REC) == prompt.messages(REC, layout="v1")
+    assert "Wednesday 2026-11-18 10:00" in prompt.messages(REC)[0]["content"]
+
+
+def test_prompt_hash_differs_by_layout():
+    assert prompt.prompt_hash(layout="v2") != prompt.prompt_hash()
+
+
+def test_unknown_layout_rejected():
+    import pytest
+    with pytest.raises(ValueError):
+        prompt.messages(REC, layout="v3")
