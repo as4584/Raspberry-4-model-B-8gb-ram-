@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from html import escape
 from urllib.parse import parse_qsl
 import asyncio
+import threading
 import base64
 import binascii
 import hashlib
@@ -79,6 +80,11 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
         generation=0
         audio=bytearray();heard_speech=False;silence_ms=0;spoken_ms=0
         send_lock=asyncio.Lock()
+        # Serialises this call's dialogue across worker threads: a barge-in cancels the
+        # awaiting task, but its thread keeps running until handle() returns.
+        dialogue_lock=threading.Lock()
+        def handle_locked(text:str,session:str):
+            with dialogue_lock:return dialogue.handle(text,session)
         jobs:set[asyncio.Task]=set()
         async def send(event:dict):
             async with send_lock:await ws.send_json(event)
@@ -86,7 +92,9 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
             try:
                 utterance=await asr.transcribe(packet)
                 if this_generation!=generation or not utterance or not dialogue:return
-                reply=dialogue.handle(utterance,call_id or 'invalid')
+                # Booking does blocking SQLite I/O (busy waits up to 15 s); keep it off the
+                # event loop so other calls keep streaming.
+                reply=await asyncio.to_thread(handle_locked,utterance,call_id or 'invalid')
                 outbound=await tts.synthesize(reply.text)
                 if this_generation!=generation:return
                 for i in range(0,len(outbound),160):
