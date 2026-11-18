@@ -49,7 +49,7 @@ def _core_utils_dir(tmp_path: Path) -> Path:
 
 
 def run_preflight(tmp_path, *, arch="aarch64", model=PI4, mem_kb=MEM_8GB_KB,
-                  py_ok=True, tailscale="connected", git=True):
+                  py_ok=True, tailscale="connected", git=True, throttled="0x0"):
     root = tmp_path / "root"
     (root / "proc" / "device-tree").mkdir(parents=True)
     if model is not None:
@@ -61,6 +61,8 @@ def run_preflight(tmp_path, *, arch="aarch64", model=PI4, mem_kb=MEM_8GB_KB,
     _stub(bindir, "python3", "exit 0" if py_ok else "exit 1")
     if git:
         _stub(bindir, "git", 'echo "0000000000000000000000000000000000000000"')
+    if throttled is not None:
+        _stub(bindir, "vcgencmd", f'[ "$1" = get_throttled ] && echo "throttled={throttled}"')
     if tailscale == "connected":
         _stub(bindir, "tailscale", 'echo "100.64.0.1"')
     elif tailscale == "logged_out":
@@ -97,3 +99,30 @@ def test_wrong_environment_is_rejected_with_distinct_code(tmp_path, kwargs, code
     assert "PI4_PREFLIGHT_OK" not in r.stdout
     assert "FAIL:" in r.stderr
 
+
+
+# Power health (PI4 2026-11-17: throttled=0x50005 with kernel under-voltage
+# warnings after a PSU change; timings from such a boot are not valid evidence).
+@pytest.mark.parametrize("value", ["0x1", "0x4", "0x50005", "0x5"])
+def test_current_undervoltage_or_throttling_fails(tmp_path, value):
+    r = run_preflight(tmp_path, throttled=value)
+    assert r.returncode == 19, (r.returncode, r.stdout, r.stderr)
+    assert "FAIL:" in r.stderr and "power" in r.stderr.lower()
+    assert "PI4_PREFLIGHT_OK" not in r.stdout
+
+
+def test_past_undervoltage_passes_but_is_flagged(tmp_path):
+    r = run_preflight(tmp_path, throttled="0x50000")
+    assert r.returncode == 0, r.stderr
+    assert "power_history=undervoltage_or_throttling_since_boot" in r.stdout
+    assert "throttled=0x50000" in r.stdout
+
+
+def test_clean_power_is_reported(tmp_path):
+    r = run_preflight(tmp_path, throttled="0x0")
+    assert r.returncode == 0 and "power_history=clean" in r.stdout
+
+
+def test_missing_vcgencmd_is_reported_not_fatal(tmp_path):
+    r = run_preflight(tmp_path, throttled=None)
+    assert r.returncode == 0 and "throttled=unknown" in r.stdout
