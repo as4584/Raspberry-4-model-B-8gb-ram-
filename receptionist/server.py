@@ -102,17 +102,23 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
                     await send({'event':'mark','streamSid':stream_id,'mark':{'name':'processing-error'}})
         try:
             while True:
-                evt=await ws.receive_json()
+                # Untrusted input: anything that isn't a JSON object is a policy close, never a crash.
+                try:evt=await ws.receive_json()
+                except ValueError:await ws.close(code=1008);break
+                if not isinstance(evt,dict):await ws.close(code=1008);break
                 event=evt.get('event')
                 if event=='connected':continue
                 if event=='start':
-                    start=evt.get('start',{})
-                    if stream_id or not evt.get('streamSid') or not start.get('callSid'):
+                    start=evt.get('start')
+                    if (stream_id or not isinstance(start,dict) or not isinstance(evt.get('streamSid'),str) or not evt['streamSid']
+                            or not isinstance(start.get('callSid'),str) or not start['callSid']):
                         await ws.close(code=1008);break
                     stream_id=evt['streamSid'];call_id=start['callSid'];dialogue=Dialogue(store)
                 elif event=='media':
                     if not stream_id or evt.get('streamSid')!=stream_id:await ws.close(code=1008);break
-                    payload=evt.get('media',{}).get('payload','')
+                    body=evt.get('media')
+                    if not isinstance(body,dict):await ws.close(code=1008);break
+                    payload=body.get('payload','')
                     if not isinstance(payload,str) or len(payload)>20000:await ws.close(code=1009);break
                     try:data=base64.b64decode(payload,validate=True)
                     except (binascii.Error,ValueError):await ws.close(code=1008);break
