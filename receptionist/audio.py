@@ -232,3 +232,75 @@ class PiperTTS:
                 if rms_mulaw(out_mulaw)<AUDIBLE_RMS:raise ValueError('Piper output is silent')
                 return out_mulaw
         return await asyncio.to_thread(run)
+
+def _wav_to_phone(path: Path) -> bytes:
+    with wave.open(str(path),'rb') as f:
+        if f.getnchannels()!=1 or f.getsampwidth()!=2:raise ValueError('Piper output must be mono PCM16')
+        raw=f.readframes(f.getnframes()); rate=f.getframerate()
+    out=mulaw_from_pcm16(resample_pcm16(raw,rate,8000))
+    if rms_mulaw(out)<AUDIBLE_RMS:raise ValueError('Piper output is silent')
+    return out
+
+class PiperDaemonTTS:
+    """Resident Piper (--output_dir: one stdin line -> one wav path on stdout). The voice
+    model loads once (~1.2 s on the Pi), so a reply sentence costs only its synthesis.
+    A barge-in cancel does NOT kill Piper (a reload costs more than finishing): the
+    sentence in flight completes in the background and its audio is discarded."""
+    def __init__(self, argv: list[str], model: str, timeout: float=35.0, extra_args: list[str]|None=None):
+        self.argv,self.model,self.timeout,self.extra_args=list(argv),model,timeout,list(extra_args or [])
+        self._proc=None;self._lock=None;self._dir=None
+    @property
+    def pid(self):return self._proc.pid if self._proc else None
+    async def _ensure(self):
+        if self._proc and self._proc.returncode is None:return self._proc
+        if not Path(self.model).is_file():raise FileNotFoundError('PIPER_MODEL missing')
+        self._dir=self._dir or tempfile.TemporaryDirectory(prefix='receptionist-tts-')
+        self._proc=await asyncio.create_subprocess_exec(*self.argv,'--model',self.model,'--output_dir',self._dir.name,
+                                                        *self.extra_args,stdin=asyncio.subprocess.PIPE,
+                                                        stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.DEVNULL)
+        return self._proc
+    async def _one(self, line: str) -> bytes:
+        async with self._lock:
+            try:
+                proc=await self._ensure()
+                proc.stdin.write((line+'\n').encode('utf-8'));await proc.stdin.drain()
+                out=await asyncio.wait_for(proc.stdout.readline(),self.timeout)
+            except BaseException:
+                await self.aclose();raise
+            if not out:await self.aclose();raise RuntimeError('piper exited')
+            path=Path(out.decode('utf-8','replace').strip())
+            try:return await asyncio.to_thread(_wav_to_phone,path)
+            finally:path.unlink(missing_ok=True)
+    async def synthesize(self, text: str) -> bytes:
+        line=' '.join(text.split())
+        if not line:raise ValueError('empty TTS text')
+        self._lock=self._lock or asyncio.Lock()
+        # Shield: a cancelled caller abandons the result, but the request/response pair on
+        # Piper's pipe still completes, so the next sentence can never read a stale path.
+        return await asyncio.shield(asyncio.ensure_future(self._one(line)))
+    async def aclose(self):
+        proc,self._proc=self._proc,None
+        if proc and proc.returncode is None:
+            proc.kill();await asyncio.shield(proc.wait())
+        if proc and proc.stdin and not proc.stdin.is_closing():proc.stdin.close()
+
+class CachingTTS:
+    """Short fixed phrases ("Okay.", "Say yes or no.") synthesise once and then play
+    instantly; variable or long text (dates, booking codes) always goes to the voice."""
+    def __init__(self, inner, max_items: int=64, max_chars: int=40):
+        from collections import OrderedDict
+        self.inner,self.max_items,self.max_chars=inner,max_items,max_chars
+        self._cache:OrderedDict[str,bytes]=OrderedDict()
+    async def synthesize(self, text: str) -> bytes:
+        key=' '.join(text.split())
+        if key in self._cache:
+            self._cache.move_to_end(key);return self._cache[key]
+        audio=await self.inner.synthesize(text)
+        if len(key)<=self.max_chars and not any(c.isdigit() for c in key):
+            self._cache[key]=audio
+            while len(self._cache)>self.max_items:self._cache.popitem(last=False)
+        return audio
+    async def prewarm(self, phrases):
+        for p in phrases:await self.synthesize(p)
+    async def aclose(self):
+        if hasattr(self.inner,'aclose'):await self.inner.aclose()
