@@ -102,6 +102,13 @@ def _collapse_repeats(text: str) -> str:
     out=[]
     for sentence in re.split(r'(?<=[.!?])\s+',text.strip()):
         if sentence and (not out or key(sentence)!=key(out[-1])):out.append(sentence)
+    # -nf + short window: whisper may restart the sentence and get cut off
+    # ("Book March 15 at 1 p.m. Book March 15 at"). A tail of 2+ words that is a
+    # strict prefix of the first sentence is that restart, not new speech.
+    if len(out)>=2:
+        words=lambda s:re.sub(r'[^\w\s]','',s.lower()).split()
+        first,tail=words(out[0]),words(' '.join(out[1:]))
+        if 2<=len(tail)<len(first) and first[:len(tail)]==tail:out=out[:1]
     text=' '.join(out)
     w=text.split()
     for k in (4,3,2):
@@ -151,6 +158,55 @@ class WhisperCppASR:
                 raise
             if proc.returncode:raise subprocess.CalledProcessError(proc.returncode,argv,out,err)
             return clean_whisper_output(out.decode('utf-8','replace'))
+
+class WhisperDaemonASR:
+    """Resident whisper (native/whisper_daemon.cpp): model loaded once, short encoder
+    window, greedy, no fallback, decode capped at ~6 tokens per second of audio.
+    Pi (#28): 32/40 exact, p50 0.72 s, max 0.89 s vs 7.1 s for whisper-cli.
+    One utterance at a time; a cancelled (barged-in) decode kills the process and
+    the next call respawns it (~0.25 s), so a stale answer can never be read."""
+    def __init__(self, argv: list[str], timeout: float=10.0, tokens_per_s: int=6, extra_tokens: int=4):
+        self.argv,self.timeout=list(argv),timeout
+        self.tokens_per_s,self.extra_tokens=tokens_per_s,extra_tokens
+        self._proc=None;self._lock=None
+    @property
+    def pid(self):return self._proc.pid if self._proc else None
+    async def _ensure(self):
+        if self._proc and self._proc.returncode is None:return self._proc
+        self._proc=await asyncio.create_subprocess_exec(*self.argv,stdin=asyncio.subprocess.PIPE,
+                                                        stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.DEVNULL)
+        ready=await asyncio.wait_for(self._proc.stdout.readline(),self.timeout)
+        if ready.strip()!=b'READY':await self._kill();raise RuntimeError('whisper daemon did not start')
+        return self._proc
+    async def _kill(self):
+        proc,self._proc=self._proc,None
+        if proc and proc.returncode is None:
+            proc.kill();await asyncio.shield(proc.wait())
+        if proc and proc.stdin and not proc.stdin.is_closing():proc.stdin.close()
+    async def aclose(self):
+        """Stop the resident process (server shutdown)."""
+        await self._kill()
+    async def transcribe(self, mulaw: bytes) -> str:
+        if not mulaw:return ''
+        self._lock=self._lock or asyncio.Lock()
+        seconds=len(mulaw)/8000
+        async with self._lock:
+            with tempfile.TemporaryDirectory(prefix='receptionist-asr-') as folder:
+                raw=Path(folder)/'utterance.raw'
+                raw.write_bytes(resample_pcm16(pcm16_from_mulaw(mulaw),8000,16000))
+                cap=math.ceil(seconds*self.tokens_per_s)+self.extra_tokens
+                try:
+                    proc=await self._ensure()
+                    proc.stdin.write(f'{raw}\t{audio_ctx_for(seconds)}\t{cap}\n'.encode())
+                    await proc.stdin.drain()
+                    line=await asyncio.wait_for(proc.stdout.readline(),self.timeout)
+                except BaseException:
+                    await self._kill()
+                    raise
+            text=line.decode('utf-8','replace').strip()
+            if not line or text.startswith('ERR'):
+                await self._kill();raise RuntimeError(f'whisper daemon failed: {text or "exited"}')
+            return clean_whisper_output(text)
 
 class MockTTS:
     async def synthesize(self,text: str) -> bytes:

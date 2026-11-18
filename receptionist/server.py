@@ -24,7 +24,7 @@ from pydantic import BaseModel
 from receptionist import health
 from receptionist.booking import BookingStore
 from receptionist.dialogue import Dialogue
-from receptionist.audio import MockASR, MockTTS, WhisperCppASR, PiperTTS, rms_mulaw
+from receptionist.audio import MockASR, MockTTS, WhisperCppASR, WhisperDaemonASR, PiperTTS, rms_mulaw
 
 class TextInput(BaseModel):
     session_id: str
@@ -62,11 +62,22 @@ def valid_signature(url:str, params:dict[str,str], actual:str|None, token:str) -
 MAX_SIM_SESSIONS=1000
 MAX_UTTERANCE_BYTES=160000   # 20 s of 8 kHz u-law per transcription chunk
 
+def select_asr_factory(env) -> tuple[Callable[[],object],str]:
+    """ASR per environment: one shared resident whisper (WHISPER_DAEMON, ~0.7 s per turn on
+    the Pi, #28), else a fresh whisper-cli per call (~7 s), else the mock."""
+    if env.get('VOICE_BACKEND')!='local' or not env.get('WHISPER_MODEL'):
+        return (lambda: MockASR()),'mock'
+    if env.get('WHISPER_DAEMON'):
+        shared=WhisperDaemonASR([env['WHISPER_DAEMON'],env['WHISPER_MODEL'],env.get('WHISPER_THREADS','4')])
+        return (lambda: shared),'daemon'
+    return (lambda: WhisperCppASR(env.get('WHISPER_CLI','whisper-cli'),env['WHISPER_MODEL'])),'cli'
+
 def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None=None, tts:object|None=None, max_sessions:int=MAX_SIM_SESSIONS) -> FastAPI:
     settings=settings or Settings()
     store=BookingStore(settings.db_path)
+    asr_kind='custom'
     if asr_factory is None:
-        asr_factory=(lambda: WhisperCppASR(os.getenv('WHISPER_CLI','whisper-cli'),os.environ['WHISPER_MODEL'])) if os.getenv('VOICE_BACKEND')=='local' and os.getenv('WHISPER_MODEL') else (lambda: MockASR())
+        asr_factory,asr_kind=select_asr_factory(os.environ)
     if tts is None:
         tts=PiperTTS(os.getenv('PIPER_CLI','piper'),os.environ['PIPER_MODEL']) if os.getenv('VOICE_BACKEND')=='local' and os.getenv('PIPER_MODEL') else MockTTS()
     app=FastAPI(title='Pi Local Receptionist',version='0.1.0')
@@ -77,7 +88,7 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
     sessions_lock=threading.Lock()  # sync endpoints run on a thread pool
 
     @app.get('/healthz')
-    def healthz():return {'status':'ok','voice_backend':os.getenv('VOICE_BACKEND','mock')}
+    def healthz():return {'status':'ok','voice_backend':os.getenv('VOICE_BACKEND','mock'),'asr':asr_kind}
 
     @app.get('/readyz')
     def readyz():

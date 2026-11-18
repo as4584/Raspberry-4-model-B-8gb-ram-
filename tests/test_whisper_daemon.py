@@ -33,9 +33,18 @@ def daemon(tmp_path):
     return WhisperDaemonASR([sys.executable, str(script), str(log)]), log
 
 
+def run(asr, coro):
+    async def go():
+        try:
+            return await coro
+        finally:
+            await asr.aclose()
+    return asyncio.run(go())
+
+
 def test_transcribes_and_cleans_output(daemon):
     asr, _ = daemon
-    assert asyncio.run(asr.transcribe(b"\xff" * 8000)) == "Book December 10 at 2 p.m."
+    assert run(asr, asr.transcribe(b"\xff" * 8000)) == "Book December 10 at 2 p.m."
 
 
 def test_sends_16k_pcm_short_window_and_token_cap(daemon):
@@ -55,7 +64,7 @@ def test_process_is_reused_across_utterances(daemon):
         pid = asr.pid
         await asr.transcribe(b"\xff" * 8000)
         return pid, asr.pid
-    first, second = asyncio.run(two())
+    first, second = run(asr, two())
     assert first == second and len(log.read_text().splitlines()) == 2
 
 
@@ -73,10 +82,30 @@ def test_cancel_kills_daemon_and_next_call_respawns(daemon):
         t0 = time.monotonic()
         text = await asr.transcribe(b"\xff" * 8000)
         return old, asr.pid, text, time.monotonic() - t0
-    old, new, text, took = asyncio.run(scenario())
+    old, new, text, took = run(asr, scenario())
     assert old != new and text == "Book December 10 at 2 p.m." and took < 3
 
 
 def test_empty_audio_never_hits_daemon(daemon):
     asr, log = daemon
-    assert asyncio.run(asr.transcribe(b"")) == "" and not log.exists()
+    assert run(asr, asr.transcribe(b"")) == "" and not log.exists()
+
+
+# --- server selection -----------------------------------------------------------
+from receptionist.audio import MockASR, WhisperCppASR  # noqa: E402
+from receptionist.server import select_asr_factory  # noqa: E402
+
+
+def test_server_uses_one_shared_daemon_when_configured():
+    env = {"VOICE_BACKEND": "local", "WHISPER_MODEL": "/m.bin", "WHISPER_DAEMON": "/opt/wd", "WHISPER_THREADS": "4"}
+    factory, kind = select_asr_factory(env)
+    a, b = factory(), factory()
+    assert kind == "daemon" and a is b and isinstance(a, WhisperDaemonASR)
+    assert a.argv == ["/opt/wd", "/m.bin", "4"]
+
+
+def test_server_falls_back_to_cli_then_mock():
+    factory, kind = select_asr_factory({"VOICE_BACKEND": "local", "WHISPER_MODEL": "/m.bin"})
+    assert kind == "cli" and isinstance(factory(), WhisperCppASR) and factory() is not factory()
+    factory, kind = select_asr_factory({})
+    assert kind == "mock" and isinstance(factory(), MockASR)
