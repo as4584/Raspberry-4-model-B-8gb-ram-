@@ -42,7 +42,7 @@ def main(argv=None) -> Path:
     records = generate.generate(a.split, a.seed, a.n, a.mode)
     out.parent.mkdir(parents=True, exist_ok=True)
     data = "".join(json.dumps(r, sort_keys=True, ensure_ascii=False) + "\n" for r in records)
-    out.write_text(data, encoding="utf-8")
+    out.write_bytes(data.encode("utf-8"))  # exact bytes: no CRLF translation
     cov = coverage.pairwise(records)
     manifest = {
         "split": a.split, "seed": a.seed, "mode": a.mode, "count": len(records),
