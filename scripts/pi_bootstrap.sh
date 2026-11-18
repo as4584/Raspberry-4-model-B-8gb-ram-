@@ -21,6 +21,7 @@ evidence_dir="$home/pi-evidence"
 
 [[ "$uid" != "0" ]] || { echo "FAIL: run as your normal user, not root (sudo is used per step)" >&2; exit 20; }
 [[ "$arch" == "aarch64" ]] || { echo "FAIL: 64-bit Raspberry Pi OS (aarch64) required, got $arch" >&2; exit 21; }
+# shellcheck source=/dev/null  # os-release path is overridable for tests
 codename="$(. "$os_release" && echo "${VERSION_CODENAME:-}")"
 [[ -n "$codename" ]] || { echo "FAIL: VERSION_CODENAME missing from $os_release" >&2; exit 22; }
 
@@ -88,7 +89,7 @@ fi
 
 echo "== 5/6 venv + tests"
 step "python3 -m venv '$checkout/.venv'"
-step "'$checkout/.venv/bin/python' -m pip install -e '$checkout[dev]'"
+step "'$checkout/.venv/bin/python' -m pip install -e '${checkout}[dev]'"
 step "cd '$checkout' && .venv/bin/python -m pytest -q"
 
 echo "== 6/6 hardware preflight"
