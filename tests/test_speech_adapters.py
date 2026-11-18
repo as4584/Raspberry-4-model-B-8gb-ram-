@@ -178,17 +178,20 @@ def test_audio_ctx_scales_with_utterance_length(seconds, expect):
     assert audio.audio_ctx_for(seconds) == expect
 
 
-def test_whisper_passes_audio_ctx_for_utterance(monkeypatch, model):
+# Default flipped after the PI4 ASR sweep (#28, 320 runs): the adaptive window
+# caused decoding runaways on 13-45% of phrases (p95 69 s, one 120 s timeout);
+# the full window had 0 runaways. Adaptive stays available as an opt-in.
+def test_whisper_uses_full_window_by_default(monkeypatch, model):
     calls = capture_whisper(monkeypatch, 'x')
     asyncio.run(WhisperCppASR('w', model).transcribe(mulaw_from_pcm16(tone_pcm16(seconds=2.0))))
+    assert '-ac' not in calls[0]['args']
+
+
+def test_whisper_adaptive_window_is_opt_in(monkeypatch, model):
+    calls = capture_whisper(monkeypatch, 'x')
+    asyncio.run(WhisperCppASR('w', model, adaptive_ctx=True).transcribe(mulaw_from_pcm16(tone_pcm16(seconds=2.0))))
     a = calls[0]['args']
     assert a[a.index('-ac') + 1] == str(audio.audio_ctx_for(2.0))
-
-
-def test_whisper_full_window_can_be_forced(monkeypatch, model):
-    calls = capture_whisper(monkeypatch, 'x')
-    asyncio.run(WhisperCppASR('w', model, adaptive_ctx=False).transcribe(mulaw_from_pcm16(tone_pcm16(seconds=2.0))))
-    assert '-ac' not in calls[0]['args']
 
 
 # --- repetition guard (PI4 2026-11-18) -------------------------------------------
