@@ -1,14 +1,39 @@
 name: tests
 on: [push, pull_request]
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   pytest:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ['3.11','3.12']
+        # 3.13 = Raspberry Pi OS Trixie on the target Pi (measured 3.13.5)
+        python-version: ['3.11', '3.12', '3.13']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: '${{ matrix.python-version }}'}
       - run: python -m pip install -e '.[dev]'
-      - run: python -m pytest -q
+      - run: python -m pytest -q --cov=receptionist --cov-report=term-missing --cov-fail-under=80
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: shellcheck --version && shellcheck -S warning scripts/*.sh
+
+  mutation:
+    # Mutation testing: proves the tests actually catch injected bugs in the
+    # safety-critical booking core, not just execute it.
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.13'}
+      - run: python -m pip install -e '.[dev]' 'mutmut>=3.3,<4'
+      - run: mutmut run --max-children 4 || true
+      - run: mutmut export-cicd-stats
+      - run: python scripts/mutation_gate.py mutants/mutmut-cicd-stats.json

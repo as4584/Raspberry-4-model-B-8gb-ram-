@@ -2,6 +2,8 @@
 
 - `BookingStore(path).book(resource, starts: datetime, ends: datetime, idem_key: str) -> dict`
 - `BookingStore.cancel(reference: str) -> bool`; `active() -> list[dict]`
+- `BookingStore.reschedule(reference, starts, ends, idem_key) -> dict` (added 2026-11-17, owner-approved; Ramona has left). One transaction: the old row becomes `status='rescheduled'` and the new active row is inserted, or nothing changes. Raises `SlotTaken` (the original stays active), `InvalidBooking` (unknown or inactive reference), `KeyConflict` (key reused with a different target). Replay with the same key returns the same row.
+- `Dialogue.handle(text, session_id)`: pending confirmation and turn counter are **per session_id**. One shared `Dialogue` may serve many calls without cross-call leakage.
 - `Dialogue(store).handle(text: str, session_id: str) -> Reply(text,action,committed_id)`
 - `create_app(Settings(...), asr_factory: Callable[[], ASR], tts: TTS) -> FastAPI`
 - `ASR.transcribe(mulaw: bytes) -> awaitable[str]`

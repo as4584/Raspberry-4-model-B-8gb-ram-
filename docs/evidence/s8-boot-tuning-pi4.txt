@@ -1,0 +1,9 @@
+PI4 evidence: Raspberry Pi 4 Model B Rev 1.5, Trixie arm64, USB boot (2026-11-17/18)
+BEFORE (stock + first-boot provisioning):
+  Startup finished in 4.955s (kernel) + 1min 5.920s (userspace) = 1min 10.876s
+  NetworkManager-wait-online 29.173s | man-db 29.089s | cloud-config 6.758s | cloud-init-local 5.660s
+AFTER scripts/pi_tune_boot.sh + controlled reboot:
+  Startup finished in 3.942s (kernel) + 26.104s (userspace) = 30.047s
+  NetworkManager-wait-online 5.459s | man-db masked | cloud-init disabled | bluetooth disabled
+Post-reboot: tailscale Running, eth0+wlan0 connected, failed_units=0, SSH back 57 s after reboot command
+Remaining top costs: dev-sda2.device 10.6s (USB storage probe), systemd-udevd 9.0s, rpi-resize-swap-file 5.7s

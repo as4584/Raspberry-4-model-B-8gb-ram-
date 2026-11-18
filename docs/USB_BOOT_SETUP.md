@@ -2,7 +2,14 @@
 Owner: Alex (physical). Gate: G1 stays **BLOCKED** until the evidence in step 6 is attached to issue #2.
 Detailed policy and SSH/ACL choices: `docs/PI_TAILSCALE_RUNBOOK.md`.
 
-## 1. Flash the USB (laptop)
+## 0. Unattended path (agent on Laptop 1; human just plugs in)
+1. Agent flashes the verified Trixie Lite arm64 image with `rpi-imager --cli` (one UAC click). The script aborts unless the target is the expected USB disk.
+2. `python scripts/make_cloudinit.py <bootfs> --wifi-file ~/.secrets/pi-wifi.txt --login-file ~/.secrets/pi-login.txt --ssh-pubkey ~/.ssh/id_ed25519.pub` writes the user, hostname, key-only SSH and Wi-Fi. Secrets stay in `~/.secrets`, never in git.
+3. `python scripts/stage_bootfs.py <bootfs> --autorun [--tailscale-authkey-file ~/.secrets/ts-pi.key]`
+4. Plug into the Pi and power on. cloud-init creates the user, then `firstboot_install.sh` installs `pi-receptionist-firstboot.service`, which runs the bootstrap (retrying until it succeeds). Progress: `journalctl -u pi-receptionist-firstboot`, `~/pi-evidence/`.
+5. With no auth key, the log shows `BLOCKER:`. Owner runs `sudo tailscale up --hostname=lex-receptionist-pi` once and approves the link, then `sudo systemctl restart pi-receptionist-firstboot`.
+
+## 1. Flash the USB (laptop, manual path)
 Raspberry Pi Imager → **Device:** Raspberry Pi 4 → **OS:** Raspberry Pi OS **(64-bit)** Lite (or Desktop) → **Storage:** the USB drive.
 In **OS customisation** (Edit settings):
 - Hostname `lex-receptionist-pi`
