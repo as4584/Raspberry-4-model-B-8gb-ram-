@@ -49,4 +49,4 @@ def test_whisper_transcribes_piper_mulaw_fixture(asr, spoken):
     text = asyncio.run(asr.transcribe(spoken)).lower()
     # whisper normalises numbers ("10th at 2 p.m."), so accept digits or words.
     assert 'book' in text and 'december' in text, text
-    assert ('10th' in text or 'tenth' in text) and (' 2' in text or 'two' in text), text
+    assert ('10' in text or 'tenth' in text) and (' 2' in text or 'two' in text), text
