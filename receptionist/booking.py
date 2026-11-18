@@ -1,5 +1,6 @@
 """Atomic, idempotent SQLite booking store. All input times are UTC-aware."""
 from __future__ import annotations
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -16,13 +17,16 @@ class BookingStore:
         self.busy_timeout_s = busy_timeout_s
 
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-        with self._connect() as db:
+        with self._session() as db:
             db.execute("PRAGMA journal_mode=WAL")
             db.execute("""CREATE TABLE IF NOT EXISTS bookings (
                 id TEXT PRIMARY KEY, resource TEXT NOT NULL, starts TEXT NOT NULL,
                 ends TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active',
                 idem_key TEXT UNIQUE NOT NULL, payload_key TEXT NOT NULL
             )""")
+            # Migration (contract v0.3): existing DB files gain the owner column in place.
+            if "caller_id" not in [c["name"] for c in db.execute("PRAGMA table_info(bookings)")]:
+                db.execute("ALTER TABLE bookings ADD COLUMN caller_id TEXT")
             db.execute("CREATE INDEX IF NOT EXISTS active_slot ON bookings(resource,status,starts,ends)")
 
     def _connect(self):
@@ -33,6 +37,15 @@ class BookingStore:
         # power cut; FULL fsyncs each commit, so a confirmed booking survives.
         db.execute("PRAGMA synchronous=FULL")
         return db
+
+    @contextmanager
+    def _session(self):
+        # sqlite3's own context manager only commits/rolls back; always close too.
+        db=self._connect()
+        try:
+            yield db
+        finally:
+            db.close()
 
     @staticmethod
     def _dt(t: datetime) -> str:
@@ -49,12 +62,13 @@ class BookingStore:
             raise InvalidBooking("Appointment longer than 4 hours")
         return a,b
 
-    def book(self, resource: str, starts: datetime, ends: datetime, idem_key: str) -> dict:
+    def book(self, resource: str, starts: datetime, ends: datetime, idem_key: str,
+             caller_id: str | None = None) -> dict:
         if not resource or not idem_key: raise InvalidBooking("Resource and idempotency key required")
         a,b = self._range(starts,ends)
         payload_key = f"{resource}|{a}|{b}"
         # SQLite BEGIN IMMEDIATE serializes writers even when several connections/threads race.
-        with self._connect() as db:
+        with self._session() as db:
             try:
                 db.execute("BEGIN IMMEDIATE")
                 previous=db.execute("SELECT * FROM bookings WHERE idem_key=?",(idem_key,)).fetchone()
@@ -66,8 +80,8 @@ class BookingStore:
                      AND starts < ? AND ends > ? LIMIT 1""",(resource,b,a)).fetchone()
                 if taken: raise SlotTaken("Requested slot is already taken")
                 key=str(uuid.uuid4())
-                db.execute("INSERT INTO bookings(id,resource,starts,ends,status,idem_key,payload_key) VALUES(?,?,?,?,?,?,?)",
-                           (key,resource,a,b,'active',idem_key,payload_key))
+                db.execute("INSERT INTO bookings(id,resource,starts,ends,status,idem_key,payload_key,caller_id) VALUES(?,?,?,?,?,?,?,?)",
+                           (key,resource,a,b,'active',idem_key,payload_key,caller_id))
                 row=db.execute("SELECT * FROM bookings WHERE id=?",(key,)).fetchone()
                 db.execute("COMMIT")
                 return dict(row)
@@ -76,15 +90,17 @@ class BookingStore:
                 if db.in_transaction: db.execute("ROLLBACK")
                 raise
 
-    def reschedule(self, reference: str, starts: datetime, ends: datetime, idem_key: str) -> dict:
+    def reschedule(self, reference: str, starts: datetime, ends: datetime, idem_key: str,
+                   caller_id: str | None = None) -> dict:
         """Move an active booking in ONE transaction: the old row is retired and the
         new row inserted together, or nothing changes (e.g. new slot taken)."""
         if not reference or not idem_key: raise InvalidBooking("Reference and idempotency key required")
         a,b = self._range(starts,ends)
-        with self._connect() as db:
+        with self._session() as db:
             try:
                 db.execute("BEGIN IMMEDIATE")
-                old=db.execute("SELECT * FROM bookings WHERE id=?",(reference,)).fetchone()
+                # Only the caller who booked may move it; a mismatch looks exactly like "not found".
+                old=db.execute("SELECT * FROM bookings WHERE id=? AND caller_id IS ?",(reference,caller_id)).fetchone()
                 resource=old['resource'] if old else ''
                 payload_key=f"{resource}|{a}|{b}|from:{reference}"
                 previous=db.execute("SELECT * FROM bookings WHERE idem_key=?",(idem_key,)).fetchone()
@@ -99,8 +115,8 @@ class BookingStore:
                 if taken: raise SlotTaken("Requested slot is already taken")
                 db.execute("UPDATE bookings SET status='rescheduled' WHERE id=?",(reference,))
                 key=str(uuid.uuid4())
-                db.execute("INSERT INTO bookings(id,resource,starts,ends,status,idem_key,payload_key) VALUES(?,?,?,?,?,?,?)",
-                           (key,resource,a,b,'active',idem_key,payload_key))
+                db.execute("INSERT INTO bookings(id,resource,starts,ends,status,idem_key,payload_key,caller_id) VALUES(?,?,?,?,?,?,?,?)",
+                           (key,resource,a,b,'active',idem_key,payload_key,caller_id))
                 row=db.execute("SELECT * FROM bookings WHERE id=?",(key,)).fetchone()
                 db.execute("COMMIT")
                 return dict(row)
@@ -109,12 +125,12 @@ class BookingStore:
                 if db.in_transaction: db.execute("ROLLBACK")
                 raise
 
-    def cancel(self, reference: str) -> bool:
-        # The UUID is an opaque bearer reference; callers must possess the complete reference.
-        with self._connect() as db:
+    def cancel(self, reference: str, caller_id: str | None = None) -> bool:
+        # The reference alone is not enough: caller_id must match the booking's owner.
+        with self._session() as db:
             try:
                 db.execute("BEGIN IMMEDIATE")
-                n=db.execute("UPDATE bookings SET status='cancelled' WHERE id=? AND status='active'",(reference,)).rowcount
+                n=db.execute("UPDATE bookings SET status='cancelled' WHERE id=? AND status='active' AND caller_id IS ?",(reference,caller_id)).rowcount
                 db.execute("COMMIT")
                 return n==1
             except Exception:
@@ -123,5 +139,5 @@ class BookingStore:
                 raise
 
     def active(self) -> list[dict]:
-        with self._connect() as db:
+        with self._session() as db:
             return [dict(x) for x in db.execute("SELECT * FROM bookings WHERE status='active' ORDER BY starts")]
