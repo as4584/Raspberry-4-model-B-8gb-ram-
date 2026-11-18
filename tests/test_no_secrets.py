@@ -46,7 +46,8 @@ def test_no_secret_patterns_in_tracked_files():
 
 @pytest.mark.parametrize("name,sample", [
     ("twilio_account_sid", "AC" + "0123456789abcdef" * 2),
-    ("tailscale_key", "tskey-auth-kAbCdE1CNTRL-AbCdEfGhIjKlMnOp"),
+    # Samples are concatenated so this file never contains a matching literal.
+    ("tailscale_key", "tskey-" + "auth-kAbCdE1CNTRL-AbCdEfGhIjKlMnOp"),
     ("doppler_token", "dp.st.prd." + "x" * 40),
     ("private_key", "-----BEGIN OPENSSH PRIVATE KEY-----\n" + "b3BlbnNzaC1rZXktdjEAAAAA" * 4),
     ("assigned_twilio_token", "TWILIO_AUTH_TOKEN=" + "f" * 32),
