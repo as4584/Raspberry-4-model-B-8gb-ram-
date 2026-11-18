@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/as4584/Raspberry-4-model-B-8gb-ram-/docs/models/tool_call.schema.json",
+  "title": "Receptionist model tool call (PROPOSAL v0.1, not yet an owner-approved contract)",
+  "description": "Exactly one tool call proposed by the model per caller turn. Proposals only: deterministic code validates and BookingStore decides.",
+  "oneOf": [
+    {
+      "type": "object", "additionalProperties": false, "required": ["name", "arguments"],
+      "properties": {
+        "name": {"const": "check_availability"},
+        "arguments": {
+          "type": "object", "additionalProperties": false, "required": ["date", "duration_min"],
+          "properties": {
+            "date": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+            "time": {"type": ["string", "null"], "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"},
+            "duration_min": {"enum": [15, 30, 60]}
+          }
+        }
+      }
+    },
+    {
+      "type": "object", "additionalProperties": false, "required": ["name", "arguments"],
+      "properties": {
+        "name": {"const": "book_appointment"},
+        "arguments": {
+          "type": "object", "additionalProperties": false, "required": ["date", "time", "duration_min"],
+          "properties": {
+            "date": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+            "time": {"type": "string", "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"},
+            "duration_min": {"enum": [15, 30, 60]}
+          }
+        }
+      }
+    },
+    {
+      "type": "object", "additionalProperties": false, "required": ["name", "arguments"],
+      "properties": {
+        "name": {"const": "reschedule_appointment"},
+        "arguments": {
+          "type": "object", "additionalProperties": false, "required": ["reference", "date", "time", "duration_min"],
+          "properties": {
+            "reference": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
+            "date": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+            "time": {"type": "string", "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"},
+            "duration_min": {"enum": [15, 30, 60]}
+          }
+        }
+      }
+    },
+    {
+      "type": "object", "additionalProperties": false, "required": ["name", "arguments"],
+      "properties": {
+        "name": {"const": "cancel_appointment"},
+        "arguments": {
+          "type": "object", "additionalProperties": false, "required": ["reference"],
+          "properties": {
+            "reference": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"}
+          }
+        }
+      }
+    },
+    {
+      "type": "object", "additionalProperties": false, "required": ["name", "arguments"],
+      "properties": {
+        "name": {"const": "answer_faq"},
+        "arguments": {
+          "type": "object", "additionalProperties": false, "required": ["topic"],
+          "properties": {"topic": {"enum": ["hours", "location", "parking", "payment_methods", "services"]}}
+        }
+      }
+    },
+    {
+      "type": "object", "additionalProperties": false, "required": ["name", "arguments"],
+      "properties": {
+        "name": {"const": "handoff_to_human"},
+        "arguments": {
+          "type": "object", "additionalProperties": false, "required": ["reason"],
+          "properties": {"reason": {"enum": ["caller_request", "emergency", "unknown_question", "unsafe_request"]}}
+        }
+      }
+    },
+    {
+      "type": "object", "additionalProperties": false, "required": ["name", "arguments"],
+      "properties": {
+        "name": {"const": "ask_clarification"},
+        "arguments": {
+          "type": "object", "additionalProperties": false, "required": ["missing", "question"],
+          "properties": {
+            "missing": {"enum": ["date", "time", "reference"]},
+            "question": {"type": "string", "minLength": 1, "maxLength": 200}
+          }
+        }
+      }
+    }
+  ]
+}
