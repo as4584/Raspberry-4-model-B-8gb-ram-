@@ -20,6 +20,7 @@ hardware is ready.
 | Behavioral tests (CheckList MFT/INV/DIR) | `research/data_pipeline/behavioral.py`, `tests/test_behavioral.py` |
 | Hybrid diversity engine | `research/data_pipeline/augment.py`, `research/data_pipeline/diversity_engine.py`, `tests/test_diversity_engine.py` |
 | ASR-noise robustness (never mis-books under noise) | `research/data_pipeline/asr_noise.py`, `tests/test_asr_robustness.py`, `docs/evidence/r2_asr_robustness.md` |
+| Grouped (leakage-safe) train/dev/holdout splits + contamination check | `research/data_pipeline/splits.py`, `tests/test_splits.py`, `research/data/splits/*.jsonl`, `docs/evidence/r2_splits.md` |
 | Grown dataset (240 of 669 pool) | `research/data/nlu_grown_set.jsonl` |
 | Research synthesis (cited) | `docs/research/data_generation_best_practices.md` |
 | Evidence | `docs/evidence/r2_nlu_eval.md`, `docs/evidence/r2_diversity_engine.md` |
