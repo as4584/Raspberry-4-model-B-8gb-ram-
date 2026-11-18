@@ -31,12 +31,13 @@ def _hours_text(hours:dict[int,tuple[time,time]])->str:
         parts.append(f"{days} {opens:%H:%M}-{closes:%H:%M}")
     return ", ".join(parts)
 
-_DIGIT_WORDS={w:str(i) for i,w in enumerate(["zero","one","two","three","four","five","six","seven","eight","nine"])}
+_DIGIT_WORDS={w:str(i) for i,w in enumerate(["zero","one","two","three","four","five","six","seven","eight","nine"])}|{"oh":"0"}
 _DIGIT_WORDS["oh"]="0"
 
 def _spoken_code(text: str) -> str | None:
-    """'4729', '4 7 2 9' or 'four seven two nine' -> '4729'; anything else -> None."""
-    digits="".join(_DIGIT_WORDS.get(t,t) for t in text.split())
+    """'4729', '4 7 2 9', 'four seven two nine' and whisper's '4-7-2-9' / '4.729' /
+    '4, 7, 2, 9' -> '4729'; anything that is not exactly four digits -> None."""
+    digits="".join(_DIGIT_WORDS.get(t,t) for t in re.split(r"[\s,.\-]+",text) if t)
     return digits if re.fullmatch(r"\d{4}",digits) else None
 
 def _code_speech(code: str | None) -> str:

@@ -51,6 +51,21 @@ def throttled():
         return "unknown"
 
 
+DIGITS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"]
+
+
+def fill_code(line, db):
+    """Replace {code} with the spoken digits of the newest active booking's code."""
+    if "{code}" not in line:
+        return line
+    import sqlite3
+    with sqlite3.connect(db) as c:
+        row = c.execute("SELECT code FROM bookings WHERE status='active' AND code IS NOT NULL ORDER BY rowid DESC LIMIT 1").fetchone()
+    if not row:
+        raise SystemExit("{code} used but no active booking with a code exists yet")
+    return line.replace("{code}", " ".join(DIGITS[int(ch)] for ch in row[0]))
+
+
 def main(argv):
     import multiprocessing as mp
     from websockets.sync.client import connect
@@ -73,6 +88,7 @@ def main(argv):
             ws.send(json.dumps({"event": "start", "streamSid": "MV", "start": {"callSid": "CV",
                                 "customParameters": {"callerId": "+15550000001"}}}))
             for line in lines:                       # one call, several spoken turns
+                line = fill_code(line, db)
                 caller = asyncio.run(piper.synthesize(line))
                 frames = [caller[i:i + 160] for i in range(0, len(caller), 160)] + [SILENCE] * 25
                 for f in frames:
