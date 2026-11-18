@@ -31,6 +31,18 @@ def _hours_text(hours:dict[int,tuple[time,time]])->str:
         parts.append(f"{days} {opens:%H:%M}-{closes:%H:%M}")
     return ", ".join(parts)
 
+_DIGIT_WORDS={w:str(i) for i,w in enumerate(["zero","one","two","three","four","five","six","seven","eight","nine"])}
+_DIGIT_WORDS["oh"]="0"
+
+def _spoken_code(text: str) -> str | None:
+    """'4729', '4 7 2 9' or 'four seven two nine' -> '4729'; anything else -> None."""
+    digits="".join(_DIGIT_WORDS.get(t,t) for t in text.split())
+    return digits if re.fullmatch(r"\d{4}",digits) else None
+
+def _code_speech(code: str | None) -> str:
+    if not code:return ""
+    return " Your booking code is "+" ".join(_cardinal(int(c)) for c in code)+"."
+
 class Dialogue:
     def __init__(self, store: BookingStore, timezone_name: str = "America/New_York",
                  hours: dict[int,tuple[time,time]] | None = None,
@@ -114,7 +126,7 @@ class Dialogue:
                                  speech=f"Your appointment is moved to {spoken_when(starts,self.tz)}.")
                 result=self.store.book("primary",starts,ends,key,caller_id=caller_id)
                 return Reply(f"Confirmed for {starts:%Y-%m-%d %I:%M %p}. Your reference is {result['id']}.","booked",result['id'],
-                             speech=f"You're booked for {spoken_when(starts,self.tz)}. Thank you for calling.")
+                             speech=f"You're booked for {spoken_when(starts,self.tz)}.{_code_speech(result.get('code'))} Thank you for calling.")
             except SlotTaken:
                 return Reply("That time was just taken. Please choose another slot.","slot_taken")
             except InvalidBooking:
@@ -149,6 +161,13 @@ class Dialogue:
         if s.startswith("cancel "):
             self._pending.pop(session_id,None)
             reference=s.removeprefix("cancel ").strip()
+            code=_spoken_code(reference.removeprefix("booking ").strip())
+            if code:
+                # Short spoken code: only valid together with the verified caller number.
+                if not caller_id:
+                    return Reply("I need the number you are calling from before I can do that. Please call from your own phone.","verification_required")
+                if self.store.cancel_by_code(code,caller_id):return Reply("The booking with that reference has been cancelled.","cancelled")
+                return Reply("I couldn't find an active appointment with that reference.","not_found")
             if self.store.cancel(reference,caller_id=caller_id):return Reply("The booking with that reference has been cancelled.","cancelled")
             return Reply("I couldn't find an active appointment with that reference.","not_found")
         if "human" in s or "operator" in s:
