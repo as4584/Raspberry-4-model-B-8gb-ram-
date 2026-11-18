@@ -114,3 +114,18 @@ def test_restore_never_overwrites_existing_target(tmp_path):
 def test_backup_of_missing_db_fails_clearly(tmp_path):
     with pytest.raises(backup.BackupError, match="not found"):
         backup.backup(tmp_path / "nope.sqlite", tmp_path / "b")
+
+
+def test_cli_backup_then_restore(tmp_path, capsys):
+    store = BookingStore(str(tmp_path / "live.sqlite"))
+    fill(store, 4)
+    assert backup.main(["x", "backup", store.path, str(tmp_path / "b"), "--keep", "2"]) == 0
+    snap = next((tmp_path / "b").glob("*.sqlite"))
+    assert backup.main(["x", "restore", str(snap), str(tmp_path / "r.sqlite")]) == 0
+    assert len(BookingStore(str(tmp_path / "r.sqlite")).active()) == 4
+    assert "OK restore" in capsys.readouterr().out
+
+
+def test_cli_reports_failure_with_exit_2(tmp_path, capsys):
+    assert backup.main(["x", "backup", str(tmp_path / "missing.sqlite"), str(tmp_path / "b")]) == 2
+    assert "FAIL: database not found" in capsys.readouterr().err
