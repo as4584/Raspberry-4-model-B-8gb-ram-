@@ -35,6 +35,7 @@ def _num(match: re.Match) -> str:
 
 def normalise(text: str) -> str:
     t = (text or "").lower()
+    t = re.sub(r"(\d)([ap])(?=\.?\s?m\b)", r"\1 \2", t)        # 10am / 9:30a.m. -> 10 am
     t = re.sub(r"\b([ap])\.?\s?m\.?(?=\W|$)", r" \1m", t)          # 2 p.m. / 2pm -> 2 pm
     t = re.sub(r"\b(\d{1,2}):(\d{2})\b", lambda m: f"{m.group(1)} {m.group(2)}" if m.group(2) != "00" else m.group(1), t)
     t = re.sub(r"\b(\d{1,2})(st|nd|rd|th)?\b", _num, t)
