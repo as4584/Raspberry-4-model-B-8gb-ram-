@@ -25,14 +25,15 @@ def d(tmp_path):
 def test_confirm_prompt_speech(d):
     r = d.handle("book december tenth at two pm", "s")
     assert r.text == "Please confirm: Thursday, December 10 at 02:00 PM for 30 minutes. Say yes or no."
-    assert r.speech == "Please confirm Thursday, December tenth at two p m, for thirty minutes. Say yes or no."
+    # 'Feel human': a short cached opener plays instantly while the rest synthesises.
+    assert r.speech == "Okay, let me check that. Thursday, December tenth at two p m. For thirty minutes. Shall I book it?"
 
 
 def test_booked_speech_has_no_uuid(d):
     d.handle("book december tenth at two pm", "s")
     r = d.handle("yes", "s")
     assert UUID.search(r.text)                          # screen still shows the reference
-    assert r.speech == "You're booked for Thursday, December tenth at two p m. Thank you for calling."
+    assert r.speech == "Great, you're all set. Thursday, December tenth at two p m. Thank you for calling."
     assert not UUID.search(r.speech)
 
 
@@ -68,5 +69,20 @@ def test_phone_path_never_sends_a_uuid_to_tts(tmp_path, monkeypatch):
             while ws.receive_json()["event"] != "mark":
                 pass
     joined = " ".join(spoken)
-    assert "You're booked for Friday, December tenth at two p m." in joined
+    assert "Great, you're all set. Friday, December tenth at two p m." in joined
     assert not UUID.search(joined) and not re.search(r"\d{4}-\d\d-\d\d", joined)
+
+
+def test_every_spoken_reply_opens_with_a_short_cacheable_sentence(d):
+    from receptionist.dialogue import OPENERS
+    from receptionist.server import split_sentences
+    first = d.handle("book december tenth at two pm", "s")
+    booked = d.handle("yes", "s")
+    for r in (first, booked):
+        opener = split_sentences(r.speech)[0]
+        assert opener in OPENERS and len(opener) <= 40 and not any(c.isdigit() for c in opener)
+
+
+def test_shall_i_book_it_still_accepts_yes_and_no(d):
+    d.handle("book december tenth at two pm", "s")
+    assert d.handle("no", "s").action != "booked" and d.store.active() == []

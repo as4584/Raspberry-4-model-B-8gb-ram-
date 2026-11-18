@@ -44,6 +44,11 @@ def _code_speech(code: str | None) -> str:
     if not code:return ""
     return " Your booking code is "+" ".join(_cardinal(int(c)) for c in code)+"."
 
+# 'Feel human' (#28): every spoken reply opens with one of these short, digit-free
+# sentences. They are synthesised once and cached, so audio starts as soon as the
+# words are understood, and each is ~1 s long, covering synthesis of what follows.
+OPENERS=("Okay, let me check that.","Great, you're all set.","Okay, all done.")
+
 class Dialogue:
     def __init__(self, store: BookingStore, timezone_name: str = "America/New_York",
                  hours: dict[int,tuple[time,time]] | None = None,
@@ -124,10 +129,10 @@ class Dialogue:
                 if reference:
                     result=self.store.reschedule(reference,starts,ends,key,caller_id=caller_id)
                     return Reply(f"Rescheduled to {starts:%Y-%m-%d %I:%M %p}. Your new reference is {result['id']}.","rescheduled",result['id'],
-                                 speech=f"Your appointment is moved to {spoken_when(starts,self.tz)}.")
+                                 speech=f"Okay, all done. Your appointment is now {spoken_when(starts,self.tz)}.")
                 result=self.store.book("primary",starts,ends,key,caller_id=caller_id)
                 return Reply(f"Confirmed for {starts:%Y-%m-%d %I:%M %p}. Your reference is {result['id']}.","booked",result['id'],
-                             speech=f"You're booked for {spoken_when(starts,self.tz)}.{_code_speech(result.get('code'))} Thank you for calling.")
+                             speech=f"Great, you're all set. {spoken_when(starts,self.tz)}.{_code_speech(result.get('code'))} Thank you for calling.")
             except SlotTaken:
                 return Reply("That time was just taken. Please choose another slot.","slot_taken")
             except InvalidBooking:
@@ -146,7 +151,7 @@ class Dialogue:
             if reference:
                 return Reply(f"Please confirm moving your appointment to {starts:%A, %B %d at %I:%M %p} for {duration} minutes. Say yes or no.","confirm_required")
             return Reply(f"Please confirm: {starts:%A, %B %d at %I:%M %p} for {duration} minutes. Say yes or no.","confirm_required",
-                         speech=f"Please confirm {spoken_when(starts,self.tz)}, for {_cardinal(duration)} minutes. Say yes or no.")
+                         speech=f"Okay, let me check that. {spoken_when(starts,self.tz)}. For {_cardinal(duration)} minutes. Shall I book it?")
         if s=="book" or s.startswith("book "):
             # Spoken request: the deterministic resolver decides the instant (or we ask).
             when=resolve(s.removeprefix("book").strip(),self._now().astimezone(self.tz))
@@ -158,7 +163,7 @@ class Dialogue:
             starts,ends,duration=slot
             self._pending[session_id]=(None,starts,ends)
             return Reply(f"Please confirm: {starts:%A, %B %d at %I:%M %p} for {duration} minutes. Say yes or no.","confirm_required",
-                         speech=f"Please confirm {spoken_when(starts,self.tz)}, for {_cardinal(duration)} minutes. Say yes or no.")
+                         speech=f"Okay, let me check that. {spoken_when(starts,self.tz)}. For {_cardinal(duration)} minutes. Shall I book it?")
         if s.startswith("cancel "):
             self._pending.pop(session_id,None)
             reference=s.removeprefix("cancel ").strip()

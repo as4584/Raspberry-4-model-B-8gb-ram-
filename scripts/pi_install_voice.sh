@@ -42,6 +42,6 @@ sandbox="sudo systemd-run --wait --pipe --quiet -p User=receptionist -p ProtectH
 step "$sandbox $speech/whisper/whisper-cli --help >/dev/null 2>&1"
 step "$sandbox $speech/whisper/whisper-daemon $wm 1 </dev/null | grep -qx READY"
 step "echo test | $sandbox sh -c '$speech/piper/piper --model $pm --output_file /tmp/t.wav >/dev/null 2>&1 && test -s /tmp/t.wav'"
-step "printf 'VOICE_BACKEND=local\nLD_LIBRARY_PATH=$speech/whisper\nWHISPER_CLI=$speech/whisper/whisper-cli\nWHISPER_DAEMON=$speech/whisper/whisper-daemon\nWHISPER_MODEL=$wm\nPIPER_CLI=$speech/piper/piper\nPIPER_MODEL=$pm\n' | sudo tee $envfile >/dev/null"
+step "printf 'VOICE_BACKEND=local\nLD_LIBRARY_PATH=$speech/whisper\nWHISPER_CLI=$speech/whisper/whisper-cli\nWHISPER_DAEMON=$speech/whisper/whisper-daemon\nPIPER_RESIDENT=1\nWHISPER_MODEL=$wm\nPIPER_CLI=$speech/piper/piper\nPIPER_MODEL=$pm\n' | sudo tee $envfile >/dev/null"
 restart local
 echo "VOICE_OK: local speech ($(basename "$wmodel"), $(basename "$pmodel"))"

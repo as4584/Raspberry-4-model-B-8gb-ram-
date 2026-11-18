@@ -53,7 +53,9 @@ def test_sends_16k_pcm_short_window_and_token_cap(daemon):
     size, ac, mt = log.read_text().split()
     assert int(size) == 2 * 16000 * 2                            # 16 kHz PCM16
     assert int(ac) == audio_ctx_for(2.0)
-    assert int(mt) == math.ceil(2.0 * 6) + 4
+    # Pi call (VAD keeps only voiced frames): 1.44 s of "book december tenth at two pm"
+    # under a 13-token cap lost "p.m." (timestamp tokens count too). 8/s + 10 keeps it.
+    assert int(mt) == math.ceil(2.0 * 8) + 10
 
 
 def test_process_is_reused_across_utterances(daemon):

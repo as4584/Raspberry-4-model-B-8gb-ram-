@@ -16,6 +16,7 @@ import hmac
 import json
 import os
 import threading
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Callable
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, HTTPException
@@ -23,8 +24,8 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from receptionist import health
 from receptionist.booking import BookingStore
-from receptionist.dialogue import Dialogue
-from receptionist.audio import MockASR, MockTTS, WhisperCppASR, WhisperDaemonASR, PiperTTS, rms_mulaw
+from receptionist.dialogue import Dialogue, OPENERS
+from receptionist.audio import MockASR, MockTTS, WhisperCppASR, WhisperDaemonASR, PiperTTS, PiperDaemonTTS, CachingTTS, rms_mulaw
 
 class TextInput(BaseModel):
     session_id: str
@@ -72,15 +73,39 @@ def select_asr_factory(env) -> tuple[Callable[[],object],str]:
         return (lambda: shared),'daemon'
     return (lambda: WhisperCppASR(env.get('WHISPER_CLI','whisper-cli'),env['WHISPER_MODEL'])),'cli'
 
+def select_tts(env) -> tuple[object,str]:
+    """TTS per environment: resident Piper behind a phrase cache prewarmed with the
+    dialogue's openers (PIPER_RESIDENT=1), else per-call Piper, else the mock."""
+    if env.get('VOICE_BACKEND')!='local' or not env.get('PIPER_MODEL'):return MockTTS(),'mock'
+    if env.get('PIPER_RESIDENT')=='1':
+        tts=CachingTTS(PiperDaemonTTS([env.get('PIPER_CLI','piper')],env['PIPER_MODEL']))
+        tts.prewarm_phrases=OPENERS
+        return tts,'resident'
+    return PiperTTS(env.get('PIPER_CLI','piper'),env['PIPER_MODEL']),'cli'
+
 def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None=None, tts:object|None=None, max_sessions:int=MAX_SIM_SESSIONS) -> FastAPI:
     settings=settings or Settings()
     store=BookingStore(settings.db_path)
     asr_kind='custom'
     if asr_factory is None:
         asr_factory,asr_kind=select_asr_factory(os.environ)
+    tts_kind='custom'
     if tts is None:
-        tts=PiperTTS(os.getenv('PIPER_CLI','piper'),os.environ['PIPER_MODEL']) if os.getenv('VOICE_BACKEND')=='local' and os.getenv('PIPER_MODEL') else MockTTS()
-    app=FastAPI(title='Pi Local Receptionist',version='0.1.0')
+        tts,tts_kind=select_tts(os.environ)
+    @asynccontextmanager
+    async def lifespan(_app):
+        # Openers are synthesised before the first call, so the first reply is instant too.
+        warm=None
+        if getattr(tts,'prewarm_phrases',None):
+            async def prewarm():
+                try:await tts.prewarm(tts.prewarm_phrases)
+                except Exception:log.warning('tts prewarm failed',exc_info=True)
+            warm=asyncio.create_task(prewarm())
+        yield
+        if warm:warm.cancel()
+        for closer in (getattr(tts,'aclose',None),):
+            if closer:await closer()
+    app=FastAPI(title='Pi Local Receptionist',version='0.1.0',lifespan=lifespan)
     app.state.store=store
     # Bounded LRU: an unbounded map of session_id -> Dialogue is a memory leak.
     sessions:OrderedDict[str,Dialogue]=OrderedDict()
@@ -88,7 +113,7 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
     sessions_lock=threading.Lock()  # sync endpoints run on a thread pool
 
     @app.get('/healthz')
-    def healthz():return {'status':'ok','voice_backend':os.getenv('VOICE_BACKEND','mock'),'asr':asr_kind}
+    def healthz():return {'status':'ok','voice_backend':os.getenv('VOICE_BACKEND','mock'),'asr':asr_kind,'tts':tts_kind}
 
     @app.get('/readyz')
     def readyz():
@@ -216,6 +241,10 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
                             audio.clear()
                         audio.extend(data)
                     elif heard_speech:
+                        # Keep quiet frames once speech started: soft consonants and short
+                        # gaps between words are part of the phrase (dropping them made whisper
+                        # hear choppy audio on the Pi). The trailing <300 ms of silence is harmless.
+                        if len(audio)+len(data)<=MAX_UTTERANCE_BYTES:audio.extend(data)
                         silence_ms+=ms
                         if silence_ms>=300 and spoken_ms>=80:
                             snapshot=bytes(audio);ticket=generation

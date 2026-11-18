@@ -86,7 +86,7 @@ def test_booked_speech_includes_spoken_code(d):
     r = _book(d)
     (row,) = d.store.active()
     digits = " ".join(["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"][int(c)] for c in row["code"])
-    assert r.speech == f"You're booked for Thursday, December tenth at two p m. Your booking code is {digits}. Thank you for calling."
+    assert r.speech == f"Great, you're all set. Thursday, December tenth at two p m. Your booking code is {digits}. Thank you for calling."
 
 
 @pytest.mark.parametrize("fmt", ["cancel {code}", "cancel booking {code}", "Cancel booking {spaced}.", "cancel {words}",
