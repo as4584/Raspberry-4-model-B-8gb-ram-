@@ -65,7 +65,7 @@ def test_kill_9_mid_stream_loses_no_confirmed_booking(tmp_path, delay):
 def _hold_lock_then_hang(path, ready):
     raw = sqlite3.connect(path, isolation_level=None)
     raw.execute("BEGIN IMMEDIATE")
-    raw.execute("INSERT INTO bookings VALUES('x','r','a','b','active','k','p')")
+    raw.execute("INSERT INTO bookings(id,resource,starts,ends,status,idem_key,payload_key) VALUES('x','r','a','b','active','k','p')")
     ready.set()
     time.sleep(60)                   # killed before it can commit
 
