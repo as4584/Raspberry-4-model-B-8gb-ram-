@@ -140,7 +140,8 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
                 reply=await asyncio.to_thread(handle_locked,utterance,call_id or 'invalid')
                 # Synthesise sentence k+1 while sentence k streams: the caller hears the first
                 # sentence without waiting for the whole reply (PI4: 8 s reply rendered up front).
-                parts=split_sentences(reply.text) or [reply.text]
+                words=reply.speech or reply.text   # phone wording when the dialogue provides it (#38)
+                parts=split_sentences(words) or [words]
                 pending=asyncio.create_task(tts.synthesize(parts[0]))
                 try:
                     for k in range(len(parts)):

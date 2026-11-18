@@ -5,6 +5,7 @@ from datetime import datetime, time, timedelta, timezone
 import re
 from zoneinfo import ZoneInfo
 from receptionist.datetime_resolve import resolve
+from receptionist.speech_format import spoken_when, _cardinal
 from receptionist.booking import BookingStore, SlotTaken, InvalidBooking, KeyConflict
 
 @dataclass
@@ -12,6 +13,7 @@ class Reply:
     text: str
     action: str = "reply"
     committed_id: str | None = None
+    speech: str | None = None   # phone wording (#38); None -> speak `text`
 
 # Opening hours per local weekday (Monday=0): (open, close). Closed days are absent.
 DEFAULT_HOURS:dict[int,tuple[time,time]]={day:(time(9),time(17)) for day in range(5)}
@@ -108,9 +110,11 @@ class Dialogue:
             try:
                 if reference:
                     result=self.store.reschedule(reference,starts,ends,key,caller_id=caller_id)
-                    return Reply(f"Rescheduled to {starts:%Y-%m-%d %I:%M %p}. Your new reference is {result['id']}.","rescheduled",result['id'])
+                    return Reply(f"Rescheduled to {starts:%Y-%m-%d %I:%M %p}. Your new reference is {result['id']}.","rescheduled",result['id'],
+                                 speech=f"Your appointment is moved to {spoken_when(starts,self.tz)}.")
                 result=self.store.book("primary",starts,ends,key,caller_id=caller_id)
-                return Reply(f"Confirmed for {starts:%Y-%m-%d %I:%M %p}. Your reference is {result['id']}.","booked",result['id'])
+                return Reply(f"Confirmed for {starts:%Y-%m-%d %I:%M %p}. Your reference is {result['id']}.","booked",result['id'],
+                             speech=f"You're booked for {spoken_when(starts,self.tz)}. Thank you for calling.")
             except SlotTaken:
                 return Reply("That time was just taken. Please choose another slot.","slot_taken")
             except InvalidBooking:
@@ -128,7 +132,8 @@ class Dialogue:
             self._pending[session_id]=(reference,starts,ends)
             if reference:
                 return Reply(f"Please confirm moving your appointment to {starts:%A, %B %d at %I:%M %p} for {duration} minutes. Say yes or no.","confirm_required")
-            return Reply(f"Please confirm: {starts:%A, %B %d at %I:%M %p} for {duration} minutes. Say yes or no.","confirm_required")
+            return Reply(f"Please confirm: {starts:%A, %B %d at %I:%M %p} for {duration} minutes. Say yes or no.","confirm_required",
+                         speech=f"Please confirm {spoken_when(starts,self.tz)}, for {_cardinal(duration)} minutes. Say yes or no.")
         if s=="book" or s.startswith("book "):
             # Spoken request: the deterministic resolver decides the instant (or we ask).
             when=resolve(s.removeprefix("book").strip(),self._now().astimezone(self.tz))
@@ -139,7 +144,8 @@ class Dialogue:
             if isinstance(slot,Reply):return slot
             starts,ends,duration=slot
             self._pending[session_id]=(None,starts,ends)
-            return Reply(f"Please confirm: {starts:%A, %B %d at %I:%M %p} for {duration} minutes. Say yes or no.","confirm_required")
+            return Reply(f"Please confirm: {starts:%A, %B %d at %I:%M %p} for {duration} minutes. Say yes or no.","confirm_required",
+                         speech=f"Please confirm {spoken_when(starts,self.tz)}, for {_cardinal(duration)} minutes. Say yes or no.")
         if s.startswith("cancel "):
             self._pending.pop(session_id,None)
             reference=s.removeprefix("cancel ").strip()
@@ -147,4 +153,5 @@ class Dialogue:
             return Reply("I couldn't find an active appointment with that reference.","not_found")
         if "human" in s or "operator" in s:
             return Reply("I can arrange a human callback. Please contact the business directly if urgent.","handoff")
-        return Reply("To book, say: book 2026-12-01 14:00. I will confirm before creating it.","help")
+        return Reply("To book, say: book 2026-12-01 14:00. I will confirm before creating it.","help",
+                     speech="Tell me the day and time you'd like, for example, December tenth at two p m.")
