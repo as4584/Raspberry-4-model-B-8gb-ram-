@@ -41,6 +41,9 @@ step() {  # step "<shell command>"
 have() { [[ "$dry" != "1" ]] && command -v "$1" >/dev/null 2>&1; }
 
 export DEBIAN_FRONTEND=noninteractive
+# The Pi has no RTC: first boot starts at the image build date and apt rejects
+# repo signatures until NTP corrects the clock. Wait up to 10 min.
+step "for i in \$(seq 120); do [ \"\$(timedatectl show -p NTPSynchronized --value)\" = yes ] && break; sleep 5; done; date -u"
 echo "== 1/6 base packages"
 step "sudo apt-get update"
 step "sudo DEBIAN_FRONTEND=noninteractive apt-get install -y git python3-venv python3-pip curl"

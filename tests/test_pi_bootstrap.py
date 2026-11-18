@@ -92,3 +92,12 @@ def test_evidence_log_is_outside_repo(tmp_path):
     r = run(tmp_path)
     log = [l for l in r.stdout.splitlines() if l.startswith("evidence_log=")]
     assert log and "pi-receptionist/" not in log[0] and "pi-evidence" in log[0]
+
+
+def test_waits_for_clock_sync_before_apt(tmp_path):
+    """Pi has no RTC: first boot starts at the image build date, so apt's
+    signature checks fail until NTP syncs (observed on the real Pi 2026-11-17)."""
+    p = plan(run(tmp_path))
+    sync = next(i for i, l in enumerate(p) if "NTPSynchronized" in l)
+    apt = next(i for i, l in enumerate(p) if "apt-get update" in l)
+    assert sync < apt
