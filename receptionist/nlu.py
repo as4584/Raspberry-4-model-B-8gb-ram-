@@ -65,8 +65,9 @@ def _extract_booking(text: str) -> str | None:
     """Return 'book YYYY-MM-DD HH:MM [dur]' if a date+time is present."""
     t = _normalise_clock(text)
     # Strip connectors that sit between date and time
-    t = re.sub(r"\s+\bat\b\s+", " ", t)   # English "at"
-    t = re.sub(r"\s+\bel\b\s+", " ", t)   # Spanish "el"
+    t = re.sub(r"\s+\bat\b\s+", " ", t)         # English "at"
+    t = re.sub(r"\s+\bel\b\s+", " ", t)         # Spanish "el"
+    t = re.sub(r"\ba\s+las\s+", " ", t, flags=re.IGNORECASE)  # Spanish "a las"
     m = _DATE_TIME.search(t)
     if not m:
         return None
@@ -97,6 +98,27 @@ _NO_ES = {
     "no gracias", "no, gracias", "cancelar eso", "olvídalo", "olvidalo",
     "en realidad no", "no quiero", "ya no",
 }
+
+# First-token triggers — robust to trailing words/punctuation ("yes please",
+# "okay!", "sure thing", "sí, por favor"). Deny is checked first so "no ..."
+# never reads as an affirmation.
+_AFFIRM_LEAD = {
+    "yes", "yeah", "yep", "yup", "sure", "ok", "okay", "confirm", "confirmed",
+    "correct", "absolutely", "definitely",
+    "sí", "si", "claro", "perfecto", "adelante", "confirmar", "confirmo",
+    "bueno", "vale",
+}
+_AFFIRM_PHRASES = (
+    "sounds good", "that works", "of course", "please do", "will do",
+    "de acuerdo", "está bien", "esta bien", "por supuesto",
+)
+_DENY_LEAD = {"no", "nope", "nah"}
+_DENY_PHRASES = (
+    "never mind", "cancel that", "forget it", "no thanks", "no thank",
+    "not anymore", "disregard", "actually no",
+    "no gracias", "cancelar eso", "olvídalo", "olvidalo", "en realidad no",
+    "no quiero", "ya no",
+)
 
 _HUMAN_EN = re.compile(
     r"\b(human|person|agent|operator|representative|staff|"
@@ -161,20 +183,31 @@ def normalize(utterance: str) -> str:
     if re.match(r"^book\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(\s+\d+)?$", low):
         return s
 
-    # --- Confirmation ---
-    if low in _YES_EN or low in _YES_ES:
-        return "yes"
-    # Partial match for "sí, confirmo" etc.
-    if any(low.startswith(p) for p in ("sí,", "si,")) or \
-       any(p in low for p in ("sí confirmo", "si confirmo",
-                               "sí, confirmo", "si, confirmo")):
-        return "yes"
+    # Punctuation-tolerant forms for keyword matching
+    bare = low.strip(" .,!?;:¡¿\"'")
+    toks = re.findall(r"\w+", bare, re.UNICODE)
+    first = toks[0] if toks else ""
+    # When an explicit ISO date is present the utterance is a booking, even if
+    # it opens with a filler affirmation ("ok so ... 2027-12-10 at 9am").
+    has_iso = bool(re.search(r"\d{4}-\d{2}-\d{2}", s))
 
-    # --- Denial ---
-    if low in _NO_EN or low in _NO_ES:
+    # --- Denial (checked before affirm so "no ..." is never an affirmation) ---
+    if bare in _NO_EN or bare in _NO_ES:
         return "no"
-    if low == "no":
-        return "no"
+    if not has_iso:
+        if first in _DENY_LEAD:
+            return "no"
+        if any(bare.startswith(p) for p in _DENY_PHRASES):
+            return "no"
+
+    # --- Confirmation ---
+    if bare in _YES_EN or bare in _YES_ES:
+        return "yes"
+    if not has_iso:
+        if first in _AFFIRM_LEAD:
+            return "yes"
+        if any(bare.startswith(p) for p in _AFFIRM_PHRASES):
+            return "yes"
 
     # --- Human escalation ---
     if _HUMAN_EN.search(low) or _HUMAN_ES.search(low):
@@ -182,6 +215,13 @@ def normalize(utterance: str) -> str:
 
     # --- Help ---
     if _HELP_EN.search(low) or _HELP_ES.search(low):
+        return "help"
+
+    # --- Reference-less cancel: a real cancel reached the passthrough above
+    #     (exact UUID) or was a deny keyword. Anything else starting with
+    #     "cancel"/"cancelar" has no valid reference, so route to help rather
+    #     than letting the dialogue attempt a cancel on arbitrary text. ---
+    if low.startswith("cancel ") or low.startswith("cancelar "):
         return "help"
 
     # --- Spanish booking intent: strip trigger words, extract date/time ---
