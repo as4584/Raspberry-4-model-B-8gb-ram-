@@ -97,3 +97,9 @@ def test_bad_caller_param_is_treated_as_anonymous(tmp_path):
         speak(ws); receive_until_mark(ws)
         rows = c.app.state.store.active()
     assert all(r["caller_id"] is None for r in rows)
+
+
+def test_accepts_asterisk_media_subprotocol(tmp_path):
+    # chan_websocket.c registers/requests the "media" WebSocket sub-protocol.
+    with client(tmp_path) as c, c.websocket_connect("/asterisk/media", subprotocols=["media"]) as ws:
+        assert ws.accepted_subprotocol == "media"
