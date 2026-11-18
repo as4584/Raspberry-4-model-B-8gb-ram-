@@ -35,3 +35,17 @@ def test_wer_uses_normalisation():
 ])
 def test_runaway_detection(hyp, ref, decode_runs, expect):
     assert is_runaway(hyp, ref, decode_runs) is expect
+
+
+# #28: digits glued to am/pm were dropped ("10am" -> "am"), scoring a correct
+# transcript as wrong.
+@pytest.mark.parametrize("text,want", [
+    ("10am", "ten am"), ("2pm", "two pm"), ("2PM", "two pm"), ("at 9:30am", "at nine thirty am"),
+    ("9:00a.m.", "nine am"), ("December 10th at 2pm", "december tenth at two pm"),
+    ("11:45 p.m.", "eleven forty five pm")])
+def test_normalise_digits_glued_to_ampm(text, want):
+    assert normalise(text) == want
+
+
+def test_wer_zero_for_spoken_vs_numeric_glued_form():
+    assert wer("book december tenth at two p m", "Book December 10th at 2pm.") == 0.0
