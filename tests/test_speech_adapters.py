@@ -101,6 +101,9 @@ def fake_piper(monkeypatch, rate=22050, seconds=0.5, channels=1, width=2, silent
     calls = []
 
     def fake_run(args, **kw):
+        # Like real subprocess: str input without text=True raises TypeError (bug seen on Pi).
+        if isinstance(kw.get('input'), str) and not (kw.get('text') or kw.get('encoding')):
+            raise TypeError('memoryview: a bytes-like object is required, not str')
         calls.append({'args': args, 'kw': kw})
         out = args[args.index('--output_file') + 1]
         n = int(rate * seconds)
@@ -120,14 +123,14 @@ def test_piper_args_match_pinned_cli(monkeypatch, model):
     assert a[0] == '/opt/piper/piper'
     assert a[a.index('--model') + 1] == model
     assert '--output_file' in a
-    assert kw['input'] == 'Hello there.\n'  # piper reads one utterance per stdin line
+    assert kw['input'] == b'Hello there.\n'  # piper reads one utterance per stdin line
     assert kw['check'] is True and kw['timeout'] == 35
 
 
 def test_piper_text_newlines_are_flattened_to_one_utterance(monkeypatch, model):
     calls = fake_piper(monkeypatch)
     asyncio.run(PiperTTS('p', model).synthesize('Line one.\nLine two.'))
-    assert calls[0]['kw']['input'] == 'Line one. Line two.\n'
+    assert calls[0]['kw']['input'] == b'Line one. Line two.\n'
 
 
 def test_piper_22k_output_becomes_8k_mulaw_with_same_duration_and_sound(monkeypatch, model):
@@ -158,3 +161,9 @@ def test_piper_empty_text_rejected_without_running(monkeypatch, model):
 
 def test_mocktts_is_silent_and_would_fail_audibility_threshold():
     assert rms_mulaw(asyncio.run(audio.MockTTS().synthesize('x'))) < audio.AUDIBLE_RMS
+
+
+def test_piper_non_ascii_text_is_utf8_encoded(monkeypatch, model):
+    calls = fake_piper(monkeypatch)
+    asyncio.run(PiperTTS('p', model).synthesize('Café at 2 pm'))
+    assert calls[0]['kw']['input'] == 'Café at 2 pm\n'.encode('utf-8')
