@@ -235,3 +235,17 @@ def test_whisper_beam_search_still_available(monkeypatch, model):
     calls = capture_whisper(monkeypatch, 'x')
     asyncio.run(WhisperCppASR('w', model, greedy=False).transcribe(b'\x00' * 160))
     assert '-bs' not in calls[0]['args']
+
+
+# With -nf (no temperature fallback) and the short window, whisper sometimes
+# restarts the sentence and gets cut off (Pi sweep 2026-11-18, base.en-q5_1):
+@pytest.mark.parametrize("raw,expect", [
+    (" Book March 15 at 1 p.m. Book March 15 at\n", "Book March 15 at 1 p.m."),
+    (" Do you take walk-ins? Do you take\n", "Do you take walk-ins?"),
+    (" Cancel booking 4729. Cancel booking\n", "Cancel booking 4729."),
+    (" Yes. Yes, please.\n", "Yes. Yes, please."),            # longer than the first: real speech
+    (" Book Friday. Book\n", "Book Friday. Book"),             # 1-word tail: too weak to call a restart
+    (" I need to book. I need help.\n", "I need to book. I need help."),
+])
+def test_whisper_output_drops_truncated_restart(raw, expect):
+    assert audio.clean_whisper_output(raw) == expect

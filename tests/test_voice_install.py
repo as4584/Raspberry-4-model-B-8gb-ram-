@@ -78,3 +78,13 @@ def test_voice_install_smoke_tests_binaries_inside_the_service_sandbox():
         assert prop in s, prop
     assert "whisper-cli" in s and "piper" in s
     assert p.index("systemd-run") < p.rindex("systemctl restart")   # verify before switching
+
+
+@needs_bash
+def test_voice_install_builds_and_enables_resident_whisper():
+    _, p = plan("/home/x/whisper.cpp/build/bin", "/home/x/m.bin", "/home/x/p", "/home/x/v.onnx")
+    assert "native/build_whisper_daemon.sh /home/x/whisper.cpp" in p
+    assert "WHISPER_DAEMON=/opt/pi-receptionist/speech/whisper/whisper-daemon" in p
+    smoke = " ".join(l for l in p.splitlines() if "systemd-run" in l)
+    assert "whisper-daemon" in smoke and "READY" in smoke                # loads the model in the sandbox
+    assert p.index("build_whisper_daemon") < p.index("cp -a")             # built before copying
