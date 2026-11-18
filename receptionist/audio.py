@@ -5,6 +5,7 @@ import asyncio
 import math
 import struct
 import subprocess
+import sys
 import tempfile
 import wave
 
@@ -33,17 +34,38 @@ def ulaw_to_pcm(value: int) -> int:
     sample-=_BIAS
     return -sample if sign else sample
 
+# Lookup tables built once from the scalar reference above: bit-identical
+# output, but per-frame work becomes C-speed table lookups (hot path on a Pi).
+_ULAW_PCM16=[struct.pack('<h',ulaw_to_pcm(i)) for i in range(256)]
+_ULAW_SQ=[ulaw_to_pcm(i)**2 for i in range(256)]
+_PCM_ULAW:bytes|None=None  # 65,536 entries indexed by the unsigned 16-bit sample
+
+def _pcm_ulaw_table() -> bytes:
+    global _PCM_ULAW
+    if _PCM_ULAW is None:
+        _PCM_ULAW=bytes(pcm_to_ulaw(v-65536 if v>=32768 else v) for v in range(65536))
+    return _PCM_ULAW
+
 def pcm16_from_mulaw(data: bytes) -> bytes:
-    return b''.join(struct.pack('<h',ulaw_to_pcm(b)) for b in data)
+    return b''.join(map(_ULAW_PCM16.__getitem__,data))
 
 def mulaw_from_pcm16(data: bytes) -> bytes:
-    return bytes(pcm_to_ulaw(v) for (v,) in struct.iter_unpack('<h',data[:len(data)//2*2]))
+    samples=memoryview(data[:len(data)//2*2]).cast('B').cast('H') if len(data)>=2 else []
+    if sys.byteorder!='little' and samples:
+        samples=struct.unpack(f'<{len(data)//2}H',data[:len(data)//2*2])
+    return bytes(map(_pcm_ulaw_table().__getitem__,samples))
 
 def resample_pcm16(data: bytes, from_hz: int, to_hz: int) -> bytes:
     if from_hz<=0 or to_hz<=0: raise ValueError('positive sample rates required')
     raw=[v for (v,) in struct.iter_unpack('<h',data[:len(data)//2*2])]
     if not raw:return b''
     if from_hz==to_hz:return data
+    if to_hz==2*from_hz:
+        # 8 kHz -> 16 kHz for whisper: same values as the generic path (midpoints
+        # of integers are exact in float, round() is identical), without per-sample float math.
+        nxt=raw[1:]+raw[-1:]
+        out=[v for a,b in zip(raw,nxt) for v in (a,round((a+b)/2))]
+        return struct.pack('<'+'h'*len(out),*out)
     out=[]
     for j in range(round(len(raw)*to_hz/from_hz)):
         x=j*from_hz/to_hz;left=min(int(x),len(raw)-1);right=min(left+1,len(raw)-1)
@@ -53,7 +75,7 @@ def resample_pcm16(data: bytes, from_hz: int, to_hz: int) -> bytes:
 
 def rms_mulaw(data: bytes) -> float:
     if not data:return 0.0
-    return math.sqrt(sum(ulaw_to_pcm(v)**2 for v in data)/len(data))
+    return math.sqrt(sum(map(_ULAW_SQ.__getitem__,data))/len(data))
 
 class MockASR:
     def __init__(self, transcripts: list[str]|None=None): self.transcripts=list(transcripts or [])
