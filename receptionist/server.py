@@ -27,6 +27,7 @@ from receptionist.booking import BookingStore
 from receptionist.dialogue import Dialogue, OPENERS
 from receptionist.telephony import CALLER_RE, MAX_UTTERANCE_BYTES, CallEngine, caller_number, split_sentences  # noqa: F401
 from receptionist.twilio_transport import TwilioMediaStreamTransport
+from receptionist.asterisk_transport import AsteriskWebSocketTransport
 from receptionist.audio import MockASR, MockTTS, WhisperCppASR, WhisperDaemonASR, PiperTTS, PiperDaemonTTS, CachingTTS, rms_mulaw
 
 class TextInput(BaseModel):
@@ -137,6 +138,15 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
         param=f'<Parameter name="callerId" value="{escape(caller,quote=True)}" />' if caller else ''
         twiml=f'<Response><Connect><Stream url="{escape(settings.wss_url,quote=True)}">{param}</Stream></Connect></Response>'
         return Response(twiml,media_type='application/xml')
+
+    @app.websocket('/asterisk/media')
+    async def asterisk_media(ws:WebSocket):
+        # Asterisk runs on this host and the service binds 127.0.0.1 only, so the media
+        # socket is reachable solely from local processes (Asterisk, SIPp tests).
+        await ws.accept()
+        engine=CallEngine(store,asr=asr_factory(),tts=tts,require_caller_id=settings.require_caller_id)
+        try:await engine.run(AsteriskWebSocketTransport(ws))
+        except (WebSocketDisconnect,ValueError,RuntimeError):pass
 
     @app.websocket('/twilio/media')
     async def media(ws:WebSocket):

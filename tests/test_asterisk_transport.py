@@ -75,22 +75,18 @@ def test_audio_waits_while_asterisk_says_xoff(tmp_path):
 
 @pytest.mark.parametrize("bad", ["not json", json.dumps([1, 2]), json.dumps({"event": "MEDIA_START"})])
 def test_malformed_control_is_policy_close(tmp_path, bad):
-    from starlette.websockets import WebSocketDisconnect
     with client(tmp_path) as c, c.websocket_connect("/asterisk/media") as ws:
         ws.send_text(bad)
-        with pytest.raises(WebSocketDisconnect) as e:
-            ws.receive()
-    assert e.value.code == 1008
+        msg = ws.receive()
+    assert msg["type"] == "websocket.close" and msg["code"] == 1008
 
 
 def test_oversized_binary_frame_is_refused(tmp_path):
-    from starlette.websockets import WebSocketDisconnect
     with client(tmp_path) as c, c.websocket_connect("/asterisk/media") as ws:
         ws.send_text(json.dumps(START))
         ws.send_bytes(b"\x00" * 20000)
-        with pytest.raises(WebSocketDisconnect) as e:
-            ws.receive()
-    assert e.value.code == 1009
+        msg = ws.receive()
+    assert msg["type"] == "websocket.close" and msg["code"] == 1009
 
 
 def test_bad_caller_param_is_treated_as_anonymous(tmp_path):
