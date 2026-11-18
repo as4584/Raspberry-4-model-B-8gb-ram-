@@ -131,3 +131,20 @@ def test_long_continuous_speech_is_transcribed_not_hung_up(tmp_path):
     assert len(asr.lengths) >= 2, "speech past the cap was dropped or the call was closed"
     assert max(asr.lengths) <= 160000 + 160
     assert sum(asr.lengths) == 25 * 8000
+
+
+def test_quiet_frames_inside_speech_reach_asr(tmp_path):
+    # Pi round trip: VAD kept only loud frames, so soft consonants and short gaps
+    # between words were cut out and the same phrase reached whisper as 1.26 s or
+    # 1.48 s of choppy audio (one run misheard). Once speech starts, keep every frame.
+    asr = RecordingASR()
+    with make_client(tmp_path, asr=lambda: asr) as c, c.websocket_connect("/twilio/media") as ws:
+        ws.send_json(start())
+        for chunk in ([b"\x00"] * 25, [b"\xf0"] * 10, [b"\x00"] * 25):   # 0.5 s loud, 0.2 s soft, 0.5 s loud
+            for frame in chunk:
+                ws.send_json(media(frame * 160))
+        for _ in range(30):
+            ws.send_json(media(b"\xff" * 160))
+        ws.send_json({"event": "stop", "streamSid": "M1"})
+    assert len(asr.lengths) == 1
+    assert asr.lengths[0] >= (25 + 10 + 25) * 160                      # nothing inside the phrase dropped
