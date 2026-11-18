@@ -47,7 +47,9 @@ def test_writes_seed_files_without_leaking_secrets(tmp_path):
     assert PW not in ud and "passwd: \"$6$" in ud
     assert json.dumps("Home Net") in nc and PSK in nc
     assert PSK not in ud
-    assert (b / "meta-data").read_text().startswith("instance-id: ")
+    md = (b / "meta-data").read_text()
+    assert "dsmode: local" in md  # Pi OS image default; apply user-data before network
+    assert "instance-id: lex-receptionist-pi-" in md
     assert PSK not in r.stdout + r.stderr and PW not in r.stdout + r.stderr
 
 

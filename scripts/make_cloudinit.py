@@ -107,7 +107,8 @@ def main(argv: list[str]) -> int:
     nc += [""]
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     files = {"user-data": ud, "network-config": nc,
-             "meta-data": [f"instance-id: {HOSTNAME}-{stamp}", ""]}
+             # dsmode local is the Pi OS image default: apply user-data before network.
+             "meta-data": ["dsmode: local", f"instance-id: {HOSTNAME}-{stamp}", ""]}
     for name, lines in files.items():
         (b / name).write_bytes("\n".join(lines).encode())
     print(f"SEEDED user-data, network-config, meta-data on {b} "
