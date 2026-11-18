@@ -21,3 +21,10 @@
 - Auth: since v0.3 cancel/reschedule require the booking's `caller_id` in addition to the reference. Caller ID can be spoofed; stronger verification (e.g. SMS code) remains a pre-production decision.
 - `DEV_ALLOW_UNSIGNED=1` is isolated dev only, NEVER public production.
 - Changes require contract test update + PR review by both accounts.
+
+## v0.4 (2026-11-18): spoken booking code (#38)
+- `book(..., caller_id=X)` rows carry `code`: 4 random digits, unique among caller X's **active** bookings, chosen inside the write transaction. Anonymous bookings get `code=None`.
+- `reschedule` keeps the code on the new row.
+- `BookingStore.cancel_by_code(code, caller_id) -> bool`: requires the matching caller number; the code alone never authorises.
+- Dialogue: the booked reply speaks "Your booking code is four seven two nine." "cancel <code>" / "cancel booking <code>" (digits or digit words) without a caller number returns `verification_required`. UUID cancel is unchanged.
+- Migration: existing DB files gain the `code` column in place (NULL for old rows).

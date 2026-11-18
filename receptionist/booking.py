@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import sqlite3
+import secrets
 import uuid
 
 class SlotTaken(Exception): pass
@@ -25,8 +26,12 @@ class BookingStore:
                 idem_key TEXT UNIQUE NOT NULL, payload_key TEXT NOT NULL
             )""")
             # Migration (contract v0.3): existing DB files gain the owner column in place.
-            if "caller_id" not in [c["name"] for c in db.execute("PRAGMA table_info(bookings)")]:
+            cols=[c["name"] for c in db.execute("PRAGMA table_info(bookings)")]
+            if "caller_id" not in cols:
                 db.execute("ALTER TABLE bookings ADD COLUMN caller_id TEXT")
+            # Migration (contract v0.4): 4-digit spoken booking code, scoped to the caller.
+            if "code" not in cols:
+                db.execute("ALTER TABLE bookings ADD COLUMN code TEXT")
             db.execute("CREATE INDEX IF NOT EXISTS active_slot ON bookings(resource,status,starts,ends)")
 
     def _connect(self):
@@ -80,8 +85,9 @@ class BookingStore:
                      AND starts < ? AND ends > ? LIMIT 1""",(resource,b,a)).fetchone()
                 if taken: raise SlotTaken("Requested slot is already taken")
                 key=str(uuid.uuid4())
-                db.execute("INSERT INTO bookings(id,resource,starts,ends,status,idem_key,payload_key,caller_id) VALUES(?,?,?,?,?,?,?,?)",
-                           (key,resource,a,b,'active',idem_key,payload_key,caller_id))
+                code=self._new_code(db,caller_id)
+                db.execute("INSERT INTO bookings(id,resource,starts,ends,status,idem_key,payload_key,caller_id,code) VALUES(?,?,?,?,?,?,?,?,?)",
+                           (key,resource,a,b,'active',idem_key,payload_key,caller_id,code))
                 row=db.execute("SELECT * FROM bookings WHERE id=?",(key,)).fetchone()
                 db.execute("COMMIT")
                 return dict(row)
@@ -115,13 +121,37 @@ class BookingStore:
                 if taken: raise SlotTaken("Requested slot is already taken")
                 db.execute("UPDATE bookings SET status='rescheduled' WHERE id=?",(reference,))
                 key=str(uuid.uuid4())
-                db.execute("INSERT INTO bookings(id,resource,starts,ends,status,idem_key,payload_key,caller_id) VALUES(?,?,?,?,?,?,?,?)",
-                           (key,resource,a,b,'active',idem_key,payload_key,caller_id))
+                # The caller keeps the code they were told; it moves to the new row.
+                db.execute("INSERT INTO bookings(id,resource,starts,ends,status,idem_key,payload_key,caller_id,code) VALUES(?,?,?,?,?,?,?,?,?)",
+                           (key,resource,a,b,'active',idem_key,payload_key,caller_id,old['code']))
                 row=db.execute("SELECT * FROM bookings WHERE id=?",(key,)).fetchone()
                 db.execute("COMMIT")
                 return dict(row)
             except Exception:
                 # BEGIN may itself have failed (e.g. locked); never mask that error.
+                if db.in_transaction: db.execute("ROLLBACK")
+                raise
+
+    @staticmethod
+    def _new_code(db, caller_id: str | None) -> str | None:
+        """4 random digits, unique among this caller's ACTIVE bookings (chosen inside the
+        caller's write transaction). No caller -> no code: a code never authorises alone."""
+        if not caller_id:return None
+        used={r[0] for r in db.execute("SELECT code FROM bookings WHERE caller_id=? AND status='active'",(caller_id,))}
+        if len(used)>=10000:raise InvalidBooking("Too many active bookings for this caller")
+        while True:
+            code=f"{secrets.randbelow(10000):04d}"
+            if code not in used:return code
+
+    def cancel_by_code(self, code: str, caller_id: str | None) -> bool:
+        if not caller_id or not code:return False
+        with self._session() as db:
+            try:
+                db.execute("BEGIN IMMEDIATE")
+                n=db.execute("UPDATE bookings SET status='cancelled' WHERE code=? AND caller_id=? AND status='active'",(code,caller_id)).rowcount
+                db.execute("COMMIT")
+                return n==1
+            except Exception:
                 if db.in_transaction: db.execute("ROLLBACK")
                 raise
 
