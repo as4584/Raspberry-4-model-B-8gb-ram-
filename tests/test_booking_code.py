@@ -117,3 +117,32 @@ def test_cancel_by_code_without_caller_number_needs_verification(d):
 def test_uuid_cancel_still_works(d):
     ref = _book(d).committed_id
     assert d.handle(f"cancel {ref}", "s", caller_id=CALLER).action == "cancelled"
+
+
+# Real whisper base.en transcripts of Piper speaking the code, captured on the Pi
+# (2026-11-18): hyphens and even a decimal point appear between the digits.
+@pytest.mark.parametrize("template", ["Cancel booking {h}", "Cancel booking {dot}", "Cancel {plain}.",
+                                      "cancel booking {comma}", "cancel booking oh {tail}"])
+def test_cancel_by_code_as_whisper_writes_it(d, template):
+    _book(d)
+    c = d.store.active()[0]["code"]
+    said = template.format(h="-".join(c), dot=f"{c[0]}.{c[1:]}", plain=c, comma=", ".join(c),
+                           tail=" ".join(c[1:]) if c[0] == "0" else None)
+    if "None" in said:
+        pytest.skip("'oh' form only applies to codes starting with zero")
+    r = d.handle(said, "s", caller_id=CALLER)
+    assert r.action == "cancelled" and d.store.active() == []
+
+
+@pytest.mark.parametrize("said", ["cancel 12-34-5", "cancel 3.5", "cancel 123", "cancel 1-2-3-4-5"])
+def test_non_four_digit_codes_still_rejected(d, said):
+    _book(d)
+    assert d.handle(said, "s", caller_id=CALLER).action != "cancelled"
+    assert len(d.store.active()) == 1
+
+
+@pytest.mark.parametrize("text,code", [("oh four one two", "0412"), ("0-4-1-2", "0412"), ("0.412", "0412"),
+                                       ("four, one, two, nine", "4129"), ("12 34", "1234")])
+def test_spoken_code_normalises_separators(text, code):
+    from receptionist.dialogue import _spoken_code
+    assert _spoken_code(text) == code
