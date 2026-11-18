@@ -253,3 +253,11 @@ def test_committed_sample_is_small_and_valid():
 def test_generated_output_dir_is_gitignored():
     res = subprocess.run(["git", "check-ignore", "-q", "lab/out/x.jsonl"], cwd=ROOT)
     assert res.returncode == 0
+
+
+def test_manifest_hash_matches_file_bytes(tmp_path):
+    import hashlib
+    out = tmp_path / "t.jsonl"
+    cli.main(["--split", "train", "--seed", "4", "--n", "10", "--out", str(out)])
+    man = json.loads((tmp_path / "t.jsonl.manifest.json").read_text())
+    assert hashlib.sha256(out.read_bytes()).hexdigest() == man["sha256"]
