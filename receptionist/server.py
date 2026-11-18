@@ -42,6 +42,10 @@ class Settings:
 # Anything else (blocked/"anonymous", injection attempts) is treated as no number.
 CALLER_RE=re.compile(r'\+?[0-9]{5,15}')
 
+def split_sentences(text:str)->list[str]:
+    # Split only where punctuation is followed by whitespace, so "1.2.3" and times stay whole.
+    return [p for p in re.split(r'(?<=[.!?])\s+',text.strip()) if p]
+
 def caller_number(value:object)->str|None:
     return value if isinstance(value,str) and CALLER_RE.fullmatch(value) else None
 
@@ -127,13 +131,22 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
                 # Booking does blocking SQLite I/O (busy waits up to 15 s); keep it off the
                 # event loop so other calls keep streaming.
                 reply=await asyncio.to_thread(handle_locked,utterance,call_id or 'invalid')
-                outbound=await tts.synthesize(reply.text)
-                if this_generation!=generation:return
-                for i in range(0,len(outbound),160):
-                    if generation!=this_generation:return
-                    payload=base64.b64encode(outbound[i:i+160]).decode()
-                    await send({'event':'media','streamSid':stream_id,'media':{'payload':payload}})
-                    await asyncio.sleep(0.02)
+                # Synthesise sentence k+1 while sentence k streams: the caller hears the first
+                # sentence without waiting for the whole reply (PI4: 8 s reply rendered up front).
+                parts=split_sentences(reply.text) or [reply.text]
+                pending=asyncio.create_task(tts.synthesize(parts[0]))
+                try:
+                    for k in range(len(parts)):
+                        outbound=await pending
+                        pending=asyncio.create_task(tts.synthesize(parts[k+1])) if k+1<len(parts) else None
+                        if this_generation!=generation:return
+                        for i in range(0,len(outbound),160):
+                            if generation!=this_generation:return
+                            payload=base64.b64encode(outbound[i:i+160]).decode()
+                            await send({'event':'media','streamSid':stream_id,'media':{'payload':payload}})
+                            await asyncio.sleep(0.02)
+                finally:
+                    if pending and not pending.done():pending.cancel()
                 if this_generation==generation:await send({'event':'mark','streamSid':stream_id,'mark':{'name':f'answer-{this_generation}'}})
             except asyncio.CancelledError:raise
             except Exception:
