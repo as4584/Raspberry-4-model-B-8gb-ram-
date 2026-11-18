@@ -16,8 +16,9 @@ class Dialogue:
     def __init__(self, store: BookingStore, timezone_name: str = "America/New_York"):
         self.store=store
         self.tz=ZoneInfo(timezone_name)
-        self.pending:tuple[datetime,datetime]|None=None
-        self.turn=0
+        # Per-session state: one caller's yes/no must never touch another's pending slot.
+        self._pending:dict[str,tuple[datetime,datetime]]={}
+        self._turns:dict[str,int]={}
 
     def _parse_datetime(self, ymd: str, hm: str) -> datetime:
         naive=datetime.fromisoformat(f"{ymd}T{hm}")
@@ -31,19 +32,19 @@ class Dialogue:
         return a
 
     def handle(self, utterance: str, session_id: str) -> Reply:
-        self.turn+=1
+        turn=self._turns[session_id]=self._turns.get(session_id,0)+1
         s=utterance.strip().lower()
         if s in ("no","never mind","cancel that"):
-            self.pending=None
+            self._pending.pop(session_id,None)
             return Reply("Okay, no appointment was created.")
         if s in ("yes","confirm"):
-            if not self.pending:
+            pending=self._pending.pop(session_id,None)
+            if not pending:
                 return Reply("There is no pending booking to confirm.")
-            starts,ends=self.pending
-            self.pending=None
+            starts,ends=pending
             try:
                 # Stable within a call/turn even if the network retries the same operation.
-                result=self.store.book("primary",starts,ends,f"{session_id}:{self.turn}")
+                result=self.store.book("primary",starts,ends,f"{session_id}:{turn}")
                 return Reply(f"Confirmed for {starts.astimezone(self.tz):%Y-%m-%d %I:%M %p}. Your reference is {result['id']}.","booked",result['id'])
             except SlotTaken:
                 return Reply("That time was just taken. Please choose another slot.","slot_taken")
@@ -56,13 +57,13 @@ class Dialogue:
                 duration=int(match.group(3) or '30')
                 if starts.astimezone(timezone.utc)<=datetime.now(timezone.utc):
                     return Reply("Please choose a future appointment time.")
-                self.pending=(starts,starts+timedelta(minutes=duration))
+                self._pending[session_id]=(starts,starts+timedelta(minutes=duration))
                 return Reply(f"Please confirm: {starts:%A, %B %d at %I:%M %p} for {duration} minutes. Say yes or no.","confirm_required")
             except (ValueError,InvalidBooking) as exc:
-                self.pending=None
+                self._pending.pop(session_id,None)
                 return Reply(f"Please choose an unambiguous date and time. {exc}","invalid")
         if s.startswith("cancel "):
-            self.pending=None
+            self._pending.pop(session_id,None)
             reference=s.removeprefix("cancel ").strip()
             if self.store.cancel(reference):return Reply("The booking with that reference has been cancelled.","cancelled")
             return Reply("I couldn't find an active appointment with that reference.","not_found")
