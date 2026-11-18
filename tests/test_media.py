@@ -33,10 +33,12 @@ def test_twilio_duplex_media_and_mark(tmp_path):
             media=ws.receive_json()
             assert media['event']=='media' and media['streamSid']=='M1'
             assert base64.b64decode(media['media']['payload'])==bytes([255]*160)
+            # Replies stream per sentence: one or more further media frames, then the mark.
             msg=ws.receive_json()
-            assert msg['event']=='media'
-            mark=ws.receive_json()
-            assert mark['event']=='mark' and mark['streamSid']=='M1'
+            while msg['event']=='media':
+                assert msg['streamSid']=='M1'
+                msg=ws.receive_json()
+            assert msg['event']=='mark' and msg['streamSid']=='M1'
             ws.send_json({'event':'stop','streamSid':'M1'})
 
 def test_codec_boundary():
@@ -58,8 +60,11 @@ def test_two_calls_separate_and_same_slot_races(tmp_path):
             assert ws.receive_json()['streamSid']==sid # clear
             output=ws.receive_json()
             assert output['event']=='media' and output['streamSid']==sid
-            assert ws.receive_json()['streamSid']==sid # second media
-            assert ws.receive_json()['event']=='mark'
+            msg=ws.receive_json()
+            while msg['event']=='media':  # per-sentence frames, all on this call's stream
+                assert msg['streamSid']==sid
+                msg=ws.receive_json()
+            assert msg['event']=='mark' and msg['streamSid']==sid
             ws.send_json({'event':'stop'})
         return True
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
