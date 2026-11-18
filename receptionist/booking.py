@@ -11,8 +11,9 @@ class InvalidBooking(Exception): pass
 class KeyConflict(Exception): pass
 
 class BookingStore:
-    def __init__(self, path: str):
+    def __init__(self, path: str, busy_timeout_s: float = 15.0):
         self.path = path
+        self.busy_timeout_s = busy_timeout_s
 
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as db:
@@ -25,9 +26,12 @@ class BookingStore:
             db.execute("CREATE INDEX IF NOT EXISTS active_slot ON bookings(resource,status,starts,ends)")
 
     def _connect(self):
-        db = sqlite3.connect(self.path, timeout=15, isolation_level=None)
+        db = sqlite3.connect(self.path, timeout=self.busy_timeout_s, isolation_level=None)
         db.row_factory = sqlite3.Row
-        db.execute("PRAGMA busy_timeout=15000")
+        db.execute(f"PRAGMA busy_timeout={int(self.busy_timeout_s * 1000)}")
+        # Power-loss durability: in WAL mode NORMAL can drop the last commits on a
+        # power cut; FULL fsyncs each commit, so a confirmed booking survives.
+        db.execute("PRAGMA synchronous=FULL")
         return db
 
     @staticmethod
@@ -68,7 +72,8 @@ class BookingStore:
                 db.execute("COMMIT")
                 return dict(row)
             except Exception:
-                db.execute("ROLLBACK")
+                # BEGIN may itself have failed (e.g. locked); never mask that error.
+                if db.in_transaction: db.execute("ROLLBACK")
                 raise
 
     def reschedule(self, reference: str, starts: datetime, ends: datetime, idem_key: str) -> dict:
@@ -100,7 +105,8 @@ class BookingStore:
                 db.execute("COMMIT")
                 return dict(row)
             except Exception:
-                db.execute("ROLLBACK")
+                # BEGIN may itself have failed (e.g. locked); never mask that error.
+                if db.in_transaction: db.execute("ROLLBACK")
                 raise
 
     def cancel(self, reference: str) -> bool:
@@ -112,7 +118,8 @@ class BookingStore:
                 db.execute("COMMIT")
                 return n==1
             except Exception:
-                db.execute("ROLLBACK")
+                # BEGIN may itself have failed (e.g. locked); never mask that error.
+                if db.in_transaction: db.execute("ROLLBACK")
                 raise
 
     def active(self) -> list[dict]:
