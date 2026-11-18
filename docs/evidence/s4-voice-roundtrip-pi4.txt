@@ -23,3 +23,9 @@ PI4 spoken-booking round trip @ 5d18b3d (base.en-q5_1, throttled 0x50005, INVALI
   caller said "book december tenth at two pm" -> heard "Book December 10 at 2 p.m."
   receptionist said: "Please confirm, Thursday, December 10 at 2.00pm for 30 minutes. Say yes or no."
   asr 19.31 s for 1.44 s audio; first audio 6.39 s after ASR; end-of-speech -> first audio 25.69 s
+
+PI4 FIRST FULL SPOKEN BOOKING (2 turns, one call) @ fix/s3-asr-punctuation 579dda4 + multi-turn harness, base.en-q5_1, throttled 0x50005 (timing INVALID):
+  caller: "book december tenth at two pm" -> heard reply "Please confirm, Thursday, December 10 at 2.00PM for 30 minutes. Say yes or no." (27.4 s)
+  caller: "yes" -> heard reply "confirmed for 2026-12-10 2:00PM. Your reference is <uuid read aloud, 14.9 s>" (24.7 s)
+  DB: (2026-12-10T19:00:00+00:00, 2026-12-10T19:30:00+00:00, +15550000001, active)
+  Before the punctuation fix the same call ended with whisper "Yes." -> help text and NO booking.
