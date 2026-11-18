@@ -21,6 +21,7 @@ hardware is ready.
 | Hybrid diversity engine | `research/data_pipeline/augment.py`, `research/data_pipeline/diversity_engine.py`, `tests/test_diversity_engine.py` |
 | ASR-noise robustness (never mis-books under noise) | `research/data_pipeline/asr_noise.py`, `tests/test_asr_robustness.py`, `docs/evidence/r2_asr_robustness.md` |
 | Grouped (leakage-safe) train/dev/holdout splits + contamination check | `research/data_pipeline/splits.py`, `tests/test_splits.py`, `research/data/splits/*.jsonl`, `docs/evidence/r2_splits.md` |
+| Diagnostics: per-slot F1 + error breakdown; near-duplicate detection | `research/data_pipeline/slot_metrics.py`, `research/data_pipeline/dedup.py`, `tests/test_slot_metrics.py`, `tests/test_dedup.py`, `docs/evidence/r2_diagnostics.md` |
 | Grown dataset (240 of 669 pool) | `research/data/nlu_grown_set.jsonl` |
 | Research synthesis (cited) | `docs/research/data_generation_best_practices.md` |
 | Evidence | `docs/evidence/r2_nlu_eval.md`, `docs/evidence/r2_diversity_engine.md` |
