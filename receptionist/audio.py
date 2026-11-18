@@ -71,12 +71,21 @@ def clean_whisper_output(stdout: str) -> str:
         if line:words.append(line)
     return ' '.join(words)
 
+def audio_ctx_for(seconds: float) -> int:
+    """whisper encoder context for an utterance: 50 frames/s + 64 margin, 128..1500.
+    The default 1500 always encodes a 30 s window; on the PI4 a 2 s utterance
+    encoded in 11.65 s at 1500 vs 1.06 s at 160 with the same transcript."""
+    return min(1500,max(128,math.ceil(seconds*50)+64))
+
 class WhisperCppASR:
     """whisper.cpp `whisper-cli` (pinned v1.9.5): -m model -f wav -t N -l en -nt -np."""
-    def __init__(self, executable: str, model: str, timeout: int=40, threads: int=4):
+    def __init__(self, executable: str, model: str, timeout: int=40, threads: int=4, adaptive_ctx: bool=True):
         self.executable,self.model,self.timeout,self.threads=executable,model,timeout,threads
-    def args(self, wav: str) -> list[str]:
-        return [self.executable,'-m',self.model,'-f',wav,'-t',str(self.threads),'-l','en','-nt','-np']
+        self.adaptive_ctx=adaptive_ctx
+    def args(self, wav: str, seconds: float|None=None) -> list[str]:
+        a=[self.executable,'-m',self.model,'-f',wav,'-t',str(self.threads),'-l','en','-nt','-np']
+        if self.adaptive_ctx and seconds is not None:a+=['-ac',str(audio_ctx_for(seconds))]
+        return a
     async def transcribe(self, mulaw: bytes) -> str:
         if not Path(self.model).is_file():raise FileNotFoundError('WHISPER_MODEL missing')
         if not mulaw:return ''
@@ -86,7 +95,7 @@ class WhisperCppASR:
                 with wave.open(str(path),'wb') as f:
                     f.setnchannels(1);f.setsampwidth(2);f.setframerate(16000)
                     f.writeframes(resample_pcm16(pcm16_from_mulaw(mulaw),8000,16000))
-                result=subprocess.run(self.args(str(path)),capture_output=True,text=True,timeout=self.timeout,check=True)
+                result=subprocess.run(self.args(str(path),len(mulaw)/8000),capture_output=True,text=True,timeout=self.timeout,check=True)
                 return clean_whisper_output(result.stdout)
         return await asyncio.to_thread(run)
 
