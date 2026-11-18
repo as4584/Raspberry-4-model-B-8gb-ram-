@@ -31,12 +31,15 @@ def _hours_text(hours:dict[int,tuple[time,time]])->str:
 class Dialogue:
     def __init__(self, store: BookingStore, timezone_name: str = "America/New_York",
                  hours: dict[int,tuple[time,time]] | None = None,
-                 durations: tuple[int,...] = (15,30,60), default_duration: int = 30):
+                 durations: tuple[int,...] = (15,30,60), default_duration: int = 30,
+                 require_caller_id: bool = False):
         self.store=store
         self.tz=ZoneInfo(timezone_name)
         self.hours=DEFAULT_HOURS if hours is None else hours
         self.durations=durations
         self.default_duration=default_duration
+        # Production should set this: anonymous callers may then not book, cancel or move.
+        self.require_caller_id=require_caller_id
         self._closed_text=f"That time is outside our business hours. We are open {_hours_text(self.hours)}."
         allowed=", ".join(str(x) for x in durations[:-1])
         self._duration_text=f"Please choose a duration of {allowed} or {durations[-1]} minutes."
@@ -79,9 +82,12 @@ class Dialogue:
             return Reply(self._closed_text,"closed")
         return starts,ends,duration
 
-    def handle(self, utterance: str, session_id: str) -> Reply:
+    def handle(self, utterance: str, session_id: str, caller_id: str | None = None) -> Reply:
         turn=self._turns[session_id]=self._turns.get(session_id,0)+1
         s=utterance.strip().lower()
+        if self.require_caller_id and not caller_id and re.match(r"(book|cancel|reschedule) ",s):
+            self._pending.pop(session_id,None)
+            return Reply("I need the number you are calling from before I can do that. Please call from your own phone.","verification_required")
         if s in ("no","never mind","cancel that"):
             pending=self._pending.pop(session_id,None)
             if pending and pending[0]:
@@ -96,9 +102,9 @@ class Dialogue:
             key=f"{session_id}:{turn}"
             try:
                 if reference:
-                    result=self.store.reschedule(reference,starts,ends,key)
+                    result=self.store.reschedule(reference,starts,ends,key,caller_id=caller_id)
                     return Reply(f"Rescheduled to {starts:%Y-%m-%d %I:%M %p}. Your new reference is {result['id']}.","rescheduled",result['id'])
-                result=self.store.book("primary",starts,ends,key)
+                result=self.store.book("primary",starts,ends,key,caller_id=caller_id)
                 return Reply(f"Confirmed for {starts:%Y-%m-%d %I:%M %p}. Your reference is {result['id']}.","booked",result['id'])
             except SlotTaken:
                 return Reply("That time was just taken. Please choose another slot.","slot_taken")
@@ -121,7 +127,7 @@ class Dialogue:
         if s.startswith("cancel "):
             self._pending.pop(session_id,None)
             reference=s.removeprefix("cancel ").strip()
-            if self.store.cancel(reference):return Reply("The booking with that reference has been cancelled.","cancelled")
+            if self.store.cancel(reference,caller_id=caller_id):return Reply("The booking with that reference has been cancelled.","cancelled")
             return Reply("I couldn't find an active appointment with that reference.","not_found")
         if "human" in s or "operator" in s:
             return Reply("I can arrange a human callback. Please contact the business directly if urgent.","handoff")
