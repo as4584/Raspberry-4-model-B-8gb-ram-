@@ -1,0 +1,10 @@
+[Unit]
+Description=Nightly bookings DB backup (catches up after power loss)
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
