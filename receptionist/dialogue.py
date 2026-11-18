@@ -98,8 +98,9 @@ class Dialogue:
             if not pending:
                 return Reply("There is no pending booking to confirm.")
             reference,starts,ends=pending
-            # Stable within a call/turn even if the network retries the same operation.
-            key=f"{session_id}:{turn}"
+            # Stable for a retried identical operation; the operation is part of the key so a
+            # rebuilt session reusing a turn number with a different request is not a conflict.
+            key=f"{session_id}:{turn}:{reference or 'book'}@{starts.astimezone(timezone.utc):%Y%m%dT%H%M}-{ends.astimezone(timezone.utc):%Y%m%dT%H%M}"
             try:
                 if reference:
                     result=self.store.reschedule(reference,starts,ends,key,caller_id=caller_id)
