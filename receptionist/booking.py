@@ -1,5 +1,6 @@
 """Atomic, idempotent SQLite booking store. All input times are UTC-aware."""
 from __future__ import annotations
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -16,7 +17,7 @@ class BookingStore:
         self.busy_timeout_s = busy_timeout_s
 
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-        with self._connect() as db:
+        with self._session() as db:
             db.execute("PRAGMA journal_mode=WAL")
             db.execute("""CREATE TABLE IF NOT EXISTS bookings (
                 id TEXT PRIMARY KEY, resource TEXT NOT NULL, starts TEXT NOT NULL,
@@ -36,6 +37,15 @@ class BookingStore:
         # power cut; FULL fsyncs each commit, so a confirmed booking survives.
         db.execute("PRAGMA synchronous=FULL")
         return db
+
+    @contextmanager
+    def _session(self):
+        # sqlite3's own context manager only commits/rolls back; always close too.
+        db=self._connect()
+        try:
+            yield db
+        finally:
+            db.close()
 
     @staticmethod
     def _dt(t: datetime) -> str:
@@ -58,7 +68,7 @@ class BookingStore:
         a,b = self._range(starts,ends)
         payload_key = f"{resource}|{a}|{b}"
         # SQLite BEGIN IMMEDIATE serializes writers even when several connections/threads race.
-        with self._connect() as db:
+        with self._session() as db:
             try:
                 db.execute("BEGIN IMMEDIATE")
                 previous=db.execute("SELECT * FROM bookings WHERE idem_key=?",(idem_key,)).fetchone()
@@ -86,7 +96,7 @@ class BookingStore:
         new row inserted together, or nothing changes (e.g. new slot taken)."""
         if not reference or not idem_key: raise InvalidBooking("Reference and idempotency key required")
         a,b = self._range(starts,ends)
-        with self._connect() as db:
+        with self._session() as db:
             try:
                 db.execute("BEGIN IMMEDIATE")
                 # Only the caller who booked may move it; a mismatch looks exactly like "not found".
@@ -117,7 +127,7 @@ class BookingStore:
 
     def cancel(self, reference: str, caller_id: str | None = None) -> bool:
         # The reference alone is not enough: caller_id must match the booking's owner.
-        with self._connect() as db:
+        with self._session() as db:
             try:
                 db.execute("BEGIN IMMEDIATE")
                 n=db.execute("UPDATE bookings SET status='cancelled' WHERE id=? AND status='active' AND caller_id IS ?",(reference,caller_id)).rowcount
@@ -129,5 +139,5 @@ class BookingStore:
                 raise
 
     def active(self) -> list[dict]:
-        with self._connect() as db:
+        with self._session() as db:
             return [dict(x) for x in db.execute("SELECT * FROM bookings WHERE status='active' ORDER BY starts")]
