@@ -189,3 +189,21 @@ def test_whisper_full_window_can_be_forced(monkeypatch, model):
     calls = capture_whisper(monkeypatch, 'x')
     asyncio.run(WhisperCppASR('w', model, adaptive_ctx=False).transcribe(mulaw_from_pcm16(tone_pcm16(seconds=2.0))))
     assert '-ac' not in calls[0]['args']
+
+
+# --- repetition guard (PI4 2026-11-18) -------------------------------------------
+# With a shortened encoder window (-ac 256) whisper deterministically repeated the
+# caller's sentence into the padding: "Book December 10 at 2 p.m. Book December 10
+# at 2 p.m." (never at -ac 1500 or 176; -mc 0 did not help).
+
+@pytest.mark.parametrize("raw,expect", [
+    (" Book December 10 at 2 p.m. Book December 10 at 2 p.m.\n", "Book December 10 at 2 p.m."),
+    (" Book December 10 at 2 p.m.\n Book December 10 at 2 p.m.\n", "Book December 10 at 2 p.m."),
+    (" Yes. Yes. Yes.\n", "Yes."),
+    (" book december tenth book december tenth\n", "book december tenth"),
+    (" Cancel it. Actually, book it.\n", "Cancel it. Actually, book it."),
+    (" Book at two. Book at three.\n", "Book at two. Book at three."),
+    ("[BLANK_AUDIO]\n", ""),
+])
+def test_whisper_output_collapses_repeated_sentences(raw, expect):
+    assert audio.clean_whisper_output(raw) == expect
