@@ -57,3 +57,33 @@ def test_snapshot_without_sidecar_is_refused(tmp_path):
     (d / "bookings-20261118T033000Z.sha256").unlink()
     r = run(tmp_path)
     assert r.returncode == 71 and r.stdout == b""
+
+
+SETUP = ROOT / "scripts" / "pi_setup_backup_reader.sh"
+PUB = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFIXTUREfixturefixturefixturefixture desktop-backup"
+
+
+def setup_plan(pub, uid="1000"):
+    e = {**os.environ, "DRY_RUN": "1", "BOOTSTRAP_UID": uid}
+    r = subprocess.run([BASH, str(SETUP), pub], env=e, capture_output=True, text=True, timeout=30)
+    return r, "\n".join(l[6:] for l in r.stdout.splitlines() if l.startswith("PLAN: "))
+
+
+def test_reader_key_is_restricted_to_the_export_command():
+    r, p = setup_plan(PUB)
+    assert r.returncode == 0, r.stderr
+    assert f'restrict,command="/usr/local/bin/pi-backup-export" {PUB}' in p
+    assert "useradd --system --create-home --shell /bin/sh --groups receptionist backupreader" in p
+    assert "install -o root -g root -m 755" in p and "/usr/local/bin/pi-backup-export" in p
+    assert "sudoers" not in p and "usermod -aG sudo" not in p
+
+
+@pytest.mark.parametrize("bad", ["", "not a key", "-----BEGIN OPENSSH PRIVATE KEY-----", 'ssh-ed25519 AAAA x" ; rm -rf /'])
+def test_setup_rejects_bad_public_keys(bad):
+    r, _ = setup_plan(bad)
+    assert r.returncode == 72 and "FAIL" in r.stderr
+
+
+def test_setup_refuses_root():
+    r, _ = setup_plan(PUB, uid="0")
+    assert r.returncode == 73
