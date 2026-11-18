@@ -1,0 +1,9 @@
+PI4 evidence 2026-11-18 ~01:49 EST, service + timer at 860b6ae
+timer: pi-receptionist-backup.timer active, next run 03:34:35 EST (03:30 + randomized delay), Persistent=true
+systemctl start pi-receptionist-backup.service -> Result=success
+snapshot: /var/backups/pi-receptionist/bookings-20261118T064922Z.sqlite (20480 B, owner receptionist) + .sha256
+sha256sum -c: OK
+restore -> /root/restore-drill.sqlite: OK, bookings table 8 cols, 0 rows (live DB empty), integrity ok
+restore onto live DB path: refused "target exists" (exit 2)
+on-Pi tests: test_backup_restore + test_backup_units 13 passed
+LIMIT: backups share the USB stick with the live DB; off-device copy not yet implemented.
