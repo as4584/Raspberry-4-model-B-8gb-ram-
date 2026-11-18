@@ -72,7 +72,7 @@ def clean_whisper_output(stdout: str) -> str:
     return ' '.join(words)
 
 class WhisperCppASR:
-    """whisper.cpp `whisper-cli` (pinned v1.8.2): -m model -f wav -t N -l en -nt -np."""
+    """whisper.cpp `whisper-cli` (pinned v1.9.5): -m model -f wav -t N -l en -nt -np."""
     def __init__(self, executable: str, model: str, timeout: int=40, threads: int=4):
         self.executable,self.model,self.timeout,self.threads=executable,model,timeout,threads
     def args(self, wav: str) -> list[str]:

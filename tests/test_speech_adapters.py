@@ -46,7 +46,7 @@ def capture_whisper(monkeypatch, stdout):
     return calls
 
 
-# --- whisper.cpp (pinned v1.8.2 whisper-cli) ---------------------------------------
+# --- whisper.cpp (pinned v1.9.5 whisper-cli) ---------------------------------------
 
 def test_whisper_args_match_pinned_cli(monkeypatch, model):
     calls = capture_whisper(monkeypatch, ' book December tenth at two pm\n')
