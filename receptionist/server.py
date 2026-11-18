@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from html import escape
 from urllib.parse import parse_qsl
 import asyncio
+import logging
+import time
 import re
 import threading
 import base64
@@ -41,6 +43,8 @@ class Settings:
 # A caller number we accept as an identity: optional +, 5-15 digits (E.164-ish).
 # Anything else (blocked/"anonymous", injection attempts) is treated as no number.
 CALLER_RE=re.compile(r'\+?[0-9]{5,15}')
+
+log=logging.getLogger('receptionist.call')
 
 def split_sentences(text:str)->list[str]:
     # Split only where punctuation is followed by whitespace, so "1.2.3" and times stay whole.
@@ -126,7 +130,10 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
             async with send_lock:await ws.send_json(event)
         async def process(packet:bytes, this_generation:int):
             try:
+                t0=time.monotonic()
                 utterance=await asr.transcribe(packet)
+                t_asr=time.monotonic()
+                log.info('call=%s gen=%d phase=asr audio_s=%.2f took_s=%.2f stale=%s',call_id,this_generation,len(packet)/8000,t_asr-t0,this_generation!=generation)
                 if this_generation!=generation or not utterance or not dialogue:return
                 # Booking does blocking SQLite I/O (busy waits up to 15 s); keep it off the
                 # event loop so other calls keep streaming.
@@ -138,6 +145,7 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
                 try:
                     for k in range(len(parts)):
                         outbound=await pending
+                        if k==0:log.info('call=%s gen=%d phase=first_audio_ready since_asr_done_s=%.2f',call_id,this_generation,time.monotonic()-t_asr)
                         pending=asyncio.create_task(tts.synthesize(parts[k+1])) if k+1<len(parts) else None
                         if this_generation!=generation:return
                         for i in range(0,len(outbound),160):
