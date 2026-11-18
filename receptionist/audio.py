@@ -130,15 +130,24 @@ class WhisperCppASR:
     async def transcribe(self, mulaw: bytes) -> str:
         if not Path(self.model).is_file():raise FileNotFoundError('WHISPER_MODEL missing')
         if not mulaw:return ''
-        def run():
-            with tempfile.TemporaryDirectory(prefix='receptionist-asr-') as folder:
-                path=Path(folder)/'utterance.wav'
-                with wave.open(str(path),'wb') as f:
-                    f.setnchannels(1);f.setsampwidth(2);f.setframerate(16000)
-                    f.writeframes(resample_pcm16(pcm16_from_mulaw(mulaw),8000,16000))
-                result=subprocess.run(self.args(str(path),len(mulaw)/8000),capture_output=True,text=True,timeout=self.timeout,check=True)
-                return clean_whisper_output(result.stdout)
-        return await asyncio.to_thread(run)
+        with tempfile.TemporaryDirectory(prefix='receptionist-asr-') as folder:
+            path=Path(folder)/'utterance.wav'
+            with wave.open(str(path),'wb') as f:
+                f.setnchannels(1);f.setsampwidth(2);f.setframerate(16000)
+                f.writeframes(resample_pcm16(pcm16_from_mulaw(mulaw),8000,16000))
+            argv=self.args(str(path),len(mulaw)/8000)
+            proc=await asyncio.create_subprocess_exec(*argv,stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.PIPE)
+            try:
+                out,err=await asyncio.wait_for(proc.communicate(),self.timeout)
+            except BaseException:
+                # Barge-in cancel or timeout: kill whisper now, or stale 4-thread decodes
+                # pile up on the Pi's 4 cores and slow every later reply (S5).
+                if proc.returncode is None:
+                    proc.kill()
+                    await asyncio.shield(proc.wait())
+                raise
+            if proc.returncode:raise subprocess.CalledProcessError(proc.returncode,argv,out,err)
+            return clean_whisper_output(out.decode('utf-8','replace'))
 
 class MockTTS:
     async def synthesize(self,text: str) -> bytes:

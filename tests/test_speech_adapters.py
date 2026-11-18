@@ -7,6 +7,7 @@ binaries are not configured.
 import asyncio
 import math
 import struct
+import subprocess
 import wave
 from pathlib import Path
 
@@ -33,16 +34,24 @@ def model(tmp_path):
     return str(p)
 
 
-def capture_whisper(monkeypatch, stdout):
+class FakeProc:
+    def __init__(self, stdout, code):
+        self.stdout, self.returncode = stdout, code
+
+    async def communicate(self):
+        return self.stdout.encode(), b''
+
+
+def capture_whisper(monkeypatch, stdout, code=0):
     calls = []
 
-    def fake_run(args, **kw):
+    async def fake_exec(*args, **kw):
         wav = Path(args[args.index('-f') + 1])
         with wave.open(str(wav), 'rb') as f:
-            calls.append({'args': args, 'kw': kw, 'rate': f.getframerate(), 'ch': f.getnchannels(),
+            calls.append({'args': list(args), 'kw': kw, 'rate': f.getframerate(), 'ch': f.getnchannels(),
                           'width': f.getsampwidth(), 'frames': f.getnframes()})
-        return Completed(stdout)
-    monkeypatch.setattr(audio.subprocess, 'run', fake_run)
+        return FakeProc(stdout, code)
+    monkeypatch.setattr(audio.asyncio, 'create_subprocess_exec', fake_exec)
     return calls
 
 
@@ -85,10 +94,11 @@ def test_whisper_empty_input_never_runs_binary(monkeypatch, model):
     assert calls == []
 
 
-def test_whisper_has_timeout_and_check(monkeypatch, model):
-    calls = capture_whisper(monkeypatch, 'x')
-    asyncio.run(WhisperCppASR('w', model, timeout=7).transcribe(b'\x00' * 160))
-    assert calls[0]['kw']['timeout'] == 7 and calls[0]['kw']['check'] is True
+def test_whisper_nonzero_exit_raises(monkeypatch, model):
+    # Timeout and cancel are covered with a real child process in test_asr_cancel.py.
+    capture_whisper(monkeypatch, 'x', code=3)
+    with pytest.raises(subprocess.CalledProcessError):
+        asyncio.run(WhisperCppASR('w', model, timeout=7).transcribe(b'\x00' * 160))
 
 
 def test_whisper_default_threads_is_four():
