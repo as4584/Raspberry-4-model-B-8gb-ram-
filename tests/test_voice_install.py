@@ -58,3 +58,23 @@ def test_voice_install_needs_all_four_paths_and_non_root():
     assert r.returncode == 60 and "FAIL:" in r.stderr
     r, _ = plan("/a", "/b", "/c", "/d", uid="0")
     assert r.returncode == 61 and "FAIL:" in r.stderr
+
+
+@needs_bash
+def test_voice_env_points_loader_at_copied_whisper_libs():
+    # Found on the Pi: whisper-cli's build-time library path is under ~/, which
+    # ProtectHome hides, so it died with "libwhisper.so.1: cannot open".
+    _, p = plan("/home/x/w", "/home/x/m.bin", "/home/x/p", "/home/x/v.onnx")
+    assert "LD_LIBRARY_PATH=/opt/pi-receptionist/speech/whisper" in p
+
+
+@needs_bash
+def test_voice_install_smoke_tests_binaries_inside_the_service_sandbox():
+    _, p = plan("/home/x/w", "/home/x/m.bin", "/home/x/p", "/home/x/v.onnx")
+    smoke = [l for l in p.splitlines() if "systemd-run" in l]
+    assert smoke, "no sandboxed smoke test"
+    s = " ".join(smoke)
+    for prop in ("User=receptionist", "ProtectHome=yes", "ProtectSystem=strict", "PrivateTmp=yes"):
+        assert prop in s, prop
+    assert "whisper-cli" in s and "piper" in s
+    assert p.index("systemd-run") < p.rindex("systemctl restart")   # verify before switching

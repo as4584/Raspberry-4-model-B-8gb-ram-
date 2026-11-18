@@ -32,6 +32,11 @@ step "sudo install -d -m 755 $speech/whisper $speech/piper $speech/models /etc/p
 step "sudo cp -a $wbin/. $speech/whisper/ && sudo cp -a $pdir/. $speech/piper/"
 step "sudo cp $wmodel $pmodel ${pmodel}.json $speech/models/ 2>/dev/null || sudo cp $wmodel $pmodel $speech/models/"
 step "sudo chown -R root:root $speech && sudo chmod -R a+rX,go-w $speech"
-step "printf 'VOICE_BACKEND=local\nWHISPER_CLI=$speech/whisper/whisper-cli\nWHISPER_MODEL=$wm\nPIPER_CLI=$speech/piper/piper\nPIPER_MODEL=$pm\n' | sudo tee $envfile >/dev/null"
+# Prove both binaries start under the service's own sandbox before switching: whisper-cli's
+# build-time library path points under ~/, which ProtectHome hides (found on the Pi).
+sandbox="sudo systemd-run --wait --pipe --quiet -p User=receptionist -p ProtectHome=yes -p ProtectSystem=strict -p PrivateTmp=yes -p PrivateDevices=yes -p NoNewPrivileges=yes -E LD_LIBRARY_PATH=$speech/whisper"
+step "$sandbox $speech/whisper/whisper-cli --help >/dev/null 2>&1"
+step "echo test | $sandbox sh -c '$speech/piper/piper --model $pm --output_file /tmp/t.wav >/dev/null 2>&1 && test -s /tmp/t.wav'"
+step "printf 'VOICE_BACKEND=local\nLD_LIBRARY_PATH=$speech/whisper\nWHISPER_CLI=$speech/whisper/whisper-cli\nWHISPER_MODEL=$wm\nPIPER_CLI=$speech/piper/piper\nPIPER_MODEL=$pm\n' | sudo tee $envfile >/dev/null"
 restart local
 echo "VOICE_OK: local speech ($(basename "$wmodel"), $(basename "$pmodel"))"
