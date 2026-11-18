@@ -1,4 +1,5 @@
-"""S4/S6: replies are synthesised and streamed sentence by sentence, so the
+"""(Uses the two-sentence spoken confirm prompt; the help reply became one spoken sentence in #38.)
+S4/S6: replies are synthesised and streamed sentence by sentence, so the
 caller hears sentence 1 while later sentences are still being synthesised.
 PI4 2026-11-18: Piper rendered the whole 8 s help reply before the first
 frame went out (11-21 s end-of-speech -> first audio, throttled)."""
@@ -24,7 +25,7 @@ class SentenceTTS:
 
     async def synthesize(self, text):
         self.calls.append(text)
-        if "confirm before creating" in text:
+        if text == "Say yes or no.":
             await asyncio.sleep(SLOW_S)
         return bytes([0x10] * 320)
 
@@ -32,7 +33,7 @@ class SentenceTTS:
 def run_call(tts):
     app = create_app(Settings(dev_allow_unsigned=True,
                               wss_url="wss://localhost/twilio/media"),
-                     asr_factory=lambda: MockASR(["hello"]), tts=tts)
+                     asr_factory=lambda: MockASR(["book 2027-12-10 14:00"]), tts=tts)
     with TestClient(app) as c, c.websocket_connect("/twilio/media") as ws:
         ws.send_json({"event": "start", "streamSid": "M1", "start": {"callSid": "C1"}})
         for _ in range(5):
@@ -54,7 +55,8 @@ def test_first_sentence_streams_before_slow_second_sentence_is_synthesised(tmp_p
     tts = SentenceTTS()
     first_s, events = run_call(tts)
     assert first_s < SLOW_S / 2, f"first audio after {first_s:.2f}s: reply not streamed per sentence"
-    assert tts.calls == ["To book, say: book 2026-12-01 14:00.", "I will confirm before creating it."]
+    # The confirm prompt is spoken as two sentences (#38 speech wording).
+    assert tts.calls == ["Please confirm Friday, December tenth at two p m, for thirty minutes.", "Say yes or no."]
     assert events.count("media") == 4 and events[-1] == "mark"
 
 
