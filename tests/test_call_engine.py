@@ -54,3 +54,13 @@ def test_caller_number_reaches_the_dialogue(tmp_path):
 def test_no_audio_before_start_is_ignored(tmp_path):
     t, _ = run(tmp_path, [*speech(), 0.3], ["book 2027-12-10 14:00"])
     assert not any(s[0] == "audio" for s in t.sent)
+
+
+def test_service_emits_per_phase_call_timings():
+    # Under uvicorn nothing configured receptionist.call, so the per-phase latency
+    # lines (asr took_s, first_audio_ready) never reached the journal on the Pi.
+    import logging
+    from receptionist.server import create_app
+    create_app()
+    lg = logging.getLogger("receptionist.call")
+    assert lg.isEnabledFor(logging.INFO) and lg.handlers
