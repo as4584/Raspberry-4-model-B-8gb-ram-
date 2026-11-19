@@ -44,9 +44,9 @@
       Content-Length: 0
     ]]>
   </send>
-  <pause milliseconds="3500"/>  <!-- a real caller waits for the greeting -->
+  <pause milliseconds="200"/>  <!-- turn 1 begins with 3.4 s of silence: the caller listens to the greeting -->
   <nop><action><exec rtp_stream="[field1],1,0"/></action></nop>
-  <pause milliseconds="4000"/>  <!-- caller talks over the reply -->
+  <pause milliseconds="7400"/>  <!-- 3.4 s greeting silence + ~2.3 s speech + 1.7 s into the reply: caller talks over it -->
   <nop><action><exec rtp_stream="[field2],1,0"/></action></nop>
   <pause/>
   <send retrans="500">
