@@ -70,7 +70,7 @@ def main(argv=None) -> int:
     since = time.strftime("%Y-%m-%d %H:%M:%S")
 
     t0 = time.monotonic()
-    sipp = subprocess.run(["sipp", "-sf", str(SCENARIO), "-inf", str(inf), "-s", "100", "127.0.0.1:5060",
+    sipp = subprocess.run(["sipp", "-sf", str(SCENARIO), "-inf", str(inf), "-s", "100", "127.0.0.1:5070",
                            "-i", "127.0.0.1", "-mi", "127.0.0.1", "-m", str(a.calls), "-l", str(a.concurrency),
                            "-r", str(a.concurrency), "-rp", "1000", "-d", str(a.pause_ms), "-trace_err", "-error_file", str(work / "err.log"),
                            "-timeout", str(int(a.calls * (2 * a.pause_ms / 1000 + 10))), "-nostdin"],
