@@ -54,6 +54,6 @@ def test_modules_autoload_with_explicit_noloads():
     # res_stasis_*), so chan_pjsip declined to load and SIPp got only "100 Trying".
     mods = conf("modules.conf")
     assert re.search(r"^autoload\s*=\s*yes$", mods, re.M)
-    assert not re.search(r"^noload\s*=\s*(chan_pjsip|chan_websocket|res_pjsip|res_ari|res_stasis)", mods, re.M)
+    assert not re.search(r"^noload\s*=\s*(chan_pjsip|chan_websocket|res_pjsip|res_ari|res_stasis)\.so$", mods, re.M)
     for unwanted in ("chan_iax2.so", "res_pjsip_phoneprov.so", "app_voicemail.so"):
         assert f"noload = {unwanted}" in mods
