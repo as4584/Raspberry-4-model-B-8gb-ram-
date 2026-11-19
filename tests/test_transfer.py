@@ -17,13 +17,17 @@ LOUD, QUIET = b"\x00" * 160, b"\xff" * 160
 def test_dialplan_passes_channel_and_continues_to_transfer():
     assert "v(caller=${URIENCODE(${CALLERID(num)})},chan=${UNIQUEID})" in EXT
     assert "chan=${UNIQUEID}),,g)" in EXT                      # 'g': continue after our hangup
+    # Pi: ARI refuses per-channel variables outside Stasis (HTTP 409), so the target goes
+    # in a per-call GLOBAL that the dialplan reads and clears.
+    assert "Set(TRANSFER_TO=${GLOBAL(XFER_${REPLACE(UNIQUEID,.,_)})})" in EXT
+    assert "Set(GLOBAL(XFER_${REPLACE(UNIQUEID,.,_)})=)" in EXT
     assert 'GotoIf($["${TRANSFER_TO}" != ""]?transfer)' in EXT
     assert "Dial(PJSIP/${TRANSFER_TO}@telnyx,30)" in EXT
 
 
 class FakeARI:
     def __init__(self): self.calls = []
-    async def set_variable(self, channel, name, value): self.calls.append((channel, name, value))
+    async def set_global(self, name, value): self.calls.append((name, value))
 
 
 class FakeWS:
@@ -36,7 +40,7 @@ def test_transport_transfer_sets_variable_on_caller_channel_then_hangs_up():
     t = AsteriskWebSocketTransport(ws, ari=ari)
     t.caller_channel = "1763500000.1"
     asyncio.run(t.transfer("+15557654321"))
-    assert ari.calls == [("1763500000.1", "TRANSFER_TO", "+15557654321")]
+    assert ari.calls == [("XFER_1763500000_1", "+15557654321")]
     assert ws.sent and '"HANGUP"' in ws.sent[-1]
 
 

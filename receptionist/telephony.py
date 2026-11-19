@@ -142,7 +142,8 @@ class CallEngine:
                     await transport.transfer(self.transfer_to)
             except asyncio.CancelledError:
                 raise
-            except Exception:
+            except Exception as exc:
+                log.warning('call=%s gen=%d phase=error %s: %s', call_id, this_generation, type(exc).__name__, exc)
                 if this_generation == generation:
                     # Avoid lying about booking success if ASR/TTS fails.
                     await transport.mark('processing-error')
