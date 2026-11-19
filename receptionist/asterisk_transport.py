@@ -83,5 +83,5 @@ class AsteriskWebSocketTransport:
     async def transfer(self, target: str):
         if not self.ari or not self.caller_channel:
             raise RuntimeError('transfer needs ARI and the caller channel id')
-        await self.ari.set_variable(self.caller_channel, 'TRANSFER_TO', target)
+        await self.ari.set_global('XFER_' + self.caller_channel.replace('.', '_'), target)
         await self.hangup()          # the dialplan continues ('g') and dials TRANSFER_TO

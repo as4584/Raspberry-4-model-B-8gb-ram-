@@ -1,5 +1,5 @@
 """Minimal ARI client (loopback only) for call control the media socket can't do:
-setting TRANSFER_TO on the caller's channel. Standard library only."""
+handing the dialplan a transfer target. Standard library only."""
 from __future__ import annotations
 
 import asyncio
@@ -21,6 +21,7 @@ class ARIClient:
         with urllib.request.urlopen(req, timeout=3) as r:
             return r.status
 
-    async def set_variable(self, channel: str, name: str, value: str) -> None:
-        path = f'/channels/{urllib.parse.quote(channel, safe="")}/variable'
-        await asyncio.to_thread(self._post, path, {'variable': name, 'value': value})
+    async def set_global(self, name: str, value: str) -> None:
+        # Per-channel variables need the channel in a Stasis app (HTTP 409 on the Pi);
+        # a per-call global works for any channel and the dialplan clears it.
+        await asyncio.to_thread(self._post, '/asterisk/variable', {'variable': name, 'value': value})
