@@ -47,6 +47,9 @@ def _normalise(phrase: str) -> str:
     t = phrase.lower()
     t = re.sub(r"\b([ap])\.\s?m\.?", r"\1m", t)               # p.m. -> pm
     t = re.sub(r"(\d)([ap]m)\b", r"\1 \2", t)                  # 2pm -> 2 pm
+    # whisper sometimes fuses the hour word and am/pm ("TENAM", "elevenpm"): split only
+    # when the whole token is exactly an hour word + am/pm.
+    t = re.sub(r"\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)([ap]m)\b", r"\1 \2", t)
     t = re.sub(r"[^a-z0-9: ]+", " ", t)
     return _words_to_digits(" ".join(t.split()))
 
