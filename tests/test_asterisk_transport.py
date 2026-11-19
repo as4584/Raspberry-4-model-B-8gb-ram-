@@ -22,6 +22,14 @@ def client(tmp_path, transcripts=("book 2027-12-10 14:00",)):
     return TestClient(app)
 
 
+def skip_greeting(ws):
+    # The Asterisk path greets the caller on answer, ending with MARK_MEDIA "greeting".
+    while True:
+        msg = ws.receive()
+        if msg.get("text") and json.loads(msg["text"]).get("correlation_id") == "greeting":
+            return
+
+
 def speak(ws, loud=10, quiet=20):
     for _ in range(loud):
         ws.send_bytes(LOUD)
@@ -45,6 +53,7 @@ def receive_until_mark(ws):
 def test_turn_flushes_streams_binary_audio_then_marks(tmp_path):
     with client(tmp_path) as c, c.websocket_connect("/asterisk/media?caller=%2B15550000001") as ws:
         ws.send_text(json.dumps(START))
+        skip_greeting(ws)
         speak(ws)
         got = receive_until_mark(ws)
     assert got[0] == ("FLUSH_MEDIA", None)
@@ -55,6 +64,7 @@ def test_caller_number_comes_from_dialplan_uri_param(tmp_path):
     with client(tmp_path, ["book 2027-12-10 14:00", "yes"]) as c, \
             c.websocket_connect("/asterisk/media?caller=%2B15550000001") as ws:
         ws.send_text(json.dumps(START))
+        skip_greeting(ws)
         speak(ws); receive_until_mark(ws)
         speak(ws); receive_until_mark(ws)
         rows = c.app.state.store.active()
@@ -64,6 +74,7 @@ def test_caller_number_comes_from_dialplan_uri_param(tmp_path):
 def test_audio_waits_while_asterisk_says_xoff(tmp_path):
     with client(tmp_path) as c, c.websocket_connect("/asterisk/media?caller=%2B15550000001") as ws:
         ws.send_text(json.dumps(START))
+        skip_greeting(ws)
         ws.send_text(json.dumps({"event": "MEDIA_XOFF", "channel_id": START["channel_id"]}))
         speak(ws)
         first = json.loads(ws.receive()["text"])
@@ -86,13 +97,16 @@ def test_oversized_binary_frame_is_refused(tmp_path):
         ws.send_text(json.dumps(START))
         ws.send_bytes(b"\x00" * 20000)
         msg = ws.receive()
-    assert msg["type"] == "websocket.close" and msg["code"] == 1009
+        while msg["type"] != "websocket.close":          # greeting audio may come first
+            msg = ws.receive()
+    assert msg["code"] == 1009
 
 
 def test_bad_caller_param_is_treated_as_anonymous(tmp_path):
     with client(tmp_path, ["book 2027-12-10 14:00", "yes"]) as c, \
             c.websocket_connect("/asterisk/media?caller=evil%27--") as ws:
         ws.send_text(json.dumps(START))
+        skip_greeting(ws)
         speak(ws); receive_until_mark(ws)
         speak(ws); receive_until_mark(ws)
         rows = c.app.state.store.active()

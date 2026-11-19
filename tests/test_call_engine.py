@@ -93,7 +93,9 @@ def test_soft_onset_before_the_vad_trigger_is_kept(tmp_path):
 
 def test_greets_the_caller_when_the_call_starts(tmp_path):
     from receptionist.dialogue import GREETING, OPENERS
-    t, _ = run(tmp_path, [CallStart("C1", "+15550000001"), 0.3], [])
+    engine = CallEngine(BookingStore(str(tmp_path / "g.sqlite")), asr=MockASR([]), tts=MockTTS(), greet=True)
+    t = FakeTransport([CallStart("C1", "+15550000001"), 0.3])
+    asyncio.run(engine.run(t))
     kinds = [s[0] for s in t.sent]
     assert "audio" in kinds and t.sent[-1] == ("mark", "greeting")
     assert len(GREETING) <= 60 and not any(c.isdigit() for c in GREETING)

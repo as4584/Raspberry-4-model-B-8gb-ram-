@@ -43,7 +43,7 @@
       Content-Length: 0
     ]]>
   </send>
-  <pause milliseconds="800"/>
+  <pause milliseconds="3500"/>  <!-- a real caller waits for the greeting -->
   <nop><action><exec rtp_stream="[field1],1,0"/></action></nop>
   <pause/>
   <nop><action><exec rtp_stream="[field2],1,0"/></action></nop>

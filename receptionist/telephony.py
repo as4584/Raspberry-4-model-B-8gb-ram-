@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
 import threading
 import time
@@ -17,13 +18,14 @@ from typing import AsyncIterator, Protocol
 
 from receptionist.audio import rms_mulaw
 from receptionist.booking import BookingStore
-from receptionist.dialogue import Dialogue
+from receptionist.dialogue import GREETING, Dialogue
 
 log = logging.getLogger('receptionist.call')
 
 CALLER_RE = re.compile(r'\+?[0-9]{5,15}')
 MAX_UTTERANCE_BYTES = 160000   # 20 s of 8 kHz u-law per transcription chunk
 FRAME_BYTES = 160              # 20 ms of 8 kHz u-law
+PREROLL_BYTES = 2400           # 300 ms kept from before the VAD trigger (soft onsets)
 
 
 def caller_number(value: object) -> str | None:
@@ -58,8 +60,9 @@ class CallTransport(Protocol):
 class CallEngine:
     """One instance per service; run() once per call."""
 
-    def __init__(self, store: BookingStore, asr, tts, require_caller_id: bool = False):
+    def __init__(self, store: BookingStore, asr, tts, require_caller_id: bool = False, greet: bool = False):
         self.store, self.asr, self.tts, self.require_caller_id = store, asr, tts, require_caller_id
+        self.greet = greet           # answer like a person; the legacy Twilio path keeps its old behaviour
 
     async def run(self, transport: CallTransport) -> None:
         asr, tts = self.asr, self.tts
@@ -68,6 +71,7 @@ class CallEngine:
         caller_id: str | None = None
         generation = 0
         audio = bytearray(); heard_speech = False; silence_ms = 0.0; spoken_ms = 0.0
+        preroll = bytearray()
         # Serialises this call's dialogue across worker threads: a barge-in cancels the
         # awaiting task, but its thread keeps running until handle() returns.
         dialogue_lock = threading.Lock()
@@ -76,6 +80,38 @@ class CallEngine:
         def handle_locked(text: str, session: str):
             with dialogue_lock:
                 return dialogue.handle(text, session, caller_id=caller_id)
+
+        async def speak(words: str, this_generation: int, mark_name: str, t_ref: float):
+            # Synthesise sentence k+1 while sentence k streams: the caller hears the first
+            # sentence without waiting for the whole reply.
+            parts = split_sentences(words) or [words]
+            pending = asyncio.create_task(tts.synthesize(parts[0]))
+            try:
+                for k in range(len(parts)):
+                    outbound = await pending
+                    if k == 0:
+                        log.info('call=%s gen=%d phase=first_audio_ready since_asr_done_s=%.2f', call_id,
+                                 this_generation, time.monotonic() - t_ref)
+                    pending = asyncio.create_task(tts.synthesize(parts[k + 1])) if k + 1 < len(parts) else None
+                    if this_generation != generation:
+                        return
+                    for i in range(0, len(outbound), FRAME_BYTES):
+                        if generation != this_generation:
+                            return
+                        await transport.send_frame(outbound[i:i + FRAME_BYTES])
+            finally:
+                if pending and not pending.done():
+                    pending.cancel()
+            if this_generation == generation:
+                await transport.mark(mark_name)
+
+        async def greet(this_generation: int):
+            try:
+                await speak(GREETING, this_generation, 'greeting', time.monotonic())
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.warning('call=%s greeting failed', call_id, exc_info=True)
 
         async def process(packet: bytes, this_generation: int):
             try:
@@ -92,29 +128,10 @@ class CallEngine:
                 # The action name (never the caller's words) is safe to log and explains outcomes.
                 log.info('call=%s gen=%d phase=dialogue action=%s words=%d', call_id, this_generation,
                          reply.action, len(utterance.split()))
-                # Synthesise sentence k+1 while sentence k streams: the caller hears the first
-                # sentence without waiting for the whole reply.
+                if os.getenv('LOG_TRANSCRIPTS') == '1':      # test runs only: never on by default
+                    log.info('call=%s gen=%d heard=%r', call_id, this_generation, utterance)
                 words = reply.speech or reply.text   # phone wording when the dialogue provides it (#38)
-                parts = split_sentences(words) or [words]
-                pending = asyncio.create_task(tts.synthesize(parts[0]))
-                try:
-                    for k in range(len(parts)):
-                        outbound = await pending
-                        if k == 0:
-                            log.info('call=%s gen=%d phase=first_audio_ready since_asr_done_s=%.2f', call_id,
-                                     this_generation, time.monotonic() - t_asr)
-                        pending = asyncio.create_task(tts.synthesize(parts[k + 1])) if k + 1 < len(parts) else None
-                        if this_generation != generation:
-                            return
-                        for i in range(0, len(outbound), FRAME_BYTES):
-                            if generation != this_generation:
-                                return
-                            await transport.send_frame(outbound[i:i + FRAME_BYTES])
-                finally:
-                    if pending and not pending.done():
-                        pending.cancel()
-                if this_generation == generation:
-                    await transport.mark(f'answer-{this_generation}')
+                await speak(words, this_generation, f'answer-{this_generation}', t_asr)
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -131,6 +148,9 @@ class CallEngine:
                 if isinstance(event, CallStart):
                     call_id, caller_id = event.call_id, event.caller_id
                     dialogue = Dialogue(self.store, require_caller_id=self.require_caller_id)
+                    if self.greet:
+                        task = asyncio.create_task(greet(generation))   # barge-in cancels it like any reply
+                        jobs.add(task); task.add_done_callback(jobs.discard)
                     continue
                 if not isinstance(event, AudioIn) or call_id is None or not event.data:
                     continue
@@ -143,6 +163,7 @@ class CallEngine:
                         for task in list(jobs):
                             task.cancel()
                         await transport.flush()
+                        audio.extend(preroll); preroll.clear()
                     heard_speech = True; silence_ms = 0; spoken_ms += ms
                     if len(audio) + len(data) > MAX_UTTERANCE_BYTES:
                         # A long unbroken talker is a normal caller: transcribe what we
@@ -150,6 +171,10 @@ class CallEngine:
                         spawn(bytes(audio), generation)
                         audio.clear()
                     audio.extend(data)
+                elif not heard_speech:
+                    # Soft onsets ("b" in "book") sit below the trigger: keep the last 300 ms.
+                    preroll.extend(data)
+                    del preroll[:max(0, len(preroll) - PREROLL_BYTES)]
                 elif heard_speech:
                     # Keep quiet frames once speech started: soft consonants and short
                     # gaps between words are part of the phrase (dropping them made whisper
