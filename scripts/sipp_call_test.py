@@ -42,11 +42,11 @@ def bookings_for(callers: list[str]) -> list[tuple]:
 
 def cleanup(callers: list[str]) -> None:
     """Cancel this run's test bookings so the live calendar is left as we found it."""
-    q = ("import sqlite3,sys;d=sqlite3.connect(sys.argv[1]);"
-         "d.execute('UPDATE bookings SET status=\'cancelled\' WHERE caller_id IN (%s)'"
-         "%','.join('?'*len(sys.argv[2:])),sys.argv[2:]);d.commit()")
-    subprocess.run(["sudo", "-u", "receptionist", "/opt/pi-receptionist/app/.venv/bin/python", "-c", q, DB, *callers],
-                   check=True)
+    q = ("import sqlite3,sys;d=sqlite3.connect(sys.argv[1]);c=sys.argv[3:];"
+         "d.execute('UPDATE bookings SET status=? WHERE caller_id IN (%s)'%','.join('?'*len(c)),[sys.argv[2]]+c);"
+         "d.commit()")
+    subprocess.run(["sudo", "-u", "receptionist", "/opt/pi-receptionist/app/.venv/bin/python", "-c", q, DB,
+                    "cancelled", *callers], check=True)
 
 
 def main(argv=None) -> int:
