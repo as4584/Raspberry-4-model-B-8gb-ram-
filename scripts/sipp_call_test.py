@@ -56,7 +56,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--calls", type=int, default=1)
     ap.add_argument("--concurrency", type=int, default=1)
-    ap.add_argument("--pause-ms", type=int, default=9000, help="wait after each turn for the reply")
+    ap.add_argument("--pause-ms", type=int, default=12500, help="pause after each turn starts (turn 1 has 3.4 s of greeting silence first)")
     ap.add_argument("--day", default="december tenth")
     a = ap.parse_args(argv)
 
