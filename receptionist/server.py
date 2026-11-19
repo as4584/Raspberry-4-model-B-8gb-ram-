@@ -49,6 +49,15 @@ class Settings:
 
 log=logging.getLogger('receptionist.call')
 
+def _enable_call_timing_logs():
+    # uvicorn configures only its own loggers; give the per-phase latency lines a
+    # handler (stderr -> journal) once, without duplicating a caller's own setup.
+    if not log.handlers:
+        h=logging.StreamHandler()
+        h.setFormatter(logging.Formatter('%(levelname)s %(message)s'))
+        log.addHandler(h)
+    log.setLevel(logging.INFO);log.propagate=False
+
 def valid_signature(url:str, params:dict[str,str], actual:str|None, token:str) -> bool:
     if not token or not actual:return False
     message=url+''.join(k+params[k] for k in sorted(params))
@@ -79,6 +88,7 @@ def select_tts(env) -> tuple[object,str]:
 
 def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None=None, tts:object|None=None, max_sessions:int=MAX_SIM_SESSIONS) -> FastAPI:
     settings=settings or Settings()
+    _enable_call_timing_logs()
     store=BookingStore(settings.db_path)
     asr_kind='custom'
     if asr_factory is None:
