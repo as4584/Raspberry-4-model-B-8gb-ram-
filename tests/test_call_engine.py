@@ -64,3 +64,36 @@ def test_service_emits_per_phase_call_timings():
     create_app()
     lg = logging.getLogger("receptionist.call")
     assert lg.isEnabledFor(logging.INFO) and lg.handlers
+
+
+def test_transcripts_are_not_logged_by_default(tmp_path, caplog, monkeypatch):
+    import logging
+    monkeypatch.delenv("LOG_TRANSCRIPTS", raising=False)
+    with caplog.at_level(logging.INFO, logger="receptionist.call"):
+        run(tmp_path, [CallStart("C1", "+15550000001"), *speech(), 0.5], ["book 2027-12-10 14:00"])
+    assert "2027-12-10" not in caplog.text and "heard=" not in caplog.text
+
+
+class RecordingASR:
+    def __init__(self): self.packets = []
+    async def transcribe(self, b): self.packets.append(b); return ""
+
+
+def test_soft_onset_before_the_vad_trigger_is_kept(tmp_path):
+    # Pi, 3 concurrent SIPp calls: whisper heard "December 10th at 10 am." -- the soft
+    # start of "Book" fell below the loudness trigger and was dropped. Keep 300 ms pre-roll.
+    asr = RecordingASR()
+    engine = CallEngine(BookingStore(str(tmp_path / "p.sqlite")), asr=asr, tts=MockTTS())
+    soft = b"\xf0" * 160                                   # quiet but not silent
+    script = [CallStart("C1", None), *[AudioIn(QUIET)] * 20, *[AudioIn(soft)] * 10, *speech(), 0.5]
+    asyncio.run(engine.run(FakeTransport(script)))
+    (packet,) = asr.packets
+    assert packet.startswith(soft * 10) or soft * 10 in packet[:15 * 160]
+
+
+def test_greets_the_caller_when_the_call_starts(tmp_path):
+    from receptionist.dialogue import GREETING, OPENERS
+    t, _ = run(tmp_path, [CallStart("C1", "+15550000001"), 0.3], [])
+    kinds = [s[0] for s in t.sent]
+    assert "audio" in kinds and t.sent[-1] == ("mark", "greeting")
+    assert len(GREETING) <= 60 and not any(c.isdigit() for c in GREETING)
