@@ -99,3 +99,49 @@ def test_greets_the_caller_when_the_call_starts(tmp_path):
     kinds = [s[0] for s in t.sent]
     assert "audio" in kinds and t.sent[-1] == ("mark", "greeting")
     assert len(GREETING) <= 60 and not any(c.isdigit() for c in GREETING)
+
+
+class SlowFirstASR:
+    """First transcription is slow (still running when the caller speaks again)."""
+    def __init__(self):
+        self.packets = []
+
+    async def transcribe(self, b):
+        self.packets.append(len(b))
+        if len(self.packets) == 1:
+            await asyncio.sleep(1.0)
+        return "book 2027-12-10 14:00" if len(self.packets) > 1 else ""
+
+
+def test_speech_before_any_reply_is_carried_into_the_next_utterance(tmp_path):
+    # Pi barge-in run: the caller said "yes" while turn 1 was still being transcribed;
+    # turn 1 was cancelled and lost, so "yes" had nothing to confirm. Unanswered speech
+    # must be kept and heard together with what follows.
+    asr = SlowFirstASR()
+    engine = CallEngine(BookingStore(str(tmp_path / "c.sqlite")), asr=asr, tts=MockTTS())
+    first, second = speech(), speech()
+    asyncio.run(engine.run(FakeTransport([CallStart("C1", None), *first, 0.2, *second, 1.5])))
+    assert len(asr.packets) == 2
+    assert asr.packets[1] >= asr.packets[0] + 10 * 160          # carried first utterance + new one
+
+
+def test_speech_after_a_reply_started_is_not_carried(tmp_path):
+    # Once the receptionist has answered, a new utterance is a new turn (true barge-in).
+    class Answering(RecordingASR):
+        async def transcribe(self, b):
+            self.packets.append(b); return "hello"
+    asr = Answering()
+    engine = CallEngine(BookingStore(str(tmp_path / "d.sqlite")), asr=asr, tts=MockTTS())
+    asyncio.run(engine.run(FakeTransport([CallStart("C1", None), *speech(), 0.6, *speech(), 0.6])))
+    assert len(asr.packets) == 2 and abs(len(asr.packets[0]) - len(asr.packets[1])) <= 2400   # at most the pre-roll, never a carried turn
+
+
+def test_turn_ends_when_audio_stops_arriving_silence_suppression(tmp_path):
+    # Pi SIPp run: after the caller's sentence no more RTP arrived (silence suppression /
+    # DTX does this on real networks too), so the 300 ms quiet-frame count never completed
+    # and the turn stayed open until the next words 7 s later. Wall-clock silence ends it.
+    asr = RecordingASR()
+    engine = CallEngine(BookingStore(str(tmp_path / "x.sqlite")), asr=asr, tts=MockTTS())
+    script = [CallStart("C1", None), *[AudioIn(LOUD)] * 10, *[AudioIn(QUIET)] * 3, 0.8]
+    asyncio.run(engine.run(FakeTransport(script)))
+    assert len(asr.packets) == 1

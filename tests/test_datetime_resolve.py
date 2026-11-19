@@ -56,3 +56,15 @@ def test_explicit_24h_time_needs_no_ampm():
 def test_result_is_after_now():
     got = resolve("november 18 at 10 am", NOW)
     assert got is not None and got > NOW
+
+
+# Phone path (Pi, 2026-11-19): whisper fused the hour word and "am" -- "TENAM", "Tenum".
+@pytest.mark.parametrize("glued,plain", [("Book December 11 at TENAM.", "book december 11 at ten am"),
+                                         ("book december 11 at elevenpm", "book december 11 at eleven pm"),
+                                         ("book december 11 at twoam", "book december 11 at two am")])
+def test_hour_word_glued_to_am_pm_is_split(glued, plain):
+    assert resolve(glued, NOW) == resolve(plain, NOW) is not None
+
+
+def test_other_words_ending_in_am_are_untouched():
+    assert resolve("book december 11 at program", NOW) is None

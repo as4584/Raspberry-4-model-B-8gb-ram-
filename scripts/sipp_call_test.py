@@ -24,10 +24,13 @@ SCENARIO = HERE.parent / "tests" / "sipp" / "receptionist_call.xml"
 DB = "/var/lib/pi-receptionist/data/receptionist.sqlite"
 
 
-def turn_audio(text: str, folder: Path) -> Path:
+def turn_audio(text: str, folder: Path, lead_ms: int = 0) -> Path:
+    """Piper speech as raw u-law for SIPp. lead_ms of silence goes first: a real phone sends
+    continuous RTP (silence included) from answer, so Asterisk's strictrtp has learned the
+    source before the caller speaks. Without it, SIPp's 2nd+ calls lost ~0.3 s of 'Book'."""
     import asr_sweep  # Piper -> the same 8 kHz u-law path as a phone call
-    path = folder / (text.replace(" ", "_")[:40] + ".ulaw")
-    path.write_bytes(asr_sweep.synth(text, folder))
+    path = folder / (text.replace(" ", "_")[:40] + f"-{lead_ms}.ulaw")
+    path.write_bytes(b"\xff" * (8 * lead_ms) + asr_sweep.synth(text, folder))
     return path
 
 
@@ -53,7 +56,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--calls", type=int, default=1)
     ap.add_argument("--concurrency", type=int, default=1)
-    ap.add_argument("--pause-ms", type=int, default=9000, help="wait after each turn for the reply")
+    ap.add_argument("--pause-ms", type=int, default=12500, help="pause after each turn starts (turn 1 has 3.4 s of greeting silence first)")
     ap.add_argument("--day", default="december tenth")
     a = ap.parse_args(argv)
 
@@ -63,7 +66,7 @@ def main(argv=None) -> int:
     yes = turn_audio("yes", work)
     base = int(time.time()) % 100000
     callers = [f"+1555{base:05d}{i:02d}" for i in range(a.calls)]
-    lines = [f"{c};{turn_audio(f'book {a.day} at {hours[i % len(hours)]}', work)};{yes};x\n"
+    lines = [f"{c};{turn_audio(f'book {a.day} at {hours[i % len(hours)]}', work, lead_ms=3400)};{yes};x\n"
              for i, c in enumerate(callers)]
     inf = work / "calls.csv"
     inf.write_text("SEQUENTIAL\n" + "".join(lines))

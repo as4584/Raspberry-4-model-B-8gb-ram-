@@ -88,8 +88,9 @@ def main(argv=None) -> int:
     ap.add_argument("--calls", type=int, default=10)
     ap.add_argument("--barge", type=int, default=5)
     ap.add_argument("--concurrent", type=int, default=3)
-    ap.add_argument("--pause-ms", type=int, default=9000)
+    ap.add_argument("--pause-ms", type=int, default=12500, help="pause after each turn starts (turn 1 has 3.4 s of greeting silence first)")
     ap.add_argument("--out", default=str(Path.home() / "call-quality.json"))
+    ap.add_argument("--keep", default="", help="directory to keep the stereo recordings in (debugging)")
     a = ap.parse_args(argv)
     from receptionist.asr_eval import wer
     from receptionist.dialogue import GREETING
@@ -107,7 +108,7 @@ def main(argv=None) -> int:
             c = f"+1556{base:05d}{len(all_callers) + i:02d}"
             phrase = f"book {DAYS[(len(all_callers) + i) // len(HOURS) % len(DAYS)]} at {HOURS[(len(all_callers) + i) % len(HOURS)]}"
             callers.append(c); phrases.append(phrase)
-            rows.append(f"{c};{S.turn_audio(phrase, work)};{yes};x\n")
+            rows.append(f"{c};{S.turn_audio(phrase, work, lead_ms=3400)};{yes};x\n")
         all_callers.extend(callers)
         since = time.strftime("%Y-%m-%d %H:%M:%S")
         t0 = time.monotonic()
@@ -117,11 +118,19 @@ def main(argv=None) -> int:
         per_call = []
         for c, phrase in zip(callers, phrases):
             raw = recording(c)
+            if a.keep and raw:
+                Path(a.keep).mkdir(parents=True, exist_ok=True); (Path(a.keep) / f"{c[1:]}.raw").write_bytes(raw)
             m = call_metrics.analyse(raw) if raw else {"missing_recording": True}
             m["caller"], m["phrase"], m["booked"] = c, phrase, c in booked
             m["_raw"] = raw
             per_call.append(m)
-        heard = [l.split("heard=", 1)[1] for l in journal_since(since) if "heard=" in l]
+        # Per-call transcripts in order: "call=<id> gen=<n> heard='...'" (calls run in caller order).
+        heard: dict[str, list[str]] = {}
+        for l in journal_since(since):
+            if "heard=" in l and "call=" in l:
+                cid = l.split("call=", 1)[1].split()[0]
+                heard.setdefault(cid, []).append(l.split("heard=", 1)[1].strip("'\""))
+        heard = list(heard.values())
         return {"name": name, "sipp_exit": code, "wall_s": round(wall, 1), "calls": per_call,
                 "booked": len(booked), "heard": heard}
 
@@ -138,11 +147,10 @@ def main(argv=None) -> int:
                                     "greeting_wer": round(wer(GREETING, text.split("?")[0] + "?"), 3)})
 
     # Phone-path ASR accuracy: what the receptionist heard vs. what the caller said.
+    # Pair per call (sequential batch, one call at a time): turn 1 = phrase, turn 2 = "yes".
     asr_pairs = []
-    for b in (seq,):
-        heard = [h.strip("'\"") for h in b["heard"]]
-        said = [x for m in b["calls"] for x in (m["phrase"], "yes")]
-        asr_pairs = list(zip(said, heard))
+    for m, turns in zip(seq["calls"], seq["heard"]):
+        asr_pairs += list(zip((m["phrase"], "yes"), turns))
     asr_wer = [wer(s, h) for s, h in asr_pairs]
 
     latencies = [x for b in (seq, conc) for m in b["calls"] for x in m.get("reply_latency_s", [])]

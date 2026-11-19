@@ -75,6 +75,9 @@ class CallEngine:
         generation = 0
         audio = bytearray(); heard_speech = False; silence_ms = 0.0; spoken_ms = 0.0
         preroll = bytearray()
+        # Audio of utterances whose reply hasn't started playing yet. If the caller speaks
+        # again first, it is carried into the next utterance instead of being lost.
+        unanswered: dict[int, bytes] = {}
         # Serialises this call's dialogue across worker threads: a barge-in cancels the
         # awaiting task, but its thread keeps running until handle() returns.
         dialogue_lock = threading.Lock()
@@ -101,6 +104,7 @@ class CallEngine:
                     for i in range(0, len(outbound), FRAME_BYTES):
                         if generation != this_generation:
                             return
+                        unanswered.pop(this_generation, None)     # the caller is hearing a reply
                         await transport.send_frame(outbound[i:i + FRAME_BYTES])
             finally:
                 if pending and not pending.done():
@@ -119,7 +123,10 @@ class CallEngine:
         async def process(packet: bytes, this_generation: int):
             try:
                 t0 = time.monotonic()
+                unanswered[this_generation] = packet
                 utterance = await asr.transcribe(packet)
+                if not utterance:
+                    unanswered.pop(this_generation, None)        # noise: nothing to carry
                 t_asr = time.monotonic()
                 log.info('call=%s gen=%d phase=asr audio_s=%.2f took_s=%.2f stale=%s', call_id, this_generation,
                          len(packet) / 8000, t_asr - t0, this_generation != generation)
@@ -152,6 +159,24 @@ class CallEngine:
             task = asyncio.create_task(process(packet, ticket))
             jobs.add(task); task.add_done_callback(jobs.discard)
 
+        def end_turn():
+            nonlocal heard_speech, silence_ms, spoken_ms
+            snapshot, ticket = bytes(audio), generation
+            audio.clear(); heard_speech = False; silence_ms = 0; spoken_ms = 0
+            spawn(snapshot, ticket)
+
+        last_audio = time.monotonic()
+
+        async def silence_watchdog():
+            # Networks with silence suppression (DTX) -- and SIPp -- send no packets while
+            # the caller is quiet, so counting quiet frames alone can leave a turn open
+            # forever. 300 ms with no audio at all after speech also ends the turn.
+            while True:
+                await asyncio.sleep(0.05)
+                if heard_speech and spoken_ms >= 80 and time.monotonic() - last_audio >= 0.3:
+                    end_turn()
+
+        watchdog = asyncio.create_task(silence_watchdog())
         try:
             async for event in transport.events():
                 if isinstance(event, CallStart):
@@ -164,6 +189,7 @@ class CallEngine:
                 if not isinstance(event, AudioIn) or call_id is None or not event.data:
                     continue
                 data = event.data
+                last_audio = time.monotonic()
                 # Simple VAD. Runs on speech+silence, leaving heavier ASR on a background task.
                 ms = 1000 * len(data) / 8000
                 if rms_mulaw(data) > 650:
@@ -172,6 +198,8 @@ class CallEngine:
                         for task in list(jobs):
                             task.cancel()
                         await transport.flush()
+                        for g in sorted(unanswered):
+                            audio.extend(unanswered.pop(g))
                         audio.extend(preroll); preroll.clear()
                     heard_speech = True; silence_ms = 0; spoken_ms += ms
                     if len(audio) + len(data) > MAX_UTTERANCE_BYTES:
@@ -192,10 +220,9 @@ class CallEngine:
                         audio.extend(data)
                     silence_ms += ms
                     if silence_ms >= 300 and spoken_ms >= 80:
-                        snapshot, ticket = bytes(audio), generation
-                        audio.clear(); heard_speech = False; silence_ms = 0; spoken_ms = 0
-                        spawn(snapshot, ticket)
+                        end_turn()
         finally:
+            watchdog.cancel()
             for task in list(jobs):
                 task.cancel()
             if jobs:
