@@ -75,6 +75,9 @@ class CallEngine:
         generation = 0
         audio = bytearray(); heard_speech = False; silence_ms = 0.0; spoken_ms = 0.0
         preroll = bytearray()
+        # Audio of utterances whose reply hasn't started playing yet. If the caller speaks
+        # again first, it is carried into the next utterance instead of being lost.
+        unanswered: dict[int, bytes] = {}
         # Serialises this call's dialogue across worker threads: a barge-in cancels the
         # awaiting task, but its thread keeps running until handle() returns.
         dialogue_lock = threading.Lock()
@@ -101,6 +104,7 @@ class CallEngine:
                     for i in range(0, len(outbound), FRAME_BYTES):
                         if generation != this_generation:
                             return
+                        unanswered.pop(this_generation, None)     # the caller is hearing a reply
                         await transport.send_frame(outbound[i:i + FRAME_BYTES])
             finally:
                 if pending and not pending.done():
@@ -119,7 +123,10 @@ class CallEngine:
         async def process(packet: bytes, this_generation: int):
             try:
                 t0 = time.monotonic()
+                unanswered[this_generation] = packet
                 utterance = await asr.transcribe(packet)
+                if not utterance:
+                    unanswered.pop(this_generation, None)        # noise: nothing to carry
                 t_asr = time.monotonic()
                 log.info('call=%s gen=%d phase=asr audio_s=%.2f took_s=%.2f stale=%s', call_id, this_generation,
                          len(packet) / 8000, t_asr - t0, this_generation != generation)
@@ -172,6 +179,8 @@ class CallEngine:
                         for task in list(jobs):
                             task.cancel()
                         await transport.flush()
+                        for g in sorted(unanswered):
+                            audio.extend(unanswered.pop(g))
                         audio.extend(preroll); preroll.clear()
                     heard_speech = True; silence_ms = 0; spoken_ms += ms
                     if len(audio) + len(data) > MAX_UTTERANCE_BYTES:

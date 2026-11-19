@@ -127,7 +127,10 @@ def test_speech_before_any_reply_is_carried_into_the_next_utterance(tmp_path):
 
 def test_speech_after_a_reply_started_is_not_carried(tmp_path):
     # Once the receptionist has answered, a new utterance is a new turn (true barge-in).
-    asr = RecordingASR()
+    class Answering(RecordingASR):
+        async def transcribe(self, b):
+            self.packets.append(b); return "hello"
+    asr = Answering()
     engine = CallEngine(BookingStore(str(tmp_path / "d.sqlite")), asr=asr, tts=MockTTS())
     asyncio.run(engine.run(FakeTransport([CallStart("C1", None), *speech(), 0.6, *speech(), 0.6])))
-    assert len(asr.packets) == 2 and abs(asr.packets[0] - asr.packets[1]) < 400
+    assert len(asr.packets) == 2 and abs(len(asr.packets[0]) - len(asr.packets[1])) <= 2400   # at most the pre-roll, never a carried turn
