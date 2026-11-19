@@ -134,3 +134,14 @@ def test_speech_after_a_reply_started_is_not_carried(tmp_path):
     engine = CallEngine(BookingStore(str(tmp_path / "d.sqlite")), asr=asr, tts=MockTTS())
     asyncio.run(engine.run(FakeTransport([CallStart("C1", None), *speech(), 0.6, *speech(), 0.6])))
     assert len(asr.packets) == 2 and abs(len(asr.packets[0]) - len(asr.packets[1])) <= 2400   # at most the pre-roll, never a carried turn
+
+
+def test_turn_ends_when_audio_stops_arriving_silence_suppression(tmp_path):
+    # Pi SIPp run: after the caller's sentence no more RTP arrived (silence suppression /
+    # DTX does this on real networks too), so the 300 ms quiet-frame count never completed
+    # and the turn stayed open until the next words 7 s later. Wall-clock silence ends it.
+    asr = RecordingASR()
+    engine = CallEngine(BookingStore(str(tmp_path / "x.sqlite")), asr=asr, tts=MockTTS())
+    script = [CallStart("C1", None), *[AudioIn(LOUD)] * 10, *[AudioIn(QUIET)] * 3, 0.8]
+    asyncio.run(engine.run(FakeTransport(script)))
+    assert len(asr.packets) == 1
