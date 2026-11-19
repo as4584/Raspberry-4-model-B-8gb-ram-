@@ -89,6 +89,9 @@ class CallEngine:
                 # Booking does blocking SQLite I/O (busy waits up to 15 s); keep it off the
                 # event loop so other calls keep streaming.
                 reply = await asyncio.to_thread(handle_locked, utterance, call_id or 'invalid')
+                # The action name (never the caller's words) is safe to log and explains outcomes.
+                log.info('call=%s gen=%d phase=dialogue action=%s words=%d', call_id, this_generation,
+                         reply.action, len(utterance.split()))
                 # Synthesise sentence k+1 while sentence k streams: the caller hears the first
                 # sentence without waiting for the whole reply.
                 words = reply.speech or reply.text   # phone wording when the dialogue provides it (#38)
