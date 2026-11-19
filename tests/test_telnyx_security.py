@@ -56,3 +56,10 @@ def test_inbound_rejected_unless_signalling_and_media_are_encrypted():
 def test_rtp_port_range_matches_firewall_plan():
     rtp = (D / "rtp.conf").read_text().replace(" ", "")
     assert "rtpstart=16384" in rtp and "rtpend=16484" in rtp and "strictrtp=yes" in rtp
+
+
+def test_only_sipp_rec_calls_are_recorded():
+    sipp = EXT[EXT.index("[from-sipp]"):].split("\n[")[0]
+    assert "MixMonitor(" in sipp and "exten => _recX.,1" in sipp
+    for ctx in ("[from-telnyx]", "[receptionist]"):
+        assert "MixMonitor" not in EXT[EXT.index(ctx):].split("\n[")[0]

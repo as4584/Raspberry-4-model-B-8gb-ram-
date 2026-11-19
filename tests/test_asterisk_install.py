@@ -26,7 +26,10 @@ def plan(env=None, uid="1000"):
 def test_installs_configs_renders_templates_and_starts_service():
     r, p = plan({"TELNYX_SIP_USERNAME": "u", "TELNYX_SIP_PASSWORD": "p"})
     assert r.returncode == 0, r.stderr
-    assert "envsubst" in p and "pjsip.conf.tmpl" in p and "ari.conf.tmpl" in p
+    assert "envsubst" in p and "pjsip-secrets.conf.tmpl" in p and "ari.conf.tmpl" in p
+    assert "/run/asterisk-secrets/pjsip-secrets.conf" in p               # Telnyx creds: RAM only
+    for f in ("pjsip.conf", "rtp.conf", "logger.conf"):
+        assert f"deploy/asterisk/{f}" in p
     assert "install -m 640 -o root -g asterisk" in p                  # configs readable by asterisk only
     assert "/etc/pi-receptionist/ari.env" in p and "chmod 600" in p
     assert "systemctl enable --now asterisk.service" in p
@@ -38,7 +41,7 @@ def test_without_telnyx_creds_installs_sipp_only_and_says_so():
     r, p = plan({"TELNYX_SIP_USERNAME": "", "TELNYX_SIP_PASSWORD": ""})
     assert r.returncode == 0, r.stderr
     assert "SIPP_ONLY" in r.stdout
-    assert "sed" in p and "telnyx" in p                                 # Telnyx sections stripped
+    assert "pjsip-secrets" not in p                                    # nothing rendered; #tryinclude skips
 
 
 @needs_bash

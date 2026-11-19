@@ -34,13 +34,7 @@ def test_dialplan_answers_and_dials_websocket_with_caller_number():
     assert "Answer()" in ext
 
 
-def test_sipp_endpoint_is_localhost_only_and_telnyx_uses_env_placeholders():
-    pj = conf("pjsip.conf.tmpl")
-    sipp = pj[pj.index("[sipp-identify]"):]
-    assert "match = 127.0.0.1" in sipp.split("\n[")[0]
-    for var in ("${TELNYX_SIP_USERNAME}", "${TELNYX_SIP_PASSWORD}"):
-        assert var in pj
-    assert not re.search(r"password\s*=\s*[^$\s]", pj)          # no literal password
+# SIPp/Telnyx transport and credential rules: tests/test_telnyx_security.py
 
 
 def test_no_secrets_or_public_bind_anywhere():
