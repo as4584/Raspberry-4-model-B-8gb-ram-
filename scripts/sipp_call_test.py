@@ -40,20 +40,33 @@ def bookings_for(callers: list[str]) -> list[tuple]:
     return [tuple(r) for r in json.loads(out)]
 
 
+def cleanup(callers: list[str]) -> None:
+    """Cancel this run's test bookings so the live calendar is left as we found it."""
+    q = ("import sqlite3,sys;d=sqlite3.connect(sys.argv[1]);"
+         "d.execute('UPDATE bookings SET status=\'cancelled\' WHERE caller_id IN (%s)'"
+         "%','.join('?'*len(sys.argv[2:])),sys.argv[2:]);d.commit()")
+    subprocess.run(["sudo", "-u", "receptionist", "/opt/pi-receptionist/app/.venv/bin/python", "-c", q, DB, *callers],
+                   check=True)
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--calls", type=int, default=1)
     ap.add_argument("--concurrency", type=int, default=1)
     ap.add_argument("--pause-ms", type=int, default=9000, help="wait after each turn for the reply")
-    ap.add_argument("--turns", nargs=2, default=["book december tenth at two pm", "yes"])
+    ap.add_argument("--day", default="december tenth")
     a = ap.parse_args(argv)
 
     work = Path(tempfile.mkdtemp(prefix="sipp-"))
-    t1, t2 = (turn_audio(t, work) for t in a.turns)
+    # Each call asks for its own hour so concurrent test calls never compete for a slot.
+    hours = ["nine am", "ten am", "eleven am", "noon", "one pm", "two pm", "three pm", "four pm"]
+    yes = turn_audio("yes", work)
     base = int(time.time()) % 100000
     callers = [f"+1555{base:05d}{i:02d}" for i in range(a.calls)]
+    lines = [f"{c};{turn_audio(f'book {a.day} at {hours[i % len(hours)]}', work)};{yes};x\n"
+             for i, c in enumerate(callers)]
     inf = work / "calls.csv"
-    inf.write_text("SEQUENTIAL\n" + "".join(f"{c};{t1};{t2};x;{a.pause_ms}\n" for c in callers))
+    inf.write_text("SEQUENTIAL\n" + "".join(lines))
     since = time.strftime("%Y-%m-%d %H:%M:%S")
 
     t0 = time.monotonic()
@@ -68,6 +81,7 @@ def main(argv=None) -> int:
                           capture_output=True, text=True).stdout
     phases = [l for l in logs.splitlines() if "phase=" in l]
     rows = bookings_for(callers)
+    cleanup(callers)
     booked = {c for c, status, _ in rows if status == "active"}
     result = {"calls": a.calls, "concurrency": a.concurrency, "sipp_exit": sipp.returncode, "wall_s": round(took, 1),
               "booked": len(booked), "missing": sorted(set(callers) - booked), "phase_lines": phases[-8:],
