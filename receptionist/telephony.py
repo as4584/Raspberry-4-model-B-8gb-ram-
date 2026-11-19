@@ -25,6 +25,7 @@ log = logging.getLogger('receptionist.call')
 CALLER_RE = re.compile(r'\+?[0-9]{5,15}')
 MAX_UTTERANCE_BYTES = 160000   # 20 s of 8 kHz u-law per transcription chunk
 FRAME_BYTES = 160              # 20 ms of 8 kHz u-law
+TRANSFER_SPEECH = "Okay, let me put you through to someone now."
 PREROLL_BYTES = 2400           # 300 ms kept from before the VAD trigger (soft onsets)
 
 
@@ -60,8 +61,10 @@ class CallTransport(Protocol):
 class CallEngine:
     """One instance per service; run() once per call."""
 
-    def __init__(self, store: BookingStore, asr, tts, require_caller_id: bool = False, greet: bool = False):
+    def __init__(self, store: BookingStore, asr, tts, require_caller_id: bool = False, greet: bool = False,
+                 transfer_to: str | None = None):
         self.store, self.asr, self.tts, self.require_caller_id = store, asr, tts, require_caller_id
+        self.transfer_to = transfer_to   # a human's number; None -> offer a callback instead
         self.greet = greet           # answer like a person; the legacy Twilio path keeps its old behaviour
 
     async def run(self, transport: CallTransport) -> None:
@@ -131,7 +134,12 @@ class CallEngine:
                 if os.getenv('LOG_TRANSCRIPTS') == '1':      # test runs only: never on by default
                     log.info('call=%s gen=%d heard=%r', call_id, this_generation, utterance)
                 words = reply.speech or reply.text   # phone wording when the dialogue provides it (#38)
+                transfer = reply.action == 'handoff' and self.transfer_to
+                if transfer:
+                    words = TRANSFER_SPEECH
                 await speak(words, this_generation, f'answer-{this_generation}', t_asr)
+                if transfer and this_generation == generation:
+                    await transport.transfer(self.transfer_to)
             except asyncio.CancelledError:
                 raise
             except Exception:

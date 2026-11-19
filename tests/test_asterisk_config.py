@@ -28,7 +28,7 @@ def test_media_socket_targets_local_receptionist_with_json_control():
 
 def test_dialplan_answers_and_dials_websocket_with_caller_number():
     ext = conf("extensions.conf")
-    assert "Dial(WebSocket/receptionist/c(ulaw)v(caller=${URIENCODE(${CALLERID(num)})}))" in ext
+    assert "Dial(WebSocket/receptionist/c(ulaw)v(caller=${URIENCODE(${CALLERID(num)})}," in ext
     for ctx in ("[from-telnyx]", "[from-sipp]", "[receptionist]"):
         assert ctx in ext
     assert "Answer()" in ext

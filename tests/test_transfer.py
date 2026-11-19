@@ -16,7 +16,7 @@ LOUD, QUIET = b"\x00" * 160, b"\xff" * 160
 
 def test_dialplan_passes_channel_and_continues_to_transfer():
     assert "v(caller=${URIENCODE(${CALLERID(num)})},chan=${UNIQUEID})" in EXT
-    assert re.search(r"Dial\(WebSocket/receptionist/[^)]*\)\),,g\)", EXT)            # continue after our hangup
+    assert "chan=${UNIQUEID}),,g)" in EXT                      # 'g': continue after our hangup
     assert 'GotoIf($["${TRANSFER_TO}" != ""]?transfer)' in EXT
     assert "Dial(PJSIP/${TRANSFER_TO}@telnyx,30)" in EXT
 
@@ -75,3 +75,9 @@ def test_handoff_transfers_after_speaking_when_a_target_is_configured(tmp_path):
 
 def test_handoff_without_target_only_speaks(tmp_path):
     assert not any(isinstance(s, tuple) and s[0] == "transfer" for s in run(tmp_path, None))
+
+
+def test_service_reads_ari_secret_and_transfer_target_from_root_only_files():
+    unit = (Path(__file__).resolve().parents[1] / "deploy" / "pi-receptionist.service").read_text().splitlines()
+    assert "EnvironmentFile=-/etc/pi-receptionist/ari.env" in unit
+    assert "EnvironmentFile=-/etc/pi-receptionist/telephony.env" in unit

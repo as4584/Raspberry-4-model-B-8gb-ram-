@@ -28,6 +28,7 @@ from receptionist.dialogue import Dialogue, OPENERS
 from receptionist.telephony import CALLER_RE, MAX_UTTERANCE_BYTES, CallEngine, caller_number, split_sentences  # noqa: F401
 from receptionist.twilio_transport import TwilioMediaStreamTransport
 from receptionist.asterisk_transport import AsteriskWebSocketTransport
+from receptionist.ari import ARIClient
 from receptionist.audio import MockASR, MockTTS, WhisperCppASR, WhisperDaemonASR, PiperTTS, PiperDaemonTTS, CachingTTS, rms_mulaw
 
 class TextInput(BaseModel):
@@ -155,8 +156,10 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
         # socket is reachable solely from local processes (Asterisk, SIPp tests).
         # chan_websocket asks for the "media" sub-protocol; echo it or the handshake fails.
         await ws.accept(subprotocol='media' if 'media' in ws.scope.get('subprotocols',[]) else None)
-        engine=CallEngine(store,asr=asr_factory(),tts=tts,require_caller_id=settings.require_caller_id,greet=True)
-        try:await engine.run(AsteriskWebSocketTransport(ws))
+        engine=CallEngine(store,asr=asr_factory(),tts=tts,require_caller_id=settings.require_caller_id,greet=True,
+                          transfer_to=caller_number(os.getenv('TRANSFER_TO')))
+        ari=ARIClient(os.environ['ARI_PASSWORD']) if os.getenv('ARI_PASSWORD') else None
+        try:await engine.run(AsteriskWebSocketTransport(ws,ari=ari))
         except (WebSocketDisconnect,ValueError,RuntimeError):pass
 
     @app.websocket('/twilio/media')

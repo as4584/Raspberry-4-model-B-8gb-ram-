@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 
 from fastapi import WebSocket
 
@@ -19,9 +20,12 @@ MAX_FRAME_BYTES = 8000          # 1 s of u-law; Asterisk sends ~160-byte frames
 
 
 class AsteriskWebSocketTransport:
-    def __init__(self, ws: WebSocket):
-        self.ws = ws
+    def __init__(self, ws: WebSocket, ari=None):
+        self.ws, self.ari = ws, ari
         self.channel_id: str | None = None
+        chan = getattr(ws, 'query_params', {}).get('chan') if hasattr(ws, 'query_params') else None
+        # The caller's own channel (dialplan v(chan=${UNIQUEID})): the one a transfer acts on.
+        self.caller_channel: str | None = chan if isinstance(chan, str) and re.fullmatch(r'[0-9]+\.[0-9]+', chan) else None
         self._xon = asyncio.Event(); self._xon.set()
         self._send_lock = asyncio.Lock()
 
@@ -77,4 +81,7 @@ class AsteriskWebSocketTransport:
         await self._command('HANGUP')
 
     async def transfer(self, target: str):
-        raise NotImplementedError('transfer goes through ARI (T6)')
+        if not self.ari or not self.caller_channel:
+            raise RuntimeError('transfer needs ARI and the caller channel id')
+        await self.ari.set_variable(self.caller_channel, 'TRANSFER_TO', target)
+        await self.hangup()          # the dialplan continues ('g') and dials TRANSFER_TO
