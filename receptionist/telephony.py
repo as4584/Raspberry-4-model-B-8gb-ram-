@@ -159,6 +159,24 @@ class CallEngine:
             task = asyncio.create_task(process(packet, ticket))
             jobs.add(task); task.add_done_callback(jobs.discard)
 
+        def end_turn():
+            nonlocal heard_speech, silence_ms, spoken_ms
+            snapshot, ticket = bytes(audio), generation
+            audio.clear(); heard_speech = False; silence_ms = 0; spoken_ms = 0
+            spawn(snapshot, ticket)
+
+        last_audio = time.monotonic()
+
+        async def silence_watchdog():
+            # Networks with silence suppression (DTX) -- and SIPp -- send no packets while
+            # the caller is quiet, so counting quiet frames alone can leave a turn open
+            # forever. 300 ms with no audio at all after speech also ends the turn.
+            while True:
+                await asyncio.sleep(0.05)
+                if heard_speech and spoken_ms >= 80 and time.monotonic() - last_audio >= 0.3:
+                    end_turn()
+
+        watchdog = asyncio.create_task(silence_watchdog())
         try:
             async for event in transport.events():
                 if isinstance(event, CallStart):
@@ -171,6 +189,7 @@ class CallEngine:
                 if not isinstance(event, AudioIn) or call_id is None or not event.data:
                     continue
                 data = event.data
+                last_audio = time.monotonic()
                 # Simple VAD. Runs on speech+silence, leaving heavier ASR on a background task.
                 ms = 1000 * len(data) / 8000
                 if rms_mulaw(data) > 650:
@@ -201,10 +220,9 @@ class CallEngine:
                         audio.extend(data)
                     silence_ms += ms
                     if silence_ms >= 300 and spoken_ms >= 80:
-                        snapshot, ticket = bytes(audio), generation
-                        audio.clear(); heard_speech = False; silence_ms = 0; spoken_ms = 0
-                        spawn(snapshot, ticket)
+                        end_turn()
         finally:
+            watchdog.cancel()
             for task in list(jobs):
                 task.cancel()
             if jobs:
