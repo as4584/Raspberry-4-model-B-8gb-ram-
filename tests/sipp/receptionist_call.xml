@@ -2,7 +2,7 @@
 <!-- T4: a free, local stand-in for a phone call. SIPp dials Asterisk (endpoint "sipp",
      identified by 127.0.0.1), streams caller turns as G.711 u-law RTP, then hangs up.
      Turn audio files are raw 8 kHz u-law made by scripts/sipp_call_test.py.
-     -inf vars: [field0]=caller number, [field1..3]=turn files, [field4]=pause ms between turns. -->
+     -inf vars: [field0]=caller number, [field1..2]=turn files; -d sets the pause after each turn. -->
 <scenario name="receptionist call">
   <send retrans="500">
     <![CDATA[
@@ -45,9 +45,9 @@
   </send>
   <pause milliseconds="800"/>
   <nop><action><exec rtp_stream="[field1],1,0"/></action></nop>
-  <pause milliseconds="[field4]"/>
+  <pause/>
   <nop><action><exec rtp_stream="[field2],1,0"/></action></nop>
-  <pause milliseconds="[field4]"/>
+  <pause/>
   <send retrans="500">
     <![CDATA[
       BYE sip:[service]@[remote_ip]:[remote_port] SIP/2.0
