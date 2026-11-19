@@ -47,7 +47,11 @@ def _code_speech(code: str | None) -> str:
 # 'Feel human' (#28): every spoken reply opens with one of these short, digit-free
 # sentences. They are synthesised once and cached, so audio starts as soon as the
 # words are understood, and each is ~1 s long, covering synthesis of what follows.
-OPENERS=("Okay, let me check that.","Great, you're all set.","Okay, all done.")
+# Spoken when the call is answered, like a person picking up. Two short sentences so each
+# is cached by the TTS (callers wait for a greeting before they talk).
+GREETING="Hi, thanks for calling. How can I help you today?"
+OPENERS=("Okay, let me check that.","Great, you're all set.","Okay, all done.",
+         "Hi, thanks for calling.","How can I help you today?")
 
 class Dialogue:
     def __init__(self, store: BookingStore, timezone_name: str = "America/New_York",
