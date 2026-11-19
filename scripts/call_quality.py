@@ -38,7 +38,7 @@ DAYS = ["december tenth", "december eleventh", "december fourteenth", "december 
 def sipp(xml: Path, rows: list[str], concurrency: int, pause_ms: int, work: Path) -> int:
     inf = work / f"inf-{time.monotonic_ns()}.csv"
     inf.write_text("SEQUENTIAL\n" + "".join(rows))
-    r = subprocess.run(["sipp", "-sf", str(xml), "-inf", str(inf), "-s", "rec1", "127.0.0.1:5070",
+    r = subprocess.run(["sipp", "-sf", str(xml), "-inf", str(inf), "-s", "rec10", "127.0.0.1:5070",
                         "-i", "127.0.0.1", "-mi", "127.0.0.1", "-m", str(len(rows)), "-l", str(concurrency),
                         "-r", str(concurrency), "-rp", "1000", "-d", str(pause_ms), "-nostdin",
                         "-timeout", str(len(rows) * 40)], capture_output=True, text=True)
