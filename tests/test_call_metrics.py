@@ -4,7 +4,13 @@ the Pi runs it on real SIPp calls (scripts/call_quality.py)."""
 import math
 import struct
 
-from scripts.call_metrics import analyse
+import importlib.util
+from pathlib import Path
+
+_spec = importlib.util.spec_from_file_location("call_metrics", Path(__file__).parents[1] / "scripts" / "call_metrics.py")
+call_metrics = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(call_metrics)
+analyse = call_metrics.analyse
 
 FRAME = 160                              # 20 ms at 8 kHz
 
