@@ -63,3 +63,31 @@ def test_brain_runtime_is_an_optional_extra_installed_on_the_pi():
     py = (ROOT / "pyproject.toml").read_text()
     assert 'brain = ["onnxruntime' in py and "tokenizers" in py
     assert '$app[brain]' in (ROOT / "scripts" / "pi_install_service.sh").read_text()
+
+
+def test_engine_greets_with_the_given_greeting(tmp_path):
+    spoken = []
+    class TTS:
+        async def synthesize(self, text):
+            spoken.append(text); return b"\xff" * 160
+    class T:
+        async def events(self):
+            yield CallStart("C1", None); await asyncio.sleep(0.3)
+        async def send_frame(self, f): pass
+        async def flush(self): pass
+        async def mark(self, n): pass
+        async def hangup(self): pass
+        async def transfer(self, t): pass
+    eng = CallEngine(BookingStore(str(tmp_path / "g.sqlite")), asr=MockASR([]), tts=TTS(), greet=True,
+                     greeting="Hi, thanks for calling LexMakesIt. How can I help you today?")
+    asyncio.run(eng.run(T()))
+    assert spoken[:2] == ["Hi, thanks for calling LexMakesIt.", "How can I help you today?"]
+
+
+def test_server_loads_the_profile_and_prewarms_its_greeting(tmp_path, monkeypatch):
+    import json
+    from receptionist.server import load_business_profile
+    f = tmp_path / "p.json"; f.write_text(json.dumps({"name": "LexMakesIt", "faq": {}}))
+    prof, greeting = load_business_profile({"BUSINESS_PROFILE": str(f)})
+    assert prof["name"] == "LexMakesIt" and greeting.startswith("Hi, thanks for calling LexMakesIt.")
+    assert load_business_profile({"BUSINESS_PROFILE": str(tmp_path / "none.json")})[0] is None
