@@ -1,0 +1,6 @@
+[Unit]
+Description=Delete review-mode transcripts and recordings older than 14 days
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/find /var/lib/pi-receptionist/data/review /var/spool/asterisk/review -type f -mtime +14 -delete

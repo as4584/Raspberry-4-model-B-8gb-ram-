@@ -25,7 +25,7 @@ from pydantic import BaseModel
 from receptionist import health
 from receptionist.booking import BookingStore
 from receptionist.dialogue import Dialogue, OPENERS
-from receptionist.telephony import CALLER_RE, MAX_UTTERANCE_BYTES, CallEngine, caller_number, split_sentences  # noqa: F401
+from receptionist.telephony import CALLER_RE, MAX_UTTERANCE_BYTES, CallEngine, caller_number, review_key, split_sentences  # noqa: F401
 from receptionist.twilio_transport import TwilioMediaStreamTransport
 from receptionist.asterisk_transport import AsteriskWebSocketTransport
 from receptionist.ari import ARIClient
@@ -157,7 +157,9 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
         # chan_websocket asks for the "media" sub-protocol; echo it or the handshake fails.
         await ws.accept(subprotocol='media' if 'media' in ws.scope.get('subprotocols',[]) else None)
         engine=CallEngine(store,asr=asr_factory(),tts=tts,require_caller_id=settings.require_caller_id,greet=True,
-                          transfer_to=caller_number(os.getenv('TRANSFER_TO')))
+                          transfer_to=caller_number(os.getenv('TRANSFER_TO')),
+                          review_dir=os.getenv('REVIEW_DIR','/var/lib/pi-receptionist/data/review'),
+                          review_callers={k for k in (review_key(x) for x in os.getenv('REVIEW_CALLERS','').split(',')) if k})
         ari=ARIClient(os.environ['ARI_PASSWORD'],user=os.getenv('ARI_USERNAME','receptionist')) if os.getenv('ARI_PASSWORD') else None
         try:await engine.run(AsteriskWebSocketTransport(ws,ari=ari))
         except (WebSocketDisconnect,ValueError,RuntimeError):pass

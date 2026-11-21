@@ -67,8 +67,11 @@ def test_rtp_port_range_matches_firewall_plan():
     assert "rtpstart=16384" in rtp and "rtpend=16484" in rtp and "strictrtp=yes" in rtp
 
 
-def test_only_sipp_rec_calls_are_recorded():
+def test_only_sipp_rec_calls_and_owner_review_numbers_are_recorded():
     sipp = EXT[EXT.index("[from-sipp]"):].split("\n[")[0]
     assert "MixMonitor(" in sipp and "exten => _recX.,1" in sipp
-    for ctx in ("[from-telnyx]", "[receptionist]"):
-        assert "MixMonitor" not in EXT[EXT.index(ctx):].split("\n[")[0]
+    assert "MixMonitor" not in EXT[EXT.index("[from-telnyx]"):].split("\n[")[0]
+    rec = EXT[EXT.index("[receptionist]"):].split("\n[")[0].splitlines()
+    mm = next(i for i, l in enumerate(rec) if "MixMonitor" in l)
+    # The only recording in the real-call path sits right behind the review-number gate.
+    assert 'GotoIf($["${GLOBAL(REVIEW_${CALLERID(num):-10})}" != "1"]?go)' in rec[mm - 1]

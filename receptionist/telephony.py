@@ -36,6 +36,29 @@ def caller_number(value: object) -> str | None:
     return value if isinstance(value, str) and CALLER_RE.fullmatch(value) else None
 
 
+def review_key(number: str | None) -> str | None:
+    """Last 10 digits of a US number, so '+19736530992', '19736530992' and '9736530992' match."""
+    digits = re.sub(r'\D', '', number or '')
+    return digits[-10:] if len(digits) >= 10 else None
+
+
+class ReviewLog:
+    """Owner-approved review mode: one JSONL file per call, root-only (600)."""
+
+    def __init__(self, folder: str, call_id: str):
+        os.makedirs(folder, mode=0o700, exist_ok=True)
+        self.path = os.path.join(folder, f"{time.strftime('%Y%m%d-%H%M%S')}-{call_id}.jsonl")
+        fd = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        self._f = os.fdopen(fd, 'a', encoding='utf-8')
+
+    def write(self, **row):
+        import json
+        self._f.write(json.dumps({"t": round(time.time(), 3), **row}) + "\n"); self._f.flush()
+
+    def close(self):
+        self._f.close()
+
+
 def split_sentences(text: str) -> list[str]:
     # Split only where punctuation is followed by whitespace, so "1.2.3" and times stay whole.
     return [p for p in re.split(r'(?<=[.!?])\s+', text.strip()) if p]
@@ -65,8 +88,10 @@ class CallEngine:
     """One instance per service; run() once per call."""
 
     def __init__(self, store: BookingStore, asr, tts, require_caller_id: bool = False, greet: bool = False,
-                 transfer_to: str | None = None):
+                 transfer_to: str | None = None, review_dir: str | None = None,
+                 review_callers: set[str] | None = None):
         self.store, self.asr, self.tts, self.require_caller_id = store, asr, tts, require_caller_id
+        self.review_dir, self.review_callers = review_dir, set(review_callers or ())
         self.transfer_to = transfer_to   # a human's number; None -> offer a callback instead
         self.greet = greet           # answer like a person; the legacy Twilio path keeps its old behaviour
 
@@ -81,6 +106,7 @@ class CallEngine:
         # Audio of utterances whose reply hasn't started playing yet. If the caller speaks
         # again first, it is carried into the next utterance instead of being lost.
         unanswered: dict[int, bytes] = {}
+        review: ReviewLog | None = None
         last_voiced = time.monotonic()
         speech_end: dict[int, float] = {}       # generation -> time of its last voiced frame
         noise_floor = 0.0      # this call's line-noise level (u-law RMS), learned from non-speech
@@ -113,8 +139,11 @@ class CallEngine:
                             return
                         unanswered.pop(this_generation, None)     # the caller is hearing a reply
                         if this_generation in speech_end:
+                            latency = time.monotonic() - speech_end.pop(this_generation)
                             log.info('call=%s gen=%d phase=reply_latency end_of_speech_to_audio_s=%.2f', call_id,
-                                     this_generation, time.monotonic() - speech_end.pop(this_generation))
+                                     this_generation, latency)
+                            if review:
+                                review.write(type="latency", gen=this_generation, end_of_speech_to_audio_s=round(latency, 2))
                         await transport.send_frame(outbound[i:i + FRAME_BYTES])
             finally:
                 if pending and not pending.done():
@@ -151,6 +180,9 @@ class CallEngine:
                 if os.getenv('LOG_TRANSCRIPTS') == '1':      # test runs only: never on by default
                     log.info('call=%s gen=%d heard=%r', call_id, this_generation, utterance)
                 words = reply.speech or reply.text   # phone wording when the dialogue provides it (#38)
+                if review:
+                    review.write(type="turn", gen=this_generation, heard=utterance, action=reply.action,
+                                 reply=words, audio_s=round(len(packet) / 8000, 2), asr_s=round(t_asr - t0, 2))
                 transfer = reply.action == 'handoff' and self.transfer_to
                 if transfer:
                     words = TRANSFER_SPEECH
@@ -192,6 +224,9 @@ class CallEngine:
             async for event in transport.events():
                 if isinstance(event, CallStart):
                     call_id, caller_id = event.call_id, event.caller_id
+                    if self.review_dir and review_key(caller_id) in self.review_callers:
+                        review = ReviewLog(self.review_dir, call_id)
+                        review.write(type="start", call=call_id)
                     dialogue = Dialogue(self.store, require_caller_id=self.require_caller_id)
                     if self.greet:
                         task = asyncio.create_task(greet(generation))   # barge-in cancels it like any reply
@@ -247,6 +282,8 @@ class CallEngine:
                         end_turn()
         finally:
             watchdog.cancel()
+            if review:
+                review.write(type="end"); review.close()
             for task in list(jobs):
                 task.cancel()
             if jobs:

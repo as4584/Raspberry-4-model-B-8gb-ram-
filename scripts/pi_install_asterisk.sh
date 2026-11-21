@@ -22,6 +22,11 @@ for f in http.conf ari.conf websocket_client.conf chan_websocket.conf extensions
   step "sudo install -m 640 -o root -g asterisk $cfg/$f $etc/$f"
 done
 step "sudo install -d -o asterisk -g asterisk -m 750 /var/spool/asterisk/monitor"
+# Review mode (owner-approved): only numbers in REVIEW_CALLERS (/etc/pi-receptionist/telephony.env)
+# are recorded; files are root/asterisk-only and deleted after 14 days.
+step "sudo install -d -o asterisk -g asterisk -m 700 /var/spool/asterisk/review"
+step "sudo bash -c '. /etc/pi-receptionist/telephony.env 2>/dev/null; { echo \"[globals]\"; for n in \$(echo \"\${REVIEW_CALLERS:-}\" | tr , \" \"); do d=\$(echo \"\$n\" | tr -cd 0-9); [ \${#d} -ge 10 ] && echo \"REVIEW_\${d: -10}=1\"; done; } > /etc/asterisk/review.conf' && sudo chown root:asterisk /etc/asterisk/review.conf && sudo chmod 640 /etc/asterisk/review.conf"
+step "sudo install -m 644 $here/deploy/pi-receptionist-review-cleanup.service $here/deploy/pi-receptionist-review-cleanup.timer /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now pi-receptionist-review-cleanup.timer"
 # Secrets never pass through this script: pi-receptionist-secrets.service renders them from
 # Doppler (read-only prd token in /etc/pi-receptionist/doppler.env) into RAM at every boot.
 step "sudo install -d -m 750 -o root -g asterisk /opt/pi-receptionist/templates"
