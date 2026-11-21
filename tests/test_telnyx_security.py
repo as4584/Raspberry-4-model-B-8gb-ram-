@@ -46,15 +46,21 @@ def test_credentials_only_in_ram_include_with_tls_registration():
     assert "password=${TELNYX_SIP_PASSWORD}" in SEC.replace(" ", "")
 
 
-def test_inbound_rejected_unless_signalling_and_media_are_encrypted():
-    tel = EXT[EXT.index("[from-telnyx]"):].split("\n[")[0]
-    # Real call, Pi 2026-11-21: CHANNEL(secure_signaling)/(secure_media) are IAX2-only items;
-    # under PJSIP they are "unknown", so every encrypted Telnyx call was rejected. PJSIP uses
-    # CHANNEL(pjsip,secure) (TLS signalling) and CHANNEL(rtp,secure) (SRTP media).
-    assert 'GotoIf($["${CHANNEL(pjsip,secure)}${CHANNEL(rtp,secure)}" = "11"]?ok)' in tel
-    assert "secure_signaling)" not in EXT and "secure_media)" not in EXT
-    assert "Hangup(21)" in tel and "Goto(receptionist,s,1)" in tel
-    assert tel.index("Hangup(21)") < tel.index("Goto(receptionist,s,1)")
+def test_inbound_requires_srtp_after_answer_and_tls_by_transport():
+    # Pi source dive (2026-11-21): CHANNEL(pjsip,secure) inspects the dialog *target URI*
+    # (Telnyx's Contact, no transport=tls) and read 0 on a real TLS call; CHANNEL(rtp,secure)
+    # is empty until media is negotiated at Answer. So: TLS is enforced by the endpoint's
+    # only transport, SRTP by media_encryption=sdes (no fallback), and the dialplan checks
+    # SRTP *after* Answer and hangs up otherwise.
+    tel = EXT[EXT.index("[from-telnyx]"):].split("
+[")[0]
+    assert "CHANNEL(pjsip,secure)" not in tel and "secure_signaling)" not in EXT
+    ans = tel.index("Answer()")
+    chk = tel.index('GotoIf($["${CHANNEL(rtp,secure)}" = "1"]?ok)')
+    assert ans < chk < tel.index("Hangup(") < tel.index("Goto(receptionist,s,1)")
+    e = section(PJ, "telnyx", "endpoint").replace(" ", "")
+    assert "transport=transport-tls" in e and "media_encryption=sdes" in e and "media_encryption_optimistic=no" in e
+    assert "bind=127.0.0.1:5070" in section(PJ, "transport-test", "transport").replace(" ", "")
 
 
 def test_rtp_port_range_matches_firewall_plan():
