@@ -27,6 +27,10 @@ def skip_greeting(ws):
     while True:
         msg = ws.receive()
         if msg.get("text") and json.loads(msg["text"]).get("correlation_id") == "greeting":
+            # A real phone line streams audio (quiet here) while the caller listens; the
+            # engine uses that first half-second to measure the line's noise.
+            for _ in range(25):
+                ws.send_bytes(QUIET)
             return
 
 

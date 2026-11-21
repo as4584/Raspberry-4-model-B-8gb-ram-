@@ -164,7 +164,7 @@ def test_line_noise_does_not_count_as_speech(tmp_path):
     # (a 1-word turn reached whisper as 3.5 s). Speech must stand out from the call's noise.
     noise = b"\xb0" * 160                       # steady hum, louder than the old fixed trigger
     asr = RecordingASR()
-    engine = CallEngine(BookingStore(str(tmp_path / "n.sqlite")), asr=asr, tts=MockTTS())
+    engine = CallEngine(BookingStore(str(tmp_path / "n.sqlite")), asr=asr, tts=MockTTS(), greet=True)
     script = [CallStart("C1", None), *[AudioIn(noise)] * 50,          # 1 s of noise: learn the floor
               *[AudioIn(LOUD)] * 10, *[AudioIn(noise)] * 40, 0.5]     # 0.2 s speech, then noise
     asyncio.run(engine.run(FakeTransport(script)))
@@ -177,6 +177,6 @@ def test_noise_alone_never_starts_a_turn(tmp_path):
     noise = b"\xb0" * 160
     assert rms_mulaw(noise) > 650                                    # would have triggered before
     asr = RecordingASR()
-    engine = CallEngine(BookingStore(str(tmp_path / "m.sqlite")), asr=asr, tts=MockTTS())
+    engine = CallEngine(BookingStore(str(tmp_path / "m.sqlite")), asr=asr, tts=MockTTS(), greet=True)
     asyncio.run(engine.run(FakeTransport([CallStart("C1", None), *[AudioIn(noise)] * 150, 0.5])))
     assert asr.packets == []

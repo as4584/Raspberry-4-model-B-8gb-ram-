@@ -39,13 +39,13 @@ def test_booked_speech_has_no_uuid(d):
 
 def test_help_speech_has_no_iso_date(d):
     r = d.handle("hello", "s")
-    assert r.speech == "Tell me the day and time you'd like, for example, December tenth at two p m."
+    assert r.speech == "Sure. Tell me the day and time you'd like, for example, December tenth at two p m."
     assert not re.search(r"\d{4}-\d\d-\d\d", r.speech)
 
 
-def test_replies_without_speech_fall_back_to_text(d):
+def test_replies_without_their_own_speech_get_text_plus_an_opener(d):
     r = d.handle("I want a human", "s")
-    assert r.speech is None and r.text
+    assert r.speech == "Okay. " + r.text
 
 
 def test_phone_path_never_sends_a_uuid_to_tts(tmp_path, monkeypatch):

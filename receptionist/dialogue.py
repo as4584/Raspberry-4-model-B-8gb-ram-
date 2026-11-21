@@ -1,6 +1,6 @@
 """Strict text-first conversation state machine; model outputs never perform writes."""
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, time, timedelta, timezone
 import re
 from zoneinfo import ZoneInfo
@@ -51,7 +51,18 @@ def _code_speech(code: str | None) -> str:
 # is cached by the TTS (callers wait for a greeting before they talk).
 GREETING="Hi, thanks for calling. How can I help you today?"
 OPENERS=("Okay, let me check that.","Great, you're all set.","Okay, all done.",
-         "Hi, thanks for calling.","How can I help you today?")
+         "Hi, thanks for calling.","How can I help you today?","Sure.","Okay.","Hmm, okay.")
+# Opener per reply kind for replies that don't start with one (real call: 'help' replies
+# had none, so each misunderstood turn waited ~1.5 s for synthesis before any audio).
+_OPENER_FOR={"help":"Sure.","clarify":"Sure.","cancelled":"Okay, all done.","handoff":"Okay."}
+
+def _with_opener(reply: "Reply") -> "Reply":
+    words=reply.speech or reply.text
+    first=words.split(". ",1)[0].rstrip(".")+"." if words else ""
+    if not words or any(words.startswith(o) for o in OPENERS):
+        return reply
+    opener=_OPENER_FOR.get(reply.action,"Hmm, okay.")
+    return replace(reply,speech=f"{opener} {words}")
 
 class Dialogue:
     def __init__(self, store: BookingStore, timezone_name: str = "America/New_York",
@@ -110,6 +121,9 @@ class Dialogue:
         return starts,ends,duration
 
     def handle(self, utterance: str, session_id: str, caller_id: str | None = None) -> Reply:
+        return _with_opener(self._handle(utterance, session_id, caller_id))
+
+    def _handle(self, utterance: str, session_id: str, caller_id: str | None = None) -> Reply:
         turn=self._turns[session_id]=self._turns.get(session_id,0)+1
         # ASR punctuates ("Yes.", "Cancel that."): drop trailing punctuation before matching.
         s=re.sub(r"[\s.!?,;]+$","",utterance.strip().lower())

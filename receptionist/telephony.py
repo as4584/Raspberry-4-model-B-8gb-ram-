@@ -26,6 +26,9 @@ CALLER_RE = re.compile(r'\+?[0-9]{5,15}')
 MAX_UTTERANCE_BYTES = 160000   # 20 s of 8 kHz u-law per transcription chunk
 FRAME_BYTES = 160              # 20 ms of 8 kHz u-law
 TRANSFER_SPEECH = "Okay, let me put you through to someone now."
+VOICE_MIN_RMS = 650            # fixed floor for speech (u-law RMS)
+NOISE_MARGIN = 2.5             # speech must be this many times the call's noise floor
+CALIBRATION_FRAMES = 25        # first 0.5 s of a greeted call: measure line noise
 PREROLL_BYTES = 2400           # 300 ms kept from before the VAD trigger (soft onsets)
 
 
@@ -80,6 +83,8 @@ class CallEngine:
         unanswered: dict[int, bytes] = {}
         last_voiced = time.monotonic()
         speech_end: dict[int, float] = {}       # generation -> time of its last voiced frame
+        noise_floor = 0.0      # this call's line-noise level (u-law RMS), learned from non-speech
+        frames_seen = 0
         # Serialises this call's dialogue across worker threads: a barge-in cancels the
         # awaiting task, but its thread keeps running until handle() returns.
         dialogue_lock = threading.Lock()
@@ -198,7 +203,19 @@ class CallEngine:
                 last_audio = time.monotonic()
                 # Simple VAD. Runs on speech+silence, leaving heavier ASR on a background task.
                 ms = 1000 * len(data) / 8000
-                if rms_mulaw(data) > 650:
+                # Speech = clearly above this call's noise floor, never below the old fixed
+                # trigger. Real Telnyx line noise sat above the fixed 650 and kept turns open
+                # (a 1-word turn reached whisper as 3.5 s); a silent line behaves as before.
+                level = rms_mulaw(data)
+                frames_seen += 1
+                if self.greet and frames_seen <= CALIBRATION_FRAMES:
+                    # Caller is listening to the greeting: learn the line's noise, never trigger.
+                    noise_floor = level if frames_seen == 1 else 0.8 * noise_floor + 0.2 * level
+                    continue
+                voiced = level > max(VOICE_MIN_RMS, NOISE_MARGIN * noise_floor)
+                if not voiced and not heard_speech:
+                    noise_floor = 0.95 * noise_floor + 0.05 * level
+                if voiced:
                     last_voiced = time.monotonic()
                     if not heard_speech:
                         generation += 1
