@@ -78,6 +78,8 @@ class CallEngine:
         # Audio of utterances whose reply hasn't started playing yet. If the caller speaks
         # again first, it is carried into the next utterance instead of being lost.
         unanswered: dict[int, bytes] = {}
+        last_voiced = time.monotonic()
+        speech_end: dict[int, float] = {}       # generation -> time of its last voiced frame
         # Serialises this call's dialogue across worker threads: a barge-in cancels the
         # awaiting task, but its thread keeps running until handle() returns.
         dialogue_lock = threading.Lock()
@@ -105,6 +107,9 @@ class CallEngine:
                         if generation != this_generation:
                             return
                         unanswered.pop(this_generation, None)     # the caller is hearing a reply
+                        if this_generation in speech_end:
+                            log.info('call=%s gen=%d phase=reply_latency end_of_speech_to_audio_s=%.2f', call_id,
+                                     this_generation, time.monotonic() - speech_end.pop(this_generation))
                         await transport.send_frame(outbound[i:i + FRAME_BYTES])
             finally:
                 if pending and not pending.done():
@@ -162,6 +167,7 @@ class CallEngine:
         def end_turn():
             nonlocal heard_speech, silence_ms, spoken_ms
             snapshot, ticket = bytes(audio), generation
+            speech_end[ticket] = last_voiced
             audio.clear(); heard_speech = False; silence_ms = 0; spoken_ms = 0
             spawn(snapshot, ticket)
 
@@ -193,6 +199,7 @@ class CallEngine:
                 # Simple VAD. Runs on speech+silence, leaving heavier ASR on a background task.
                 ms = 1000 * len(data) / 8000
                 if rms_mulaw(data) > 650:
+                    last_voiced = time.monotonic()
                     if not heard_speech:
                         generation += 1
                         for task in list(jobs):

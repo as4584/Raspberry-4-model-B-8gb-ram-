@@ -152,6 +152,8 @@ def test_logs_end_of_speech_to_first_reply_audio(tmp_path, caplog):
     # the first reply frame handed to the transport.
     import logging, re
     with caplog.at_level(logging.INFO, logger="receptionist.call"):
-        run(tmp_path, [CallStart("C1", "+15550000001"), *speech(), 0.6], ["book 2027-12-10 14:00"])
+        # Caller speaks, then goes quiet with no packets (real time passes): the turn ends
+        # on the 300 ms silence watchdog, so latency includes that wait.
+        run(tmp_path, [CallStart("C1", "+15550000001"), *[AudioIn(LOUD)] * 10, 0.9], ["book 2027-12-10 14:00"])
     m = re.search(r"phase=reply_latency end_of_speech_to_audio_s=(\d+\.\d+)", caplog.text)
     assert m and 0.25 <= float(m.group(1)) < 2.0          # includes the 300 ms end-of-turn wait
