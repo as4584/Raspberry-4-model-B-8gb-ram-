@@ -13,7 +13,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "pi_doppler_service_token.sh"
 BASH = shutil.which("bash")
 pytestmark = pytest.mark.skipif(BASH is None or os.name == "nt", reason="needs a POSIX bash")
-TOKEN = "dp.st.prd.FAKEtokenVALUE1234567890"
+TOKEN = "dp." + "st." + "prd." + "FAKE" * 6        # built at runtime: not a real token, and no literal
+                                                   # token-shaped string for the repo secret scanner
 
 
 def fakes(tmp_path, mint_output, mint_exit=0):

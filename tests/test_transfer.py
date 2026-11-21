@@ -83,5 +83,5 @@ def test_handoff_without_target_only_speaks(tmp_path):
 
 def test_service_reads_ari_secret_and_transfer_target_from_root_only_files():
     unit = (Path(__file__).resolve().parents[1] / "deploy" / "pi-receptionist.service").read_text().splitlines()
-    assert "EnvironmentFile=-/etc/pi-receptionist/ari.env" in unit
+    assert "EnvironmentFile=-/run/pi-receptionist/app.env" in unit            # ARI creds: RAM, from Doppler
     assert "EnvironmentFile=-/etc/pi-receptionist/telephony.env" in unit

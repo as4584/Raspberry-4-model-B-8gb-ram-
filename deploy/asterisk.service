@@ -1,7 +1,7 @@
 [Unit]
 Description=Asterisk PBX for the Pi receptionist (Telnyx SIP + local SIPp)
-After=network-online.target
-Wants=network-online.target
+After=network-online.target pi-receptionist-secrets.service
+Wants=network-online.target pi-receptionist-secrets.service
 
 [Service]
 Type=simple
