@@ -52,8 +52,7 @@ def test_inbound_requires_srtp_after_answer_and_tls_by_transport():
     # is empty until media is negotiated at Answer. So: TLS is enforced by the endpoint's
     # only transport, SRTP by media_encryption=sdes (no fallback), and the dialplan checks
     # SRTP *after* Answer and hangs up otherwise.
-    tel = EXT[EXT.index("[from-telnyx]"):].split("
-[")[0]
+    tel = EXT[EXT.index("[from-telnyx]"):].split("\n[")[0]
     assert "CHANNEL(pjsip,secure)" not in tel and "secure_signaling)" not in EXT
     ans = tel.index("Answer()")
     chk = tel.index('GotoIf($["${CHANNEL(rtp,secure)}" = "1"]?ok)')
