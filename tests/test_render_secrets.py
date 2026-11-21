@@ -79,3 +79,10 @@ def test_secrets_service_runs_under_doppler_with_fallback_before_consumers():
 def test_server_uses_ari_username_from_environment(monkeypatch):
     from receptionist import server
     assert "ARI_USERNAME" in Path(server.__file__).read_text()
+
+
+def test_secrets_service_gives_doppler_a_private_home():
+    # Pi: "Doppler Error: $HOME is not defined" under the hardened unit.
+    u = (D / "pi-receptionist-secrets.service").read_text()
+    assert "Environment=HOME=/var/lib/pi-receptionist/secrets" in u
+    assert "ProtectHome=yes" in u                          # still can't read real home dirs
