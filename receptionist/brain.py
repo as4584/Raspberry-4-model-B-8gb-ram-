@@ -36,6 +36,9 @@ SMALL_TALK = re.compile(r"^(hi|hello|hey|good (morning|afternoon|evening))?\W*(t
 GOODBYE = re.compile(r"\b(bye|goodbye|that's all|that is all|that'll be all|have a (good|nice|great) day)\b")
 ORDINALS = {"first": 0, "earliest": 0, "1st": 0, "second": 1, "2nd": 1, "middle": 1, "third": 2, "3rd": 2,
             "last": -1, "latest": -1}
+# whisper writes "three" as "free"/"pre"/"tree" (Pi suite); only rewrite when a time is
+# expected (times were just offered or a day is chosen) and a time word follows.
+THREE_MISHEARD = re.compile(r"\b(free|pre|tree)\b(?=[\s-]*(o[\s'-]*clock|pm|p m|am|a m|works|is good|sounds|please))")
 LOCATION = re.compile(r"\b(where|address|located|location|directions|parking)\b")
 OPEN_DAY = re.compile(r"\b(are you|you guys|is it|is the office)\s+open\b|\bopen on\b")
 
@@ -180,6 +183,10 @@ class Brain:
     # ---- the conversation ----------------------------------------------------------
     def handle(self, utterance: str, session_id: str, caller_id: str | None = None) -> Reply:
         text = " ".join(utterance.strip().split())
+        expecting_time = self._calls.get(session_id) is not None and bool(
+            self._calls[session_id].offered or self._calls[session_id].date)
+        if expecting_time:
+            text = THREE_MISHEARD.sub("three", text.lower())
         low = re.sub(r"[.!?,]+", "", text.lower()).strip()
         st = self._calls.setdefault(session_id, _Call())
         pending = session_id in self.dialogue._pending
