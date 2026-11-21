@@ -145,3 +145,13 @@ def test_turn_ends_when_audio_stops_arriving_silence_suppression(tmp_path):
     script = [CallStart("C1", None), *[AudioIn(LOUD)] * 10, *[AudioIn(QUIET)] * 3, 0.8]
     asyncio.run(engine.run(FakeTransport(script)))
     assert len(asr.packets) == 1
+
+
+def test_logs_end_of_speech_to_first_reply_audio(tmp_path, caplog):
+    # Real-call latency without recording the caller: time from the last voiced frame to
+    # the first reply frame handed to the transport.
+    import logging, re
+    with caplog.at_level(logging.INFO, logger="receptionist.call"):
+        run(tmp_path, [CallStart("C1", "+15550000001"), *speech(), 0.6], ["book 2027-12-10 14:00"])
+    m = re.search(r"phase=reply_latency end_of_speech_to_audio_s=(\d+\.\d+)", caplog.text)
+    assert m and 0.25 <= float(m.group(1)) < 2.0          # includes the 300 ms end-of-turn wait
