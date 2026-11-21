@@ -25,6 +25,19 @@ PARTS = {"morning": (time(0), time(12)), "afternoon": (time(12), time(17)), "eve
 PREFERRED_HOURS = (10, 14, 11, 15, 9, 13, 16, 12)        # spread offers across the day
 DAY_WORDS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 MIN_CONFIDENCE = 0.45
+# Cue words: the tiny model may only take drastic routes when the words support it
+# (Pi suite: "Yeah." -> human, "Perfect." -> emergency, "Tomorrow is fine." -> injection).
+CUES = {"injection": re.compile(r"\b(ignore|pretend|override|admin|system prompt|instructions|rules|jailbreak|developer mode)\b"),
+        "human": re.compile(r"\b(someone|somebody|person|human|operator|representative|staff|manager|receptionist|real)\b"),
+        "emergency": re.compile(r"\b(emergency|urgent|hurt|injur|bleed|pain|911|ambulance|right now)\w*"),
+        "cancel": re.compile(r"\bcancel")}
+BOOK_WORDS = re.compile(r"\b(book|appointment|schedule|reserve|come in|slot|opening|availability|available)\b")
+SMALL_TALK = re.compile(r"^(hi|hello|hey|good (morning|afternoon|evening))?\W*(there\W*)?(how are you|how's it going|how are things)|^(hi|hello|hey)( there)?$")
+GOODBYE = re.compile(r"\b(bye|goodbye|that's all|that is all|that'll be all|have a (good|nice|great) day)\b")
+ORDINALS = {"first": 0, "earliest": 0, "1st": 0, "second": 1, "2nd": 1, "middle": 1, "third": 2, "3rd": 2,
+            "last": -1, "latest": -1}
+LOCATION = re.compile(r"\b(where|address|located|location|directions|parking)\b")
+OPEN_DAY = re.compile(r"\b(are you|you guys|is it|is the office)\s+open\b|\bopen on\b")
 
 
 @dataclass
@@ -98,6 +111,16 @@ class Brain:
         fmt = lambda t: spoken_time(datetime.combine(date.today(), t))
         return f"We're open {span}, {fmt(o)} to {fmt(c)}."
 
+    def _open_on(self, day: date) -> Reply:
+        name = DAY_WORDS[day.weekday()].capitalize()
+        span = self.hours.get(day.weekday())
+        if not span:
+            speech = f"We're closed on {name}s. {self._hours_speech()}"
+        else:
+            fmt = lambda t: spoken_time(datetime.combine(day, t))
+            speech = f"Yes, on {name}s we're open {fmt(span[0])} to {fmt(span[1])}."
+        return Reply(speech, "faq", speech=f"Sure. {speech}")
+
     def _faq(self, text: str) -> Reply:
         t = text.lower()
         for key, answer in (self.profile.get("faq") or {}).items():
@@ -169,10 +192,43 @@ class Brain:
             return Reply("Okay. Is there anything else I can help with?", "reply",
                          speech="Okay. Is there anything else I can help with?")
 
-        intent, conf = self.intents.classify(text)
+        if GOODBYE.search(low):
+            self._calls[session_id] = _Call()
+            return Reply("Thanks for calling. Have a great day!", "goodbye",
+                         speech="Okay. Thanks for calling. Have a great day!")
+        if SMALL_TALK.search(low):
+            return Reply("I'm doing well, thanks for asking! How can I help you today?", "small_talk",
+                         speech="Okay. I'm doing well, thanks for asking! How can I help you today?")
         now = self.clock()
+        if st.offered and AFFIRM.match(low) and not parse_when(text, now).time:
+            return Reply("Which time works best?", "ask_which", speech="Sure. Which time works best for you?")
+        if st.offered:
+            for word, i in ORDINALS.items():
+                if re.search(rf"\b{word}\b", low):
+                    pick = st.offered[i]
+                    return self.dialogue.handle(f"book {pick:%Y-%m-%d %H:%M}", session_id, caller_id=caller_id)
+        bare = AFFIRM.match(low) and not pending and not any(vars(parse_when(text, now)).values())
+        if bare and st.date and st.time:          # "yes" to a single time we just proposed
+            return self.dialogue.handle(f"book {datetime.combine(st.date, st.time):%Y-%m-%d %H:%M}", session_id,
+                                        caller_id=caller_id)
+        if bare:
+            return Reply("Great! What can I help you with?", "reply", speech="Okay. What can I help you with?")
+
+        intent, conf = self.intents.classify(text)
+        if intent in CUES and not CUES[intent].search(low):
+            intent, conf = ("book", 0.5) if BOOK_WORDS.search(low) else ("faq_unknown", 0.3)
+        if intent not in ("book", "availability", "reschedule") and BOOK_WORDS.search(low) and intent not in CUES:
+            intent, conf = "book", max(conf, 0.5)
         when = parse_when(text, now)
         has_when = bool(when.date or when.time or when.part)
+        if OPEN_DAY.search(low) and when.date:
+            return self._open_on(when.date)
+        if LOCATION.search(low) and not has_when:
+            answer = (self.profile.get("faq") or {}).get("location")
+            if answer:
+                return Reply(answer, "faq", speech=f"Sure. {answer}")
+            return Reply("I don't have that detail. I can have someone call you back.", "unknown",
+                         speech="Hmm, I don't have that detail. I can have someone call you back.")
 
         if intent == "injection":
             self._calls[session_id] = _Call()
