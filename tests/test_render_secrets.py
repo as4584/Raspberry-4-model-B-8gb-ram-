@@ -71,6 +71,7 @@ def test_secrets_service_runs_under_doppler_with_fallback_before_consumers():
     assert "EnvironmentFile=/etc/pi-receptionist/doppler.env" in u
     assert "doppler run --fallback /var/lib/pi-receptionist/secrets/doppler-fallback.json" in u
     assert "Before=asterisk.service pi-receptionist.service" in u and "Type=oneshot" in u
+    assert "-- /usr/bin/bash /opt/pi-receptionist/app/scripts/render_secrets.sh" in u   # no exec bit needed
     app = (D / "pi-receptionist.service").read_text()
     assert "EnvironmentFile=-/run/pi-receptionist/app.env" in app
     assert "/etc/pi-receptionist/ari.env" not in app            # no secret on disk any more
