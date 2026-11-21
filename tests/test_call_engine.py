@@ -157,3 +157,26 @@ def test_logs_end_of_speech_to_first_reply_audio(tmp_path, caplog):
         run(tmp_path, [CallStart("C1", "+15550000001"), *[AudioIn(LOUD)] * 10, 0.9], ["book 2027-12-10 14:00"])
     m = re.search(r"phase=reply_latency end_of_speech_to_audio_s=(\d+\.\d+)", caplog.text)
     assert m and 0.25 <= float(m.group(1)) < 2.0          # includes the 300 ms end-of-turn wait
+
+
+def test_line_noise_does_not_count_as_speech(tmp_path):
+    # Real call: steady line noise above the fixed loudness trigger kept the turn open
+    # (a 1-word turn reached whisper as 3.5 s). Speech must stand out from the call's noise.
+    noise = b"\xb0" * 160                       # steady hum, louder than the old fixed trigger
+    asr = RecordingASR()
+    engine = CallEngine(BookingStore(str(tmp_path / "n.sqlite")), asr=asr, tts=MockTTS())
+    script = [CallStart("C1", None), *[AudioIn(noise)] * 50,          # 1 s of noise: learn the floor
+              *[AudioIn(LOUD)] * 10, *[AudioIn(noise)] * 40, 0.5]     # 0.2 s speech, then noise
+    asyncio.run(engine.run(FakeTransport(script)))
+    assert len(asr.packets) == 1
+    assert len(asr.packets[0]) <= (10 + 15 + 15) * 160               # speech + pre-roll + 300 ms
+
+
+def test_noise_alone_never_starts_a_turn(tmp_path):
+    from receptionist.audio import rms_mulaw
+    noise = b"\xb0" * 160
+    assert rms_mulaw(noise) > 650                                    # would have triggered before
+    asr = RecordingASR()
+    engine = CallEngine(BookingStore(str(tmp_path / "m.sqlite")), asr=asr, tts=MockTTS())
+    asyncio.run(engine.run(FakeTransport([CallStart("C1", None), *[AudioIn(noise)] * 150, 0.5])))
+    assert asr.packets == []

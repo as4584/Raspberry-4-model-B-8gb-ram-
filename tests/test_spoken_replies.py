@@ -86,3 +86,14 @@ def test_every_spoken_reply_opens_with_a_short_cacheable_sentence(d):
 def test_shall_i_book_it_still_accepts_yes_and_no(d):
     d.handle("book december tenth at two pm", "s")
     assert d.handle("no", "s").action != "booked" and d.store.active() == []
+
+
+def test_every_reply_kind_opens_with_a_cached_opener(d):
+    # Real Telnyx call 2026-11-21: 'help' replies had no opener, so every misunderstood
+    # turn waited ~1.5 s for Piper before any audio. Every spoken reply must open fast.
+    from receptionist.dialogue import OPENERS
+    from receptionist.server import split_sentences
+    for said in ("hello", "hmm", "book something", "what", "cancel 9999"):
+        r = d.handle(said, "s" + said, caller_id="+15550000001")
+        first = split_sentences(r.speech or r.text)[0]
+        assert first in OPENERS, (said, first)
