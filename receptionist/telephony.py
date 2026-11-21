@@ -89,9 +89,11 @@ class CallEngine:
 
     def __init__(self, store: BookingStore, asr, tts, require_caller_id: bool = False, greet: bool = False,
                  transfer_to: str | None = None, review_dir: str | None = None,
-                 review_callers: set[str] | None = None):
+                 review_callers: set[str] | None = None, dialogue_factory=None):
         self.store, self.asr, self.tts, self.require_caller_id = store, asr, tts, require_caller_id
         self.review_dir, self.review_callers = review_dir, set(review_callers or ())
+        # One conversation object per call (rule Dialogue, or the tiny-model Brain).
+        self.dialogue_factory = dialogue_factory or (lambda: Dialogue(store, require_caller_id=require_caller_id))
         self.transfer_to = transfer_to   # a human's number; None -> offer a callback instead
         self.greet = greet           # answer like a person; the legacy Twilio path keeps its old behaviour
 
@@ -227,7 +229,7 @@ class CallEngine:
                     if self.review_dir and review_key(caller_id) in self.review_callers:
                         review = ReviewLog(self.review_dir, call_id)
                         review.write(type="start", call=call_id)
-                    dialogue = Dialogue(self.store, require_caller_id=self.require_caller_id)
+                    dialogue = self.dialogue_factory()
                     if self.greet:
                         task = asyncio.create_task(greet(generation))   # barge-in cancels it like any reply
                         jobs.add(task); task.add_done_callback(jobs.discard)

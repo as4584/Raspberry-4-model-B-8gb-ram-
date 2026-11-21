@@ -87,10 +87,24 @@ def select_tts(env) -> tuple[object,str]:
         return tts,'resident'
     return PiperTTS(env.get('PIPER_CLI','piper'),env['PIPER_MODEL']),'cli'
 
+def select_dialogue_factory(env, store, require_caller_id: bool, load_intents=None) -> tuple[Callable[[],object],str]:
+    """The tiny-model Brain when BRAIN_DIR holds a loadable bundle; otherwise the rule Dialogue."""
+    if env.get('BRAIN_DIR'):
+        try:
+            if load_intents is None:
+                from receptionist.intent_model import load as load_intents
+            intents=load_intents(env['BRAIN_DIR'])
+            from receptionist.brain import Brain
+            return (lambda: Brain(store,intents=intents,require_caller_id=require_caller_id)),'brain'
+        except Exception:
+            log.warning('brain unavailable, using rule dialogue',exc_info=True)
+    return (lambda: Dialogue(store,require_caller_id=require_caller_id)),'rules'
+
 def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None=None, tts:object|None=None, max_sessions:int=MAX_SIM_SESSIONS) -> FastAPI:
     settings=settings or Settings()
     _enable_call_timing_logs()
     store=BookingStore(settings.db_path)
+    dialogue_factory,brain_kind=select_dialogue_factory(os.environ,store,settings.require_caller_id)
     asr_kind='custom'
     if asr_factory is None:
         asr_factory,asr_kind=select_asr_factory(os.environ)
@@ -118,7 +132,7 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
     sessions_lock=threading.Lock()  # sync endpoints run on a thread pool
 
     @app.get('/healthz')
-    def healthz():return {'status':'ok','voice_backend':os.getenv('VOICE_BACKEND','mock'),'asr':asr_kind,'tts':tts_kind}
+    def healthz():return {'status':'ok','voice_backend':os.getenv('VOICE_BACKEND','mock'),'asr':asr_kind,'tts':tts_kind,'brain':brain_kind}
 
     @app.get('/readyz')
     def readyz():
@@ -157,6 +171,7 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
         # chan_websocket asks for the "media" sub-protocol; echo it or the handshake fails.
         await ws.accept(subprotocol='media' if 'media' in ws.scope.get('subprotocols',[]) else None)
         engine=CallEngine(store,asr=asr_factory(),tts=tts,require_caller_id=settings.require_caller_id,greet=True,
+                          dialogue_factory=dialogue_factory,
                           transfer_to=caller_number(os.getenv('TRANSFER_TO')),
                           review_dir=os.getenv('REVIEW_DIR','/var/lib/pi-receptionist/data/review'),
                           review_callers={k for k in (review_key(x) for x in os.getenv('REVIEW_CALLERS','').split(',')) if k})
