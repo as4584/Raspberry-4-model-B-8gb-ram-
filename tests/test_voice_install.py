@@ -88,3 +88,11 @@ def test_voice_install_builds_and_enables_resident_whisper():
     smoke = " ".join(l for l in p.splitlines() if "systemd-run" in l)
     assert "whisper-daemon" in smoke and "READY" in smoke                # loads the model in the sandbox
     assert p.index("build_whisper_daemon") < p.index("cp -a")             # built before copying
+
+
+@needs_bash
+def test_voice_install_adds_the_brain_bundle_when_given():
+    r, p = plan("/home/x/w/build/bin", "/home/x/m.bin", "/home/x/p", "/home/x/v.onnx", "/home/x/models/brain")
+    assert r.returncode == 0, r.stderr
+    assert "cp -a /home/x/models/brain/. /opt/pi-receptionist/speech/brain/" in p
+    assert "BRAIN_DIR=/opt/pi-receptionist/speech/brain" in p
