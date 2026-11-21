@@ -24,12 +24,19 @@ SCENARIO = HERE.parent / "tests" / "sipp" / "receptionist_call.xml"
 DB = "/var/lib/pi-receptionist/data/receptionist.sqlite"
 
 
+def turn_file_name(text: str, lead_ms: int) -> str:
+    """SIPp's rtp_stream splits on commas, so names are plain [a-z0-9_-] plus a short hash."""
+    import hashlib, re
+    slug = re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_")[:40]
+    return f"{slug}-{hashlib.sha1(text.encode()).hexdigest()[:8]}-{lead_ms}.ulaw"
+
+
 def turn_audio(text: str, folder: Path, lead_ms: int = 0) -> Path:
     """Piper speech as raw u-law for SIPp. lead_ms of silence goes first: a real phone sends
     continuous RTP (silence included) from answer, so Asterisk's strictrtp has learned the
     source before the caller speaks. Without it, SIPp's 2nd+ calls lost ~0.3 s of 'Book'."""
     import asr_sweep  # Piper -> the same 8 kHz u-law path as a phone call
-    path = folder / (text.replace(" ", "_")[:40] + f"-{lead_ms}.ulaw")
+    path = folder / turn_file_name(text, lead_ms)
     path.write_bytes(b"\xff" * (8 * lead_ms) + asr_sweep.synth(text, folder))
     return path
 
