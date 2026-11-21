@@ -132,9 +132,10 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--caller", default="+15550001000")
     ap.add_argument("--only", default="")
+    ap.add_argument("--suite", nargs="+", default=["natural.json", "broad.json"])
     ap.add_argument("--out", default=str(Path.home() / "conversations.json"))
     a = ap.parse_args(argv)
-    suite = [s for s in json.loads(SUITE.read_text()) if not a.only or s["name"] == a.only]
+    suite = [s for f in a.suite for s in json.loads((SUITE.parent / f).read_text()) if not a.only or s["name"] == a.only]
     work = Path(tempfile.mkdtemp(prefix="conv-"))
     results = [run_one(s, a.caller, work) for s in suite]
     Path(a.out).write_text(json.dumps(results, indent=1))
