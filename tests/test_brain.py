@@ -136,3 +136,71 @@ def test_after_hours_time_offers_that_days_openings(brain):
     r = brain.handle("Can I come in tomorrow at seven pm?", "c", caller_id=CALLER)
     assert r.action == "offer_slots" and "tomorrow" in r.speech.lower()
     assert "seven" not in r.speech.split("I have", 1)[1]                  # never offers a closed time
+
+
+# --- batch from the 25-conversation Pi run (13/25), 2026-11-21 ---------------------------
+
+class Misfiring(FakeIntents):
+    """Reproduces the real model's observed misfires."""
+    MAP = {"yeah": ("human", 0.7), "perfect": ("emergency", 0.6), "yes": ("human", 0.6),
+           "tomorrow is fine": ("injection", 0.55), "thanks bye": ("cancel", 0.7),
+           "great i need to book an appointment": ("faq_unknown", 0.4)}
+    def classify(self, text):
+        k = re.sub(r"[^a-z ]", "", text.lower()).strip()
+        return self.MAP.get(k) or super().classify(text)
+
+
+import re  # noqa: E402
+
+
+@pytest.fixture
+def mis(tmp_path):
+    return Brain(BookingStore(str(tmp_path / "m.sqlite")), intents=Misfiring(), clock=lambda: NOW)
+
+
+@pytest.mark.parametrize("said", ["Yeah.", "Perfect.", "Yes."])
+def test_bare_yes_never_hands_off(mis, said):
+    r = mis.handle(said, "c", caller_id=CALLER)
+    assert r.action not in ("handoff", "refuse")
+
+
+def test_injection_needs_trick_words(mis):
+    mis.handle("What do you have?", "c", caller_id=CALLER)
+    r = mis.handle("Tomorrow is fine.", "c", caller_id=CALLER)
+    assert r.action == "offer_slots"
+
+
+def test_booking_words_win_over_a_weak_model(mis):
+    assert mis.handle("Great, I need to book an appointment.", "c", caller_id=CALLER).action == "ask_day"
+
+
+def test_small_talk_gets_a_human_answer_not_a_calendar(brain):
+    r = brain.handle("Hi there, how are you doing today?", "c", caller_id=CALLER)
+    assert r.action == "small_talk" and "help" in r.speech
+
+
+def test_pick_from_the_offered_list(brain):
+    brain.handle("What do you have tomorrow morning?", "c", caller_id=CALLER)
+    r = brain.handle("The first one.", "c", caller_id=CALLER)
+    assert r.action == "confirm_required"
+
+
+def test_goodbye(mis):
+    r = mis.handle("Thanks, bye.", "c", caller_id=CALLER)
+    assert r.action == "goodbye" and "thank" in r.speech.lower()
+
+
+def test_unknown_details_are_not_answered_with_hours(brain):
+    r = brain.handle("Where are you located?", "c", caller_id=CALLER)
+    assert "open" not in r.speech.lower() and r.action == "unknown"
+
+
+def test_open_on_a_day_question(brain):
+    r = brain.handle("Are you open on Sunday?", "c", caller_id=CALLER)
+    assert r.action == "faq" and "closed on sunday" in r.speech.lower()
+
+
+def test_yes_to_an_offer_list_asks_which(brain):
+    brain.handle("Anything tomorrow?", "c", caller_id=CALLER)
+    r = brain.handle("Yes.", "c", caller_id=CALLER)
+    assert r.action == "ask_which"
