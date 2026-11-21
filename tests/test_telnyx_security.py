@@ -48,7 +48,11 @@ def test_credentials_only_in_ram_include_with_tls_registration():
 
 def test_inbound_rejected_unless_signalling_and_media_are_encrypted():
     tel = EXT[EXT.index("[from-telnyx]"):].split("\n[")[0]
-    assert 'GotoIf($["${CHANNEL(secure_signaling)}${CHANNEL(secure_media)}" = "11"]?ok)' in tel
+    # Real call, Pi 2026-11-21: CHANNEL(secure_signaling)/(secure_media) are IAX2-only items;
+    # under PJSIP they are "unknown", so every encrypted Telnyx call was rejected. PJSIP uses
+    # CHANNEL(pjsip,secure) (TLS signalling) and CHANNEL(rtp,secure) (SRTP media).
+    assert 'GotoIf($["${CHANNEL(pjsip,secure)}${CHANNEL(rtp,secure)}" = "11"]?ok)' in tel
+    assert "secure_signaling)" not in EXT and "secure_media)" not in EXT
     assert "Hangup(21)" in tel and "Goto(receptionist,s,1)" in tel
     assert tel.index("Hangup(21)") < tel.index("Goto(receptionist,s,1)")
 
