@@ -129,6 +129,23 @@ class Brain:
                 break
         return sorted(free)
 
+    def _open_at(self, day: date, at: time) -> bool:
+        span = self.hours.get(day.weekday())
+        end = (datetime.combine(day, at) + timedelta(minutes=30)).time()
+        return bool(span) and span[0] <= at and end <= span[1] and end > at
+
+    def _next_open_day(self, day: date) -> date | None:
+        for i in range(1, 8):
+            d = day + timedelta(days=i)
+            if self.hours.get(d.weekday()):
+                return d
+        return None
+
+    @staticmethod
+    def _list(slots: list[datetime]) -> str:
+        times = [spoken_time(s) for s in slots]
+        return times[0] if len(times) == 1 else ", ".join(times[:-1]) + f", or {times[-1]}"
+
     @staticmethod
     def _day_words(day: date, today: date) -> str:
         if day == today:
@@ -188,8 +205,32 @@ class Brain:
         if when.part:
             st.part = when.part
         if st.date and st.time:
-            starts = datetime.combine(st.date, st.time)
-            return self.dialogue.handle(f"book {starts:%Y-%m-%d %H:%M}", session_id, caller_id=caller_id)
+            if self._open_at(st.date, st.time):
+                starts = datetime.combine(st.date, st.time)
+                return self.dialogue.handle(f"book {starts:%Y-%m-%d %H:%M}", session_id, caller_id=caller_id)
+            # Closed then: never a dead end -- offer that day's openings, or the next open day's.
+            day = self._day_words(st.date, now.date())
+            asked, st.time = st.time, None
+            if self.hours.get(st.date.weekday()):
+                note = f"We're closed at {spoken_time(datetime.combine(st.date, asked))} {day}."
+            else:
+                note = f"We're closed {day}."
+                nxt = self._next_open_day(st.date)
+                if nxt is None:
+                    return Reply(note, "no_slots", speech=f"Hmm, okay. {note} Would another day work?")
+                st.date, day = nxt, self._day_words(nxt, now.date())
+                if self._open_at(nxt, asked):
+                    st.time = asked
+                    return Reply(f"{note} {day} at {spoken_time(datetime.combine(nxt, asked))}?", "offer_slots",
+                                 speech=f"Hmm, okay. {note} I do have {day[0].upper() + day[1:]} at "
+                                        f"{spoken_time(datetime.combine(nxt, asked))}. Would that work?")
+            slots = self._free_slots(st.date, st.part)
+            if not slots:
+                return Reply(f"{note} Nothing else is open {day}.", "no_slots",
+                             speech=f"Hmm, okay. {note} Would another day work?")
+            st.offered = slots
+            return Reply(f"{note} {day}: {self._list(slots)}", "offer_slots",
+                         speech=f"Hmm, okay. {note} {day[0].upper() + day[1:]} I have {self._list(slots)}. Which works best?")
         if st.date:
             slots = self._free_slots(st.date, st.part)
             day = self._day_words(st.date, now.date())
@@ -197,8 +238,6 @@ class Brain:
                 return Reply(f"Sorry, nothing is open {day}.", "no_slots",
                              speech=f"Hmm, okay. Sorry, nothing is open {day}. Would another day work?")
             st.offered = slots
-            times = [spoken_time(s) for s in slots]
-            listed = times[0] if len(times) == 1 else ", ".join(times[:-1]) + f", or {times[-1]}"
-            return Reply(f"{day}: {listed}", "offer_slots",
-                         speech=f"Sure. {day[0].upper() + day[1:]} I have {listed}. Which works best?")
+            return Reply(f"{day}: {self._list(slots)}", "offer_slots",
+                         speech=f"Sure. {day[0].upper() + day[1:]} I have {self._list(slots)}. Which works best?")
         return Reply("What day works for you?", "ask_day", speech="Sure, I can check. What day works for you?")

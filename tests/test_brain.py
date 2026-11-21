@@ -134,4 +134,5 @@ def test_closed_day_offers_the_next_opening_instead_of_a_dead_end(sat_brain):
 
 def test_after_hours_time_offers_that_days_openings(brain):
     r = brain.handle("Can I come in tomorrow at seven pm?", "c", caller_id=CALLER)
-    assert r.action == "offer_slots" and "seven" not in r.speech and "tomorrow" in r.speech.lower()
+    assert r.action == "offer_slots" and "tomorrow" in r.speech.lower()
+    assert "seven" not in r.speech.split("I have", 1)[1]                  # never offers a closed time
