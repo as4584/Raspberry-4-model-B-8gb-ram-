@@ -180,3 +180,33 @@ def test_noise_alone_never_starts_a_turn(tmp_path):
     engine = CallEngine(BookingStore(str(tmp_path / "m.sqlite")), asr=asr, tts=MockTTS(), greet=True)
     asyncio.run(engine.run(FakeTransport([CallStart("C1", None), *[AudioIn(noise)] * 150, 0.5])))
     assert asr.packets == []
+
+
+class SlowDialogue:
+    def __init__(self, delay): self.delay = delay
+    def handle(self, text, session, caller_id=None):
+        import time as _t
+        from receptionist.dialogue import Reply
+        _t.sleep(self.delay)
+        return Reply("Great, you're all set.", "booked", speech="Great, you're all set.")
+
+
+def run_with_dialogue(tmp_path, dialogue):
+    spoken = []
+    class TTS:
+        async def synthesize(self, text):
+            spoken.append(text); return b"\xff" * 160
+    eng = CallEngine(BookingStore(str(tmp_path / "s.sqlite")), asr=MockASR(["yes"]), tts=TTS(),
+                     dialogue_factory=lambda: dialogue)
+    asyncio.run(eng.run(FakeTransport([CallStart("C1", None), *speech(), 1.6])))
+    return spoken
+
+
+def test_slow_dialogue_is_masked_with_one_moment(tmp_path):
+    # Pi: bookings occasionally took 2-5 s (slow USB fsync); a caller hears dead air.
+    spoken = run_with_dialogue(tmp_path, SlowDialogue(0.9))
+    assert spoken[:2] == ["One moment.", "Great, you're all set."]
+
+
+def test_fast_dialogue_gets_no_filler(tmp_path):
+    assert run_with_dialogue(tmp_path, SlowDialogue(0.0)) == ["Great, you're all set."]

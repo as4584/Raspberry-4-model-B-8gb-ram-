@@ -253,3 +253,21 @@ def test_pre_works_after_an_offer(sat_brain):
     sat_brain.handle("Hello, could I come in sometime tomorrow afternoon?", "c", caller_id=CALLER)
     r = sat_brain.handle("pre-works for me.", "c", caller_id=CALLER)
     assert r.action == "confirm_required" and "three p m" in r.speech
+
+
+def test_time_and_yes_in_one_breath_books_it(brain):
+    # Pi suite: "2 p.m. yes." -- the caller picked the time and confirmed at once.
+    brain.handle("Anything tomorrow?", "c", caller_id=CALLER)
+    r = brain.handle("2 p.m. yes.", "c", caller_id=CALLER)
+    assert r.action == "booked"
+
+
+def test_three_misheard_as_pretty_when_a_time_is_expected(brain):
+    brain.handle("Do you have anything open tomorrow afternoon?", "c", caller_id=CALLER)
+    r = brain.handle("Pretty works for me.", "c", caller_id=CALLER)
+    assert r.action == "confirm_required" and "three p m" in r.speech
+
+
+def test_pretty_good_is_not_a_time(brain):
+    r = brain.handle("Pretty good, thanks.", "c", caller_id=CALLER)
+    assert r.action != "confirm_required"
