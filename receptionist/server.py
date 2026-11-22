@@ -87,7 +87,15 @@ def select_tts(env) -> tuple[object,str]:
         return tts,'resident'
     return PiperTTS(env.get('PIPER_CLI','piper'),env['PIPER_MODEL']),'cli'
 
-def select_dialogue_factory(env, store, require_caller_id: bool, load_intents=None) -> tuple[Callable[[],object],str]:
+def load_business_profile(env) -> tuple[dict|None,str]:
+    """(profile, greeting): the owner's facts file, or (None, generic greeting) if absent."""
+    from receptionist.profile import greeting_for, load_profile
+    path=env.get('BUSINESS_PROFILE',str(Path(__file__).resolve().parents[1]/'deploy'/'business_profile.json'))
+    try:prof=load_profile(path)
+    except (OSError,ValueError):prof=None
+    return prof,greeting_for(prof)
+
+def select_dialogue_factory(env, store, require_caller_id: bool, load_intents=None, profile=None) -> tuple[Callable[[],object],str]:
     """The tiny-model Brain when BRAIN_DIR holds a loadable bundle; otherwise the rule Dialogue."""
     if env.get('BRAIN_DIR'):
         try:
@@ -95,7 +103,7 @@ def select_dialogue_factory(env, store, require_caller_id: bool, load_intents=No
                 from receptionist.intent_model import load as load_intents
             intents=load_intents(env['BRAIN_DIR'])
             from receptionist.brain import Brain
-            return (lambda: Brain(store,intents=intents,require_caller_id=require_caller_id)),'brain'
+            return (lambda: Brain(store,intents=intents,require_caller_id=require_caller_id,profile=profile)),'brain'
         except Exception:
             log.warning('brain unavailable, using rule dialogue',exc_info=True)
     return (lambda: Dialogue(store,require_caller_id=require_caller_id)),'rules'
@@ -104,7 +112,8 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
     settings=settings or Settings()
     _enable_call_timing_logs()
     store=BookingStore(settings.db_path)
-    dialogue_factory,brain_kind=select_dialogue_factory(os.environ,store,settings.require_caller_id)
+    profile,greeting=load_business_profile(os.environ)
+    dialogue_factory,brain_kind=select_dialogue_factory(os.environ,store,settings.require_caller_id,profile=profile)
     asr_kind='custom'
     if asr_factory is None:
         asr_factory,asr_kind=select_asr_factory(os.environ)
@@ -117,7 +126,7 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
         warm=None
         if getattr(tts,'prewarm_phrases',None):
             async def prewarm():
-                try:await tts.prewarm(tts.prewarm_phrases)
+                try:await tts.prewarm(list(tts.prewarm_phrases)+split_sentences(greeting))
                 except Exception:log.warning('tts prewarm failed',exc_info=True)
             warm=asyncio.create_task(prewarm())
         yield
@@ -171,7 +180,7 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
         # chan_websocket asks for the "media" sub-protocol; echo it or the handshake fails.
         await ws.accept(subprotocol='media' if 'media' in ws.scope.get('subprotocols',[]) else None)
         engine=CallEngine(store,asr=asr_factory(),tts=tts,require_caller_id=settings.require_caller_id,greet=True,
-                          dialogue_factory=dialogue_factory,
+                          dialogue_factory=dialogue_factory,greeting=greeting,
                           transfer_to=caller_number(os.getenv('TRANSFER_TO')),
                           review_dir=os.getenv('REVIEW_DIR','/var/lib/pi-receptionist/data/review'),
                           review_callers={k for k in (review_key(x) for x in os.getenv('REVIEW_CALLERS','').split(',')) if k})

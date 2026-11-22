@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo
 from receptionist import datetime_resolve as dr
 from receptionist.booking import BookingStore
 from receptionist.dialogue import DEFAULT_HOURS, Dialogue, Reply
+from receptionist.profile import answer as profile_answer
 from receptionist.speech_format import spoken_time
 
 AFFIRM = re.compile(r"^(yes|yeah|yep|yup|sure|correct|right|that'?s right|sounds good|perfect|ok(ay)?|please do)\b")
@@ -95,8 +96,8 @@ class Brain:
                  hours=None, profile: dict | None = None, require_caller_id: bool = False, clock=None):
         self.store, self.intents = store, intents
         self.tz = ZoneInfo(timezone_name)
-        self.hours = DEFAULT_HOURS if hours is None else hours
         self.profile = profile or {}
+        self.hours = hours if hours is not None else (self.profile.get('hours_parsed') or DEFAULT_HOURS)
         self.clock = clock or (lambda: datetime.now(self.tz))
         self.dialogue = Dialogue(store, timezone_name=timezone_name, hours=self.hours,
                                  require_caller_id=require_caller_id, clock=self.clock)
@@ -125,12 +126,18 @@ class Brain:
         return Reply(speech, "faq", speech=f"Sure. {speech}")
 
     def _faq(self, text: str) -> Reply:
-        t = text.lower()
-        for key, answer in (self.profile.get("faq") or {}).items():
-            if key.lower() in t:
-                return Reply(answer, "faq", speech=f"Sure. {answer}")
+        topic, ans = profile_answer(self.profile, text)
+        if ans:
+            return Reply(ans, "faq", speech=f"Sure. {ans}")
+        if topic or not re.search(r"\b(hours|open|close|closing|opening)\b", text.lower()):
+            return self._unknown()
         speech = self._hours_speech()
         return Reply(speech, "faq", speech=f"Sure. {speech}")
+
+    @staticmethod
+    def _unknown() -> Reply:
+        return Reply("I'm not sure about that. I can have someone call you back, or help you book.", "unknown",
+                     speech="Hmm, I'm not sure about that. I can have someone call you back, or help you book.")
 
     # ---- calendar ------------------------------------------------------------------
     def _free_slots(self, day: date, part: str | None, n: int = 3) -> list[datetime]:
@@ -231,11 +238,7 @@ class Brain:
         if OPEN_DAY.search(low) and when.date:
             return self._open_on(when.date)
         if LOCATION.search(low) and not has_when:
-            answer = (self.profile.get("faq") or {}).get("location")
-            if answer:
-                return Reply(answer, "faq", speech=f"Sure. {answer}")
-            return Reply("I don't have that detail. I can have someone call you back.", "unknown",
-                         speech="Hmm, I don't have that detail. I can have someone call you back.")
+            return self._faq(text)
 
         if intent == "injection":
             self._calls[session_id] = _Call()
@@ -252,7 +255,9 @@ class Brain:
                                             caller_id=caller_id)
             return Reply("What's your four digit booking code?", "ask_code",
                          speech="Sure. What's your four digit booking code?")
-        if intent == "faq" and not has_when:
+        if (intent in ("faq", "faq_unknown") or profile_answer(self.profile, text)[1]) and not has_when:
+            if intent == "faq_unknown" and not profile_answer(self.profile, text)[1]:
+                return self._unknown()
             return self._faq(text)
         booking_turn = intent in ("book", "availability", "reschedule") and conf >= MIN_CONFIDENCE
         follow_up = has_when and (st.date or st.time or st.offered or pending)

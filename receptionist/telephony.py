@@ -89,13 +89,15 @@ class CallEngine:
 
     def __init__(self, store: BookingStore, asr, tts, require_caller_id: bool = False, greet: bool = False,
                  transfer_to: str | None = None, review_dir: str | None = None,
-                 review_callers: set[str] | None = None, dialogue_factory=None):
+                 review_callers: set[str] | None = None, dialogue_factory=None,
+                 greeting: str | None = None):
         self.store, self.asr, self.tts, self.require_caller_id = store, asr, tts, require_caller_id
         self.review_dir, self.review_callers = review_dir, set(review_callers or ())
         # One conversation object per call (rule Dialogue, or the tiny-model Brain).
         self.dialogue_factory = dialogue_factory or (lambda: Dialogue(store, require_caller_id=require_caller_id))
         self.transfer_to = transfer_to   # a human's number; None -> offer a callback instead
         self.greet = greet           # answer like a person; the legacy Twilio path keeps its old behaviour
+        self.greeting = greeting or GREETING
 
     async def run(self, transport: CallTransport) -> None:
         asr, tts = self.asr, self.tts
@@ -155,7 +157,7 @@ class CallEngine:
 
         async def greet(this_generation: int):
             try:
-                await speak(GREETING, this_generation, 'greeting', time.monotonic())
+                await speak(self.greeting, this_generation, 'greeting', time.monotonic())
             except asyncio.CancelledError:
                 raise
             except Exception:

@@ -1,0 +1,6 @@
+{
+  "_note": "LexMakesIt facts for the phone receptionist. Fill in the answers; an empty answer makes it offer a callback instead of guessing. Hours are 24h HH:MM-HH:MM; remove a day to close it.",
+  "name": "LexMakesIt",
+  "hours": {"mon": "09:00-17:00", "tue": "09:00-17:00", "wed": "09:00-17:00", "thu": "09:00-17:00", "fri": "09:00-17:00"},
+  "faq": {"services": "", "price": "", "location": "", "parking": "", "payment": "", "contact": ""}
+}
