@@ -271,3 +271,37 @@ def test_three_misheard_as_pretty_when_a_time_is_expected(brain):
 def test_pretty_good_is_not_a_time(brain):
     r = brain.handle("Pretty good, thanks.", "c", caller_id=CALLER)
     assert r.action != "confirm_required"
+
+
+# --- the v2 intent model's new classes --------------------------------------------------
+
+class V2(FakeIntents):
+    MAP = {"what services do you offer": ("business", 0.95), "nice to meet you": ("small_talk", 0.9),
+           "talk soon": ("goodbye", 0.9), "go for it": ("affirm", 0.9), "neither works": ("negate", 0.9)}
+    def classify(self, text):
+        k = re.sub(r"[^a-z ]", "", text.lower()).strip()
+        return self.MAP.get(k) or super().classify(text)
+
+
+@pytest.fixture
+def v2(tmp_path):
+    from receptionist.profile import load_profile
+    from pathlib import Path
+    prof = load_profile(str(Path(__file__).resolve().parents[1] / "deploy" / "business_profile.json"))
+    return Brain(BookingStore(str(tmp_path / "v2.sqlite")), intents=V2(), clock=lambda: NOW, profile=prof)
+
+
+def test_v2_business_class_answers_from_the_profile(v2):
+    assert "website design" in v2.handle("What services do you offer?", "c").speech
+
+
+def test_v2_small_talk_and_goodbye_classes(v2):
+    assert v2.handle("Nice to meet you.", "c").action == "small_talk"
+    assert v2.handle("Talk soon.", "c").action == "goodbye"
+
+
+def test_v2_affirm_and_negate_classes(v2):
+    v2.handle("Tomorrow at ten please.", "c", caller_id=CALLER)
+    assert v2.handle("Go for it.", "c", caller_id=CALLER).action == "booked"
+    v2.handle("Anything tomorrow?", "d", caller_id=CALLER)
+    assert v2.handle("Neither works.", "d", caller_id=CALLER).action != "booked"
