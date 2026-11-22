@@ -330,3 +330,22 @@ def test_variation_is_reproducible_with_a_seed(tmp_path):
 def test_time_then_yes_please_in_one_breath_books(brain):
     brain.handle("Anything tomorrow?", "c", caller_id=CALLER)
     assert brain.handle("Two in the afternoon works. Yes, please.", "c", caller_id=CALLER).action == "booked"
+
+
+# --- unclear replies: ask again like a person (Ryan voice: "Yes." heard as "Just") -------
+
+def test_unclear_short_reply_to_a_confirmation_asks_again(brain):
+    brain.handle("Tomorrow at ten please.", "c", caller_id=CALLER)
+    r = brain.handle("Just", "c", caller_id=CALLER)
+    assert r.action == "confirm_again" and "yes" in r.speech.lower()
+    assert brain.handle("Yes.", "c", caller_id=CALLER).action == "booked"      # still pending
+
+
+def test_garbage_transcript_asks_to_repeat(brain):
+    r = brain.handle("[inainainainainainainaina", "c", caller_id=CALLER)
+    assert r.action == "repeat" and "catch" in r.speech.lower()
+
+
+def test_real_short_answers_still_work_while_pending(brain):
+    brain.handle("Tomorrow at ten please.", "c", caller_id=CALLER)
+    assert brain.handle("Make it eleven.", "c", caller_id=CALLER).action == "confirm_required"
