@@ -210,3 +210,34 @@ def test_slow_dialogue_is_masked_with_one_moment(tmp_path):
 
 def test_fast_dialogue_gets_no_filler(tmp_path):
     assert run_with_dialogue(tmp_path, SlowDialogue(0.0)) == ["Great, you're all set."]
+
+
+class Repeats:
+    """A dialogue that keeps failing to understand (what a noisy line looks like to the brain)."""
+    def handle(self, text, session, caller_id=None):
+        from receptionist.dialogue import Reply
+        return Reply("Sorry, I didn't catch that.", "repeat", speech="Sorry, I didn't catch that.")
+
+
+def noisy_call(tmp_path, floor_frame, turns=2):
+    spoken = []
+    class TTS:
+        async def synthesize(self, text):
+            spoken.append(text); return b"\xff" * 160
+    eng = CallEngine(BookingStore(str(tmp_path / "z.sqlite")), asr=MockASR(["huh"] * turns), tts=TTS(),
+                     dialogue_factory=lambda: Repeats(), greet=True)
+    script = [CallStart("C1", None), *[AudioIn(floor_frame)] * 50]
+    for _ in range(turns):
+        script += [*[AudioIn(LOUD)] * 10, *[AudioIn(floor_frame)] * 40, 1.0]
+    asyncio.run(eng.run(FakeTransport(script)))
+    return spoken
+
+
+def test_noisy_line_says_it_is_hard_to_hear_once(tmp_path):
+    spoken = noisy_call(tmp_path, b"\xb0" * 160)                      # loud steady background
+    said = [s for s in spoken if "background noise" in s]
+    assert len(said) == 1
+
+
+def test_quiet_line_never_blames_noise(tmp_path):
+    assert not [s for s in noisy_call(tmp_path, QUIET) if "background noise" in s]
