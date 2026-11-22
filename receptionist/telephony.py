@@ -128,13 +128,14 @@ class CallEngine:
             # Synthesise sentence k+1 while sentence k streams: the caller hears the first
             # sentence without waiting for the whole reply.
             parts = split_sentences(words) or [words]
+            t_tts = time.monotonic()
             pending = asyncio.create_task(tts.synthesize(parts[0]))
             try:
                 for k in range(len(parts)):
                     outbound = await pending
                     if k == 0:
-                        log.info('call=%s gen=%d phase=first_audio_ready since_asr_done_s=%.2f', call_id,
-                                 this_generation, time.monotonic() - t_ref)
+                        log.info('call=%s gen=%d phase=first_audio_ready tts_first_s=%.2f since_asr_done_s=%.2f',
+                                 call_id, this_generation, time.monotonic() - t_tts, time.monotonic() - t_ref)
                     pending = asyncio.create_task(tts.synthesize(parts[k + 1])) if k + 1 < len(parts) else None
                     if this_generation != generation:
                         return
@@ -177,10 +178,11 @@ class CallEngine:
                     return
                 # Booking does blocking SQLite I/O (busy waits up to 15 s); keep it off the
                 # event loop so other calls keep streaming.
+                t_d = time.monotonic()
                 reply = await asyncio.to_thread(handle_locked, utterance, call_id or 'invalid')
                 # The action name (never the caller's words) is safe to log and explains outcomes.
-                log.info('call=%s gen=%d phase=dialogue action=%s words=%d', call_id, this_generation,
-                         reply.action, len(utterance.split()))
+                log.info('call=%s gen=%d phase=dialogue action=%s words=%d dialogue_s=%.2f', call_id, this_generation,
+                         reply.action, len(utterance.split()), time.monotonic() - t_d)
                 if os.getenv('LOG_TRANSCRIPTS') == '1':      # test runs only: never on by default
                     log.info('call=%s gen=%d heard=%r', call_id, this_generation, utterance)
                 words = reply.speech or reply.text   # phone wording when the dialogue provides it (#38)
