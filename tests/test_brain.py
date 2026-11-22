@@ -378,3 +378,8 @@ def test_tomorrow_misheard(brain, heard):
 def test_more_ways_to_say_yes(brain, yes):
     talk(brain, "Book tomorrow at 3 pm.", yes)
     assert booked(brain)
+
+
+def test_bare_number_after_offer_is_not_garbage(brain):
+    talk(brain, "Appointment tomorrow.")
+    assert talk(brain, "10")[0].action != "repeat"
