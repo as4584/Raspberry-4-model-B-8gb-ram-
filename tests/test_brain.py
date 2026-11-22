@@ -217,3 +217,39 @@ def test_three_misheard_as_free_or_pre_when_a_time_is_expected(brain, heard):
 def test_free_still_means_free_without_a_time_context(brain):
     r = brain.handle("Are you free tomorrow?", "c", caller_id=CALLER)
     assert r.action == "offer_slots"
+
+
+# --- batch 2 from the Pi run (15/25) ----------------------------------------------------
+
+def test_closed_day_without_time_offers_the_next_open_day(sat_brain):
+    r = sat_brain.handle("Anything tomorrow?", "c", caller_id=CALLER)          # tomorrow = Sunday
+    assert r.action == "offer_slots" and "closed" in r.speech.lower() and "Monday" in r.speech
+
+
+def test_accepting_a_proposed_time_is_the_confirmation(sat_brain):
+    r = sat_brain.handle("Book me tomorrow at eleven.", "c", caller_id=CALLER)
+    assert "Monday" in r.speech and r.action == "confirm_required"
+    assert sat_brain.handle("Yes.", "c", caller_id=CALLER).action == "booked"
+
+
+def test_no_with_a_new_time_is_a_correction(brain):
+    brain.handle("Tomorrow at ten please.", "c", caller_id=CALLER)
+    r = brain.handle("No, wait, make it two.", "c", caller_id=CALLER)
+    assert r.action == "confirm_required" and "two p m" in r.speech
+    assert brain.handle("Yes.", "c", caller_id=CALLER).action == "booked"
+
+
+@pytest.mark.parametrize("said", ["Thanks by.", "Okay thank you, bye now."])
+def test_goodbye_variants(brain, said):
+    assert brain.handle(said, "c", caller_id=CALLER).action == "goodbye"
+
+
+def test_yo_counts_as_yes(brain):
+    brain.handle("Tomorrow at ten please.", "c", caller_id=CALLER)
+    assert brain.handle("Yo.", "c", caller_id=CALLER).action == "booked"
+
+
+def test_pre_works_after_an_offer(sat_brain):
+    sat_brain.handle("Hello, could I come in sometime tomorrow afternoon?", "c", caller_id=CALLER)
+    r = sat_brain.handle("pre-works for me.", "c", caller_id=CALLER)
+    assert r.action == "confirm_required" and "three p m" in r.speech
