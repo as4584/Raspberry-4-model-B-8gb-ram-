@@ -82,6 +82,22 @@ SCENARIO_TAIL = """  <send retrans="500"><![CDATA[
 """
 
 
+def add_noise(mulaw: bytes, snr_db: float | None, seed: int) -> bytes:
+    """Mix white noise into 8 kHz u-law caller audio at `snr_db` (None = unchanged)."""
+    if snr_db is None:
+        return mulaw
+    import random, struct
+    from receptionist.audio import mulaw_from_pcm16, pcm16_from_mulaw
+    pcm = pcm16_from_mulaw(mulaw)
+    x = struct.unpack(f"<{len(pcm) // 2}h", pcm)
+    voiced = [v for v in x if abs(v) > 300] or [1]
+    p_sig = sum(v * v for v in voiced) / len(voiced)
+    sigma = (p_sig / 10 ** (snr_db / 10)) ** 0.5
+    rng = random.Random(seed)
+    y = [max(-32768, min(32767, int(v + rng.gauss(0, sigma)))) for v in x]
+    return mulaw_from_pcm16(struct.pack(f"<{len(y)}h", *y))
+
+
 def active_bookings(caller: str) -> int:
     return sum(1 for _, status, _ in S.bookings_for([caller]) if status == "active")
 
@@ -95,8 +111,11 @@ def newest_review(after: float) -> list[dict]:
     return rows if rows and rows[0]["t"] >= after - 1 else []
 
 
-def run_one(sc: dict, caller: str, work: Path) -> dict:
+def run_one(sc: dict, caller: str, work: Path, snr_db: float | None = None) -> dict:
     files = [S.turn_audio(t, work, lead_ms=GREETING_MS if i == 0 else 0) for i, t in enumerate(sc["turns"])]
+    if snr_db is not None:
+        for k, f in enumerate(files):
+            f.write_bytes(add_noise(f.read_bytes(), snr_db, seed=k))
     xml = SCENARIO_HEAD.format(caller=caller)
     for i, f in enumerate(files):
         xml += SCENARIO_TURN.format(file=f, ms=TURN_MS + (GREETING_MS if i == 0 else 0))
@@ -133,11 +152,16 @@ def main(argv=None) -> int:
     ap.add_argument("--caller", default="+15550001000")
     ap.add_argument("--only", default="")
     ap.add_argument("--suite", nargs="+", default=["natural.json", "broad.json", "business.json"])
+    ap.add_argument("--voice", default="", help="caller voice (Piper .onnx); default PIPER_MODEL")
+    ap.add_argument("--snr-db", type=float, default=None, help="background noise level (None = clean)")
     ap.add_argument("--out", default=str(Path.home() / "conversations.json"))
     a = ap.parse_args(argv)
     suite = [s for f in a.suite for s in json.loads((SUITE.parent / f).read_text()) if not a.only or s["name"] == a.only]
+    import os
+    if a.voice:
+        os.environ["PIPER_MODEL"] = a.voice          # the caller's voice (per-run cache folder below)
     work = Path(tempfile.mkdtemp(prefix="conv-"))
-    results = [run_one(s, a.caller, work) for s in suite]
+    results = [run_one(s, a.caller, work, a.snr_db) for s in suite]
     Path(a.out).write_text(json.dumps(results, indent=1))
     for r in results:
         print(("PASS " if r["pass"] else "FAIL ") + r["name"] + ("" if r["pass"] else "  <- " + "; ".join(r["problems"])))
