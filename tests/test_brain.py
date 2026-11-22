@@ -305,3 +305,23 @@ def test_v2_affirm_and_negate_classes(v2):
     assert v2.handle("Go for it.", "c", caller_id=CALLER).action == "booked"
     v2.handle("Anything tomorrow?", "d", caller_id=CALLER)
     assert v2.handle("Neither works.", "d", caller_id=CALLER).action != "booked"
+
+
+# --- feeling alive: varied, polite openers ---------------------------------------------
+
+def test_openers_vary_across_turns_but_stay_polite_and_cached(tmp_path):
+    from receptionist.dialogue import OPENERS
+    from receptionist.server import split_sentences
+    b = Brain(BookingStore(str(tmp_path / "o.sqlite")), intents=FakeIntents(), clock=lambda: NOW, seed=3)
+    firsts = {split_sentences(b.handle("What are your hours?", f"s{i}").speech)[0] for i in range(12)}
+    assert len(firsts) >= 3                                   # not the same "Sure." every time
+    assert firsts <= set(OPENERS)                             # every variant is prewarmed (instant)
+    rude = ("whatever", "listen", "obviously", "duh")
+    assert not any(w in f.lower() for f in firsts for w in rude)
+
+
+def test_variation_is_reproducible_with_a_seed(tmp_path):
+    mk = lambda: Brain(BookingStore(str(tmp_path / "r.sqlite")), intents=FakeIntents(), clock=lambda: NOW, seed=7)
+    a, b = mk(), mk()
+    assert [a.handle("What are your hours?", f"s{i}").speech for i in range(5)] == \
+           [b.handle("What are your hours?", f"s{i}").speech for i in range(5)]
