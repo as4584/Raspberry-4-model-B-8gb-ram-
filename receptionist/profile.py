@@ -13,11 +13,13 @@ TOPICS = {
     "get_started": ("get started", "getting started", "how do i start", "sign up", "first step", "consultation",
                     "demo", "free trial"),
     "price": ("price", "cost", "charge", "how much", "rate", "fee", "pricing", "expensive"),
-    "services": ("service", "do you do", "what do you", "offer", "what kind", "specialize", "help with"),
-    "location": ("where", "address", "located", "location", "directions", "area", "serve"),
+    "services": ("service", "do you do", "what do you", "what does", "offer", "what kind", "specialize", "help with",
+                 "make it do", "makes it do"),
+    "location": ("where", "address", "located", "location", "directions", "area", "serve", "work with businesses in",
+                 "passaic", "pasei", "paterson", "north jersey"),
     "parking": ("parking", "park"),
     "payment": ("pay", "payment", "card", "cash", "venmo", "zelle"),
-    "contact": ("email", "website", "contact"),
+    "contact": ("email", "website", "contact", "phone number", "your number", "call you", "text you", "reach you"),
 }
 
 

@@ -47,7 +47,7 @@ ORDINALS = {"first": 0, "earliest": 0, "1st": 0, "second": 1, "2nd": 1, "middle"
 # expected (times were just offered or a day is chosen) and a time word follows.
 # ... also glued to "o clock" ("Preo clock"). The "o" stays so "o clock" still parses.
 THREE_MISHEARD = re.compile(r"\b(free|pre|tree|pretty)(?=o[\s'-]*clock\b|\b[\s-]*(o[\s'-]*clock|pm|p m|am|a m|works|is good|sounds|please))")
-CONFIRM_TAIL = re.compile(r"\b(yes|yeah|yep|please book it|book it|that works|sounds good)\s*$")
+CONFIRM_TAIL = re.compile(r"\b(yes|yeah|yep|yes please|please book it|book it|that works|sounds good)\s*(please)?\s*$")
 LOCATION = re.compile(r"\b(where|address|located|location|directions|parking)\b")
 OPEN_DAY = re.compile(r"\b(are you|you guys|is it|is the office)\s+open\b|\bopen on\b")
 

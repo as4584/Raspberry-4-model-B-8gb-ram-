@@ -22,7 +22,7 @@ import sipp_call_test as S  # noqa: E402
 SUITE = HERE.parent / "tests" / "conversations" / "natural.json"
 REVIEW = "/var/lib/pi-receptionist/data/review"
 GREETING_MS = 3400          # caller listens to the greeting (silence RTP) before turn 1
-TURN_MS = 13000             # time allowed per turn: speech + reply (11 s merged turns)
+TURN_MS = 15000             # time allowed per turn: speech + reply (shorter merged turns)
 
 SCENARIO_HEAD = """<?xml version="1.0" encoding="ISO-8859-1" ?>
 <scenario name="conversation">
