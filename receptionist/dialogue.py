@@ -56,7 +56,9 @@ OPENERS=("Okay, let me check that.","Great, you're all set.","Okay, all done.",
          "Of course.","Absolutely.","Happy to help.","Alright.","Got it.","Ah, okay.","I see.",
          "Perfect, you're all booked.","Wonderful, you're all set.","Let me take a look.","Sure, let me check.",
          "Sorry, was that a yes?","Sorry, I didn't catch that.",
-         "Sorry, which time was that?","Sorry, which day was that?")
+         "Sorry, which time was that?","Sorry, which day was that?",
+         "Sorry, there's a lot of background noise on your end, and I'm having a hard time hearing you.",
+         "Could you move somewhere quieter, or speak a little closer to the phone?")
 # Opener per reply kind for replies that don't start with one (real call: 'help' replies
 # had none, so each misunderstood turn waited ~1.5 s for synthesis before any audio).
 _OPENER_FOR={"help":"Sure.","clarify":"Sure.","cancelled":"Okay, all done.","handoff":"Okay."}

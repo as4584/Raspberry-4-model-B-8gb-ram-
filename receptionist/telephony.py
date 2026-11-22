@@ -27,6 +27,10 @@ MAX_UTTERANCE_BYTES = 160000   # 20 s of 8 kHz u-law per transcription chunk
 FRAME_BYTES = 160              # 20 ms of 8 kHz u-law
 TRANSFER_SPEECH = "Okay, let me put you through to someone now."
 VOICE_MIN_RMS = 650            # fixed floor for speech (u-law RMS)
+NOISY_FLOOR_RMS = 1500         # background this loud makes short words hard to hear (15 dB test line: ~1800)
+HARD_TO_HEAR = ("repeat", "ask_again", "confirm_again", "unknown")
+NOISE_NOTICE = ("Sorry, there's a lot of background noise on your end, and I'm having a hard time hearing you. "
+                "Could you move somewhere quieter, or speak a little closer to the phone?")
 NOISE_MARGIN = 2.5             # speech must be this many times the call's noise floor
 CALIBRATION_FRAMES = 25        # first 0.5 s of a greeted call: measure line noise
 FILLER = "One moment."
@@ -120,6 +124,7 @@ class CallEngine:
         # Serialises this call's dialogue across worker threads: a barge-in cancels the
         # awaiting task, but its thread keeps running until handle() returns.
         dialogue_lock = threading.Lock()
+        noise_told = [False]   # say it once per call, like a person would
         jobs: set[asyncio.Task] = set()
 
         def handle_locked(text: str, session: str):
@@ -199,6 +204,11 @@ class CallEngine:
                 if os.getenv('LOG_TRANSCRIPTS') == '1':      # test runs only: never on by default
                     log.info('call=%s gen=%d heard=%r', call_id, this_generation, utterance)
                 words = reply.speech or reply.text   # phone wording when the dialogue provides it (#38)
+                if reply.action in HARD_TO_HEAR and noise_floor >= NOISY_FLOOR_RMS and not noise_told[0]:
+                    # It misheard on a loud line: say why, instead of a bare "didn't catch that".
+                    noise_told[0] = True
+                    words = NOISE_NOTICE if reply.action == "repeat" else f"{NOISE_NOTICE} {words}"
+                    log.info('call=%s gen=%d phase=noise_notice floor=%.0f', call_id, this_generation, noise_floor)
                 if review:
                     review.write(type="turn", gen=this_generation, heard=utterance, action=reply.action,
                                  reply=words, audio_s=round(len(packet) / 8000, 2), asr_s=round(t_asr - t0, 2))
