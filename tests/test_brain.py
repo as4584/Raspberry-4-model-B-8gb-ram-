@@ -206,7 +206,7 @@ def test_yes_to_an_offer_list_asks_which(brain):
     assert r.action == "ask_which"
 
 
-@pytest.mark.parametrize("heard", ["free works for me.", "Pre-o-clock is good.", "tree o'clock please"])
+@pytest.mark.parametrize("heard", ["free works for me.", "Pre-o-clock is good.", "tree o'clock please", "Preo clock is good."])
 def test_three_misheard_as_free_or_pre_when_a_time_is_expected(brain, heard):
     # Pi suite: whisper wrote "three" as "free"/"pre" right after the receptionist offered times.
     brain.handle("Do you have anything open tomorrow afternoon?", "c", caller_id=CALLER)
