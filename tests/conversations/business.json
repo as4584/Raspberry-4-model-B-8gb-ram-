@@ -1,7 +1,7 @@
 [
   {"name": "what_do_you_do", "turns": ["Hi, what does LexMakesIt do?"], "expect": {"booked": false, "reply_mentions": ["website", "receptionist"]}},
   {"name": "website_price", "turns": ["How much does a website cost?"], "expect": {"booked": false, "reply_mentions": ["one thousand"]}},
-  {"name": "receptionist_price", "turns": ["How much is the AI receptionist?"], "expect": {"booked": false, "reply_mentions": ["quote"]}},
+  {"name": "receptionist_price", "turns": ["How much is the AI receptionist?"], "expect": {"booked": false, "reply_mentions": ["free call"]}},
   {"name": "service_area", "turns": ["Do you work with businesses in Passaic?"], "expect": {"booked": false, "reply_mentions": ["Passaic"]}},
   {"name": "get_started_then_book", "turns": ["How do I get started?", "Can we talk tomorrow at eleven?", "Yes."], "expect": {"booked": true}},
   {"name": "phone_number", "turns": ["What's your phone number?"], "expect": {"booked": false, "reply_mentions": ["five five one"]}},
