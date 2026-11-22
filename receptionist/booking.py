@@ -4,9 +4,21 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
+import logging
 import sqlite3
 import secrets
+import time
 import uuid
+
+log = logging.getLogger('receptionist.call')
+
+
+def _slow(op: str, t0: float, t_lock: float, t_work: float, limit: float = 0.2) -> None:
+    """Log a breakdown of any booking write over `limit` seconds (lock wait / work / commit)."""
+    end = time.perf_counter()
+    if end - t0 > limit:
+        log.warning('db op=%s total_s=%.2f lock_wait_s=%.2f work_s=%.2f commit_s=%.2f', op, end - t0,
+                    t_lock - t0, t_work - t_lock, end - t_work)
 
 class SlotTaken(Exception): pass
 class InvalidBooking(Exception): pass
@@ -92,7 +104,9 @@ class BookingStore:
         # SQLite BEGIN IMMEDIATE serializes writers even when several connections/threads race.
         with self._session() as db:
             try:
+                t0 = time.perf_counter()
                 db.execute("BEGIN IMMEDIATE")
+                t_lock = time.perf_counter()
                 previous=db.execute("SELECT * FROM bookings WHERE idem_key=?",(idem_key,)).fetchone()
                 if previous:
                     if previous['payload_key']!=payload_key: raise KeyConflict("Idempotency key reused with different slot")
@@ -106,7 +120,9 @@ class BookingStore:
                 db.execute("INSERT INTO bookings(id,resource,starts,ends,status,idem_key,payload_key,caller_id,code) VALUES(?,?,?,?,?,?,?,?,?)",
                            (key,resource,a,b,'active',idem_key,payload_key,caller_id,code))
                 row=db.execute("SELECT * FROM bookings WHERE id=?",(key,)).fetchone()
+                t_work = time.perf_counter()
                 db.execute("COMMIT")
+                _slow('book', t0, t_lock, t_work)
                 return dict(row)
             except Exception:
                 # BEGIN may itself have failed (e.g. locked); never mask that error.
