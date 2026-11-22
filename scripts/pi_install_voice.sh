@@ -40,6 +40,15 @@ if [[ -n "$brain" ]]; then   # tiny-model brain (receptionist/brain.py): ONNX en
   step "sudo install -d -m 755 $speech/brain && sudo cp -a $brain/. $speech/brain/"
   brainenv="BRAIN_DIR=$speech/brain\n"
 fi
+# Optional voice expressiveness, passed through from the installer's environment (numbers only).
+voiceenv=""
+for k in PIPER_NOISE_SCALE PIPER_NOISE_W PIPER_LENGTH_SCALE; do
+  v="${!k:-}"
+  if [ -n "$v" ]; then
+    [[ "$v" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "$k must be a number" >&2; exit 2; }
+    voiceenv="${voiceenv}$k=$v\n"
+  fi
+done
 step "sudo chown -R root:root $speech && sudo chmod -R a+rX,go-w $speech"
 # Prove both binaries start under the service's own sandbox before switching: whisper-cli's
 # build-time library path points under ~/, which ProtectHome hides (found on the Pi).
@@ -47,6 +56,6 @@ sandbox="sudo systemd-run --wait --pipe --quiet -p User=receptionist -p ProtectH
 step "$sandbox $speech/whisper/whisper-cli --help >/dev/null 2>&1"
 step "$sandbox $speech/whisper/whisper-daemon $wm 1 </dev/null | grep -qx READY"
 step "echo test | $sandbox sh -c '$speech/piper/piper --model $pm --output_file /tmp/t.wav >/dev/null 2>&1 && test -s /tmp/t.wav'"
-step "printf 'VOICE_BACKEND=local\nLD_LIBRARY_PATH=$speech/whisper\nWHISPER_CLI=$speech/whisper/whisper-cli\nWHISPER_DAEMON=$speech/whisper/whisper-daemon\nPIPER_RESIDENT=1\nWHISPER_MODEL=$wm\nPIPER_CLI=$speech/piper/piper\nPIPER_MODEL=$pm\n${brainenv}' | sudo tee $envfile >/dev/null"
+step "printf 'VOICE_BACKEND=local\nLD_LIBRARY_PATH=$speech/whisper\nWHISPER_CLI=$speech/whisper/whisper-cli\nWHISPER_DAEMON=$speech/whisper/whisper-daemon\nPIPER_RESIDENT=1\nWHISPER_MODEL=$wm\nPIPER_CLI=$speech/piper/piper\nPIPER_MODEL=$pm\n${brainenv}${voiceenv}' | sudo tee $envfile >/dev/null"
 restart local
 echo "VOICE_OK: local speech ($(basename "$wmodel"), $(basename "$pmodel"))"
