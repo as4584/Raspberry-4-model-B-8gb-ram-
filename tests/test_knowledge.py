@@ -60,3 +60,21 @@ def test_brain_without_a_match_still_offers_the_free_call(brain):
 def test_mid_booking_reask_beats_knowledge(brain):
     brain.handle("Appointment tomorrow.", "c", caller_id=CALLER)
     assert brain.handle("tell me a joke", "c", caller_id=CALLER).action == "ask_again"
+
+
+@pytest.fixture
+def lexkb(tmp_path):
+    from receptionist.profile import load_profile
+    prof = load_profile(str(ROOT / "deploy" / "business_profile.json"))
+    return Brain(BookingStore(str(tmp_path / "lk.sqlite")), intents=FakeIntents(), clock=lambda: NOW,
+                 profile=prof, knowledge=kb())
+
+
+def test_close_checked_answer_beats_a_keyword_hit(lexkb):
+    s = lexkb.handle("How long does a website take?", "c", caller_id=CALLER).speech
+    assert "timeline" in s and "five five one" not in s
+
+
+def test_off_topic_is_declined_politely_not_sent_to_alex(lexkb):
+    s = lexkb.handle("purple elephant quantum soup", "c", caller_id=CALLER).speech
+    assert "LexMakesIt" in s and "go over it" not in s
