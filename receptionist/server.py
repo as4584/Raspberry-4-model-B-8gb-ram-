@@ -66,6 +66,7 @@ def valid_signature(url:str, params:dict[str,str], actual:str|None, token:str) -
     return hmac.compare_digest(sig,actual)
 
 MAX_SIM_SESSIONS=1000
+CHECKPOINT_EVERY_S=300   # background WAL checkpoint for the bookings DB
 
 def select_asr_factory(env) -> tuple[Callable[[],object],str]:
     """ASR per environment: one shared resident whisper (WHISPER_DAEMON, ~0.7 s per turn on
@@ -129,7 +130,16 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
                 try:await tts.prewarm(list(tts.prewarm_phrases)+split_sentences(greeting))
                 except Exception:log.warning('tts prewarm failed',exc_info=True)
             warm=asyncio.create_task(prewarm())
+        async def checkpoints():
+            # Fold the bookings WAL into the main file off the call path (see BookingStore).
+            while True:
+                await asyncio.sleep(CHECKPOINT_EVERY_S)
+                try:await asyncio.to_thread(store.checkpoint)
+                except Exception:log.warning('bookings checkpoint failed',exc_info=True)
+        ckpt=asyncio.create_task(checkpoints())
         yield
+        ckpt.cancel()
+        await asyncio.to_thread(store.close)
         if warm:warm.cancel()
         for closer in (getattr(tts,'aclose',None),):
             if closer:await closer()

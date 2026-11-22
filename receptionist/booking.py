@@ -33,11 +33,18 @@ class BookingStore:
             if "code" not in cols:
                 db.execute("ALTER TABLE bookings ADD COLUMN code TEXT")
             db.execute("CREATE INDEX IF NOT EXISTS active_slot ON bookings(resource,status,starts,ends)")
+        # Keeper connection: while one connection stays open, closing a booking's session is
+        # never the *last* close, so SQLite doesn't checkpoint+fsync the whole WAL on the
+        # caller's time (Pi: 2-6 s saves on the USB stick). Checkpoints run via checkpoint().
+        self._keeper = sqlite3.connect(self.path, timeout=self.busy_timeout_s, check_same_thread=False)
+        self._keeper.execute("PRAGMA wal_autocheckpoint=0")
+        self._keeper.execute("SELECT count(*) FROM sqlite_master").fetchone()   # really open the file (no txn kept)
 
     def _connect(self):
         db = sqlite3.connect(self.path, timeout=self.busy_timeout_s, isolation_level=None)
         db.row_factory = sqlite3.Row
         db.execute(f"PRAGMA busy_timeout={int(self.busy_timeout_s * 1000)}")
+        db.execute("PRAGMA wal_autocheckpoint=0")     # never on a caller's commit; see checkpoint()
         # Power-loss durability: in WAL mode NORMAL can drop the last commits on a
         # power cut; FULL fsyncs each commit, so a confirmed booking survives.
         db.execute("PRAGMA synchronous=FULL")
@@ -51,6 +58,16 @@ class BookingStore:
             yield db
         finally:
             db.close()
+
+    def checkpoint(self) -> None:
+        """Fold the WAL into the main file (call off the call path, e.g. every few minutes)."""
+        self._keeper.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+
+    def close(self) -> None:
+        try:
+            self.checkpoint()
+        finally:
+            self._keeper.close()
 
     @staticmethod
     def _dt(t: datetime) -> str:
