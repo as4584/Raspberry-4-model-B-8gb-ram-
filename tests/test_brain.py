@@ -383,3 +383,28 @@ def test_more_ways_to_say_yes(brain, yes):
 def test_bare_number_after_offer_is_not_garbage(brain):
     talk(brain, "Appointment tomorrow.")
     assert talk(brain, "10")[0].action != "repeat"
+
+
+def test_misheard_answer_mid_booking_asks_again(brain):
+    talk(brain, "Appointment tomorrow.")        # offers times
+    r = talk(brain, "Pen yaf")[0]
+    assert r.action == "ask_again" and "time" in r.speech
+
+
+def test_misheard_day_after_day_question_asks_again(brain):
+    r = talk(brain, "Do you have any openings next week?")[0]
+    assert r.action == "ask_day"
+    r = talk(brain, "Who's there?")[0]
+    assert r.action == "ask_again" and "day" in r.speech
+
+
+def test_unknown_outside_booking_stays_unknown(brain):
+    assert talk(brain, "Pen yaf")[0].action == "unknown"
+
+
+def test_passay_it_is_passaic():
+    from receptionist.brain import MISHEARD
+    t = "Do you work with businesses and passay it?"
+    for heard, meant in MISHEARD:
+        t = heard.sub(meant, t)
+    assert "Passaic" in t
