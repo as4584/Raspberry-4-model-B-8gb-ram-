@@ -349,3 +349,32 @@ def test_garbage_transcript_asks_to_repeat(brain):
 def test_real_short_answers_still_work_while_pending(brain):
     brain.handle("Tomorrow at ten please.", "c", caller_id=CALLER)
     assert brain.handle("Make it eleven.", "c", caller_id=CALLER).action == "confirm_required"
+
+
+class LowBook(FakeIntents):
+    """The real v2 model on 'Great, I need to book an appointment.': book, but only 0.31 sure."""
+    def classify(self, text):
+        intent, conf = super().classify(text)
+        return (intent, 0.31) if intent == "book" else (intent, conf)
+
+
+def test_unsure_book_with_booking_words_still_books(tmp_path):
+    b = Brain(BookingStore(str(tmp_path / "b.sqlite")), intents=LowBook(), clock=lambda: NOW)
+    r = b.handle("Great, I need to book an appointment.", "c", caller_id=CALLER)
+    assert r.action != "unknown"
+
+
+def test_singular_hour_answers_hours(brain):
+    assert "9" in talk(brain, "What are your hour?")[0].text or "nine" in talk(brain, "What are your hour?")[0].speech
+
+
+@pytest.mark.parametrize("heard", ["Can I come into more at 10?", "Can I come in to morrow at 10?"])
+def test_tomorrow_misheard(brain, heard):
+    r = talk(brain, heard, "Yes.")
+    assert booked(brain) and booked(brain)[0].start.day == 19
+
+
+@pytest.mark.parametrize("yes", ["Sound good.", "Yes, thank you.", "Three works for me. Yes, thank you."])
+def test_more_ways_to_say_yes(brain, yes):
+    talk(brain, "Book tomorrow at 3 pm.", yes)
+    assert booked(brain)
