@@ -4,7 +4,6 @@ import json
 import re
 from pathlib import Path
 
-import numpy as np
 import pytest
 
 from receptionist.booking import BookingStore
@@ -18,7 +17,7 @@ VOCAB = {}
 
 def bag(text):
     """Bag-of-words stand-in for the sentence encoder."""
-    v = np.zeros(512)
+    v = [0.0] * 512
     for w in re.findall(r"[a-z']+", text.lower()):
         v[VOCAB.setdefault(w, len(VOCAB) % 512)] += 1
     return v

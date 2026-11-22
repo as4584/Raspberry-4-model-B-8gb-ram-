@@ -91,3 +91,22 @@ def test_server_loads_the_profile_and_prewarms_its_greeting(tmp_path, monkeypatc
     prof, greeting = load_business_profile({"BUSINESS_PROFILE": str(f)})
     assert prof["name"] == "LexMakesIt" and greeting.startswith("Hi, thanks for calling LexMakesIt.")
     assert load_business_profile({"BUSINESS_PROFILE": str(tmp_path / "none.json")})[0] is None
+
+
+def test_server_gives_the_brain_checked_answers_when_the_model_can_embed(tmp_path):
+    from receptionist.server import select_dialogue_factory
+    class Fake:
+        def classify(self, t): return "faq_unknown", 0.3
+        def embed(self, t): return [1.0 if w in t.lower() else 0.0 for w in ("printer", "laptop", "fix", "repair")]
+    store = BookingStore(str(tmp_path / "s.sqlite"))
+    factory, _ = select_dialogue_factory({"BRAIN_DIR": "x"}, store, False, load_intents=lambda d: Fake())
+    assert factory().knowledge is not None
+
+
+def test_model_without_embed_still_gets_a_brain(tmp_path):
+    from receptionist.server import select_dialogue_factory
+    class Fake:
+        def classify(self, t): return "book", 0.9
+    store = BookingStore(str(tmp_path / "s.sqlite"))
+    factory, kind = select_dialogue_factory({"BRAIN_DIR": "x"}, store, False, load_intents=lambda d: Fake())
+    assert kind == "brain" and factory().knowledge is None
