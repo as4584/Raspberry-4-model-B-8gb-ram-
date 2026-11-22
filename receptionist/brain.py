@@ -52,6 +52,7 @@ MISHEARD = [(re.compile(p, re.I), w) for p, w in (
     (r"\bpoint ?meant\b", "appointment"), (r"\bhour\b(?= *\?| on| today)", "hours"),
     (r"\b(puff?ake|pasaic|passaick|passay it|pass a ick)\b", "Passaic"))]
 DATE_Q = re.compile(r"\bwhat('?s| is)? (the )?(day|date|time)( is it| today)?\b|\btoday'?s date\b|\bwhat day is (it|today)\b")
+STRONG_MATCH = 0.6           # checked-answer similarity that overrides a keyword FAQ hit
 CONFIRM_TAIL = re.compile(r"\b(yes|yeah|yep|yes please|please book it|book it|that works|sounds? good)\s*(please|thank you|thanks)?\s*$")
 LOCATION = re.compile(r"\b(where|address|located|location|directions|parking)\b")
 OPEN_DAY = re.compile(r"\b(are you|you guys|is it|is the office)\s+open\b|\bopen on\b")
@@ -154,8 +155,8 @@ class Brain:
 
     @staticmethod
     def _unknown() -> Reply:
-        return Reply("I don't have that detail on hand, but Alex can go over it with you on a free call. Want me to book one?", "unknown",
-                     speech="Hmm, I don't have that detail on hand. But Alex can go over it with you on a free call. Want me to book one?")
+        return Reply("That's outside what I can help with, but I can answer questions about LexMakesIt or book you a free call with Alex.", "unknown",
+                     speech="Hmm, that's outside what I can help with. But I can answer questions about LexMakesIt, or book you a free call with Alex.")
 
     # ---- calendar ------------------------------------------------------------------
     def _free_slots(self, day: date, part: str | None, n: int = 3) -> list[datetime]:
@@ -218,9 +219,11 @@ class Brain:
             r = Reply("Sorry, which day was that?", "ask_again", speech="Sorry, which day was that?")
             last = "ask_again_day"
         else:
-            if r.action == "unknown" and self.knowledge is not None:
+            if r.action in ("unknown", "faq") and self.knowledge is not None:
                 hit = self.knowledge.best(" ".join(utterance.split()))
-                if hit:
+                # A keyword answer ("website" -> contact) loses to a close checked answer
+                # ("how long does a website take" -> timeline); an unknown takes any match.
+                if hit and (r.action == "unknown" or hit[2] >= STRONG_MATCH):
                     r = Reply(hit[1], "knowledge", speech=hit[1])
             last = r.action
         self._last[session_id] = last
@@ -351,8 +354,8 @@ class Brain:
         booking_turn = intent in ("book", "availability", "reschedule") and conf >= MIN_CONFIDENCE
         follow_up = has_when and (st.date or st.time or st.offered or pending)
         if not (booking_turn or follow_up or has_when):
-            return Reply("I don't have that detail on hand, but Alex can go over it with you on a free call. Want me to book one?", "unknown",
-                         speech="Hmm, I don't have that detail on hand. But Alex can go over it with you on a free call. Want me to book one?")
+            return Reply("That's outside what I can help with, but I can answer questions about LexMakesIt or book you a free call with Alex.", "unknown",
+                         speech="Hmm, that's outside what I can help with. But I can answer questions about LexMakesIt, or book you a free call with Alex.")
 
         # Merge what this turn said into what we already know.
         if when.date:
