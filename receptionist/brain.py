@@ -26,6 +26,12 @@ PARTS = {"morning": (time(0), time(12)), "afternoon": (time(12), time(17)), "eve
 PREFERRED_HOURS = (10, 14, 11, 15, 9, 13, 16, 12)        # spread offers across the day
 DAY_WORDS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 MIN_CONFIDENCE = 0.45
+# Same meaning, different words: a person doesn't open every reply with "Sure."
+VARIANTS = {"Sure.": ("Sure.", "Of course.", "Absolutely.", "Happy to help."),
+            "Okay.": ("Okay.", "Alright.", "Got it."),
+            "Hmm, okay.": ("Hmm, okay.", "Ah, okay.", "I see."),
+            "Great, you're all set.": ("Great, you're all set.", "Perfect, you're all booked.", "Wonderful, you're all set."),
+            "Okay, let me check that.": ("Okay, let me check that.", "Let me take a look.", "Sure, let me check.")}
 # Cue words: the tiny model may only take drastic routes when the words support it
 # (Pi suite: "Yeah." -> human, "Perfect." -> emergency, "Tomorrow is fine." -> injection).
 CUES = {"injection": re.compile(r"\b(ignore|pretend|override|admin|system prompt|instructions|rules|jailbreak|developer mode)\b"),
@@ -95,7 +101,8 @@ class _Call:
 
 class Brain:
     def __init__(self, store: BookingStore, intents, timezone_name: str = "America/New_York",
-                 hours=None, profile: dict | None = None, require_caller_id: bool = False, clock=None):
+                 hours=None, profile: dict | None = None, require_caller_id: bool = False, clock=None,
+                 seed: int | None = None):
         self.store, self.intents = store, intents
         self.tz = ZoneInfo(timezone_name)
         self.profile = profile or {}
@@ -104,6 +111,8 @@ class Brain:
         self.dialogue = Dialogue(store, timezone_name=timezone_name, hours=self.hours,
                                  require_caller_id=require_caller_id, clock=self.clock)
         self._calls: dict[str, _Call] = {}
+        import random as _random
+        self._rng = _random.Random(seed)
 
     # ---- answers -------------------------------------------------------------------
     def _hours_speech(self) -> str:
@@ -191,6 +200,17 @@ class Brain:
 
     # ---- the conversation ----------------------------------------------------------
     def handle(self, utterance: str, session_id: str, caller_id: str | None = None) -> Reply:
+        return self._vary(self._handle(utterance, session_id, caller_id))
+
+    def _vary(self, r: Reply) -> Reply:
+        sp = r.speech or ""
+        for base, options in VARIANTS.items():
+            if sp.startswith(base + " ") or sp == base:
+                choice = self._rng.choice(options)
+                return Reply(r.text, r.action, r.committed_id, speech=choice + sp[len(base):])
+        return r
+
+    def _handle(self, utterance: str, session_id: str, caller_id: str | None = None) -> Reply:
         text = " ".join(utterance.strip().split())
         expecting_time = self._calls.get(session_id) is not None and bool(
             self._calls[session_id].offered or self._calls[session_id].date)
