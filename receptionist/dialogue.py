@@ -51,7 +51,7 @@ def _code_speech(code: str | None) -> str:
 # is cached by the TTS (callers wait for a greeting before they talk).
 GREETING="Hi, thanks for calling. How can I help you today?"
 OPENERS=("Okay, let me check that.","Great, you're all set.","Okay, all done.",
-         "Hi, thanks for calling.","How can I help you today?","Sure.","Okay.","Hmm, okay.")
+         "Hi, thanks for calling.","How can I help you today?","Sure.","Okay.","Hmm, okay.","One moment.")
 # Opener per reply kind for replies that don't start with one (real call: 'help' replies
 # had none, so each misunderstood turn waited ~1.5 s for synthesis before any audio).
 _OPENER_FOR={"help":"Sure.","clarify":"Sure.","cancelled":"Okay, all done.","handoff":"Okay."}

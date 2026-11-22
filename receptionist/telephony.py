@@ -29,6 +29,8 @@ TRANSFER_SPEECH = "Okay, let me put you through to someone now."
 VOICE_MIN_RMS = 650            # fixed floor for speech (u-law RMS)
 NOISE_MARGIN = 2.5             # speech must be this many times the call's noise floor
 CALIBRATION_FRAMES = 25        # first 0.5 s of a greeted call: measure line noise
+FILLER = "One moment."
+FILLER_AFTER_S = 0.4          # speak FILLER if the brain hasn't answered by then
 PREROLL_BYTES = 2400           # 300 ms kept from before the VAD trigger (soft onsets)
 
 
@@ -179,7 +181,18 @@ class CallEngine:
                 # Booking does blocking SQLite I/O (busy waits up to 15 s); keep it off the
                 # event loop so other calls keep streaming.
                 t_d = time.monotonic()
-                reply = await asyncio.to_thread(handle_locked, utterance, call_id or 'invalid')
+                work = asyncio.ensure_future(asyncio.to_thread(handle_locked, utterance, call_id or 'invalid'))
+                done, _ = await asyncio.wait({work}, timeout=FILLER_AFTER_S)
+                if not done:
+                    # A human says "one moment" instead of leaving dead air (Pi: bookings sometimes
+                    # took 2-5 s on the slow USB stick). Honest: it claims nothing.
+                    filler = await tts.synthesize(FILLER)
+                    if this_generation == generation:
+                        for i in range(0, len(filler), FRAME_BYTES):
+                            if generation != this_generation:
+                                break
+                            await transport.send_frame(filler[i:i + FRAME_BYTES])
+                reply = await work
                 # The action name (never the caller's words) is safe to log and explains outcomes.
                 log.info('call=%s gen=%d phase=dialogue action=%s words=%d dialogue_s=%.2f', call_id, this_generation,
                          reply.action, len(utterance.split()), time.monotonic() - t_d)

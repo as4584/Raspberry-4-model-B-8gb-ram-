@@ -40,7 +40,8 @@ ORDINALS = {"first": 0, "earliest": 0, "1st": 0, "second": 1, "2nd": 1, "middle"
 # whisper writes "three" as "free"/"pre"/"tree" (Pi suite); only rewrite when a time is
 # expected (times were just offered or a day is chosen) and a time word follows.
 # ... also glued to "o clock" ("Preo clock"). The "o" stays so "o clock" still parses.
-THREE_MISHEARD = re.compile(r"\b(free|pre|tree)(?=o[\s'-]*clock\b|\b[\s-]*(o[\s'-]*clock|pm|p m|am|a m|works|is good|sounds|please))")
+THREE_MISHEARD = re.compile(r"\b(free|pre|tree|pretty)(?=o[\s'-]*clock\b|\b[\s-]*(o[\s'-]*clock|pm|p m|am|a m|works|is good|sounds|please))")
+CONFIRM_TAIL = re.compile(r"\b(yes|yeah|yep|please book it|book it|that works|sounds good)\s*$")
 LOCATION = re.compile(r"\b(where|address|located|location|directions|parking)\b")
 OPEN_DAY = re.compile(r"\b(are you|you guys|is it|is the office)\s+open\b|\bopen on\b")
 
@@ -276,7 +277,11 @@ class Brain:
         if st.date and st.time:
             if self._open_at(st.date, st.time):
                 starts = datetime.combine(st.date, st.time)
-                return self.dialogue.handle(f"book {starts:%Y-%m-%d %H:%M}", session_id, caller_id=caller_id)
+                r = self.dialogue.handle(f"book {starts:%Y-%m-%d %H:%M}", session_id, caller_id=caller_id)
+                # "2 p.m. yes." -- picked the time and confirmed it in one breath.
+                if r.action == "confirm_required" and CONFIRM_TAIL.search(low):
+                    return self.dialogue.handle("yes", session_id, caller_id=caller_id)
+                return r
             # Closed then: never a dead end -- offer that day's openings, or the next open day's.
             day = self._day_words(st.date, now.date())
             asked, st.time = st.time, None
