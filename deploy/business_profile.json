@@ -1,10 +1,16 @@
 {
   "_source": "https://lexmakesit.com, read 2026-11-22. Only facts stated on the site; numbers are spelled out for the phone voice. Hours are NOT on the site: the hours below are a placeholder until the owner confirms them.",
   "name": "LexMakesIt",
-  "hours": {"mon": "09:00-17:00", "tue": "09:00-17:00", "wed": "09:00-17:00", "thu": "09:00-17:00", "fri": "09:00-17:00"},
+  "hours": {
+    "mon": "09:00-17:00",
+    "tue": "09:00-17:00",
+    "wed": "09:00-17:00",
+    "thu": "09:00-17:00",
+    "fri": "09:00-17:00"
+  },
   "faq": {
-    "services": "LexMakesIt helps local businesses with website design, custom software and business apps, custom point of sale systems, an A I phone receptionist, business automation and A I agents, missed call text back, self updating inventory, review requests, appointment reminders, content and posting automation, Google listing setup, and automation teaching sessions.",
-    "price": "Website design starts at one thousand dollars, plus ten dollars a month for management. Automation teaching sessions are one hundred dollars per session. Other projects are priced individually, and I can have someone call you back with a quote.",
+    "services": "LexMakesIt builds websites, custom apps, and A I tools for local businesses, like this phone receptionist. We also set up automations, like missed call text back and appointment reminders, and teach automation sessions. What kind of business do you have?",
+    "price": "Website design starts at one thousand dollars, plus ten dollars a month for management. Automation teaching sessions are one hundred dollars per session. Other projects are priced individually after a free conversation, which I can book for you.",
     "location": "We're based in Paterson and serve Passaic County and North Jersey.",
     "contact": "You can call or text five five one, two two seven, seven three zero six.",
     "get_started": "The first step is a conversation, and the demo homepage is free. I can book a time for you to talk, or you can call or text five five one, two two seven, seven three zero six.",

@@ -18,7 +18,7 @@ from receptionist import datetime_resolve as dr
 from receptionist.booking import BookingStore
 from receptionist.dialogue import DEFAULT_HOURS, Dialogue, Reply
 from receptionist.profile import answer as profile_answer
-from receptionist.speech_format import spoken_time
+from receptionist.speech_format import spoken_time, spoken_when
 
 AFFIRM = re.compile(r"^(yes|yeah|yep|yup|yo|sure|correct|right|that'?s right|sounds? good|perfect|ok(ay)?|please do)\b")
 NEGATE = re.compile(r"^(no|nope|nah|never ?mind|cancel that|not really)\b")
@@ -51,6 +51,7 @@ MISHEARD = [(re.compile(p, re.I), w) for p, w in (
     (r"\b(into|in to|to) ?more\b(?! than)", "tomorrow"), (r"\bto morrow\b", "tomorrow"),
     (r"\bpoint ?meant\b", "appointment"), (r"\bhour\b(?= *\?| on| today)", "hours"),
     (r"\b(puff?ake|pasaic|passaick|passay it|pass a ick)\b", "Passaic"))]
+DATE_Q = re.compile(r"\bwhat('?s| is)? (the )?(day|date|time)( is it| today)?\b|\btoday'?s date\b|\bwhat day is (it|today)\b")
 CONFIRM_TAIL = re.compile(r"\b(yes|yeah|yep|yes please|please book it|book it|that works|sounds? good)\s*(please|thank you|thanks)?\s*$")
 LOCATION = re.compile(r"\b(where|address|located|location|directions|parking)\b")
 OPEN_DAY = re.compile(r"\b(are you|you guys|is it|is the office)\s+open\b|\bopen on\b")
@@ -152,8 +153,8 @@ class Brain:
 
     @staticmethod
     def _unknown() -> Reply:
-        return Reply("I'm not sure about that. I can have someone call you back, or help you book.", "unknown",
-                     speech="Hmm, I'm not sure about that. I can have someone call you back, or help you book.")
+        return Reply("I don't have that detail on hand, but Alex can go over it with you on a free call. Want me to book one?", "unknown",
+                     speech="Hmm, I don't have that detail on hand. But Alex can go over it with you on a free call. Want me to book one?")
 
     # ---- calendar ------------------------------------------------------------------
     def _free_slots(self, day: date, part: str | None, n: int = 3) -> list[datetime]:
@@ -244,6 +245,11 @@ class Brain:
         if not re.search(r"[a-z]{2,}|[0-9]", low) or re.search(r"(\w{2,4})\1{3,}", low):
             return Reply("Sorry, I didn't catch that.", "repeat",
                          speech="Sorry, I didn't catch that. Could you say that again?")
+        if DATE_Q.search(low) and not parse_when(text, self.clock()).time:
+            now = self.clock()
+            day, _, clock = spoken_when(now).partition(" at ")
+            return Reply(f"It's {day}, and it's {clock}.", "date",
+                         speech=f"It's {day}, and it's about {clock}. What can I help you with?")
         if pending and AFFIRM.match(low):
             return self.dialogue.handle("yes", session_id, caller_id=caller_id)
         # Waiting for yes/no and heard a short word that is neither (Ryan voice: "Yes." -> "Just"):
@@ -340,8 +346,8 @@ class Brain:
         booking_turn = intent in ("book", "availability", "reschedule") and conf >= MIN_CONFIDENCE
         follow_up = has_when and (st.date or st.time or st.offered or pending)
         if not (booking_turn or follow_up or has_when):
-            return Reply("I'm not sure about that. I can have someone call you back, or help you book.", "unknown",
-                         speech="Hmm, I'm not sure about that. I can have someone call you back, or help you book.")
+            return Reply("I don't have that detail on hand, but Alex can go over it with you on a free call. Want me to book one?", "unknown",
+                         speech="Hmm, I don't have that detail on hand. But Alex can go over it with you on a free call. Want me to book one?")
 
         # Merge what this turn said into what we already know.
         if when.date:

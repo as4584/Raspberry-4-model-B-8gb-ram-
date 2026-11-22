@@ -292,7 +292,7 @@ def v2(tmp_path):
 
 
 def test_v2_business_class_answers_from_the_profile(v2):
-    assert "website design" in v2.handle("What services do you offer?", "c").speech
+    assert "websites" in v2.handle("What services do you offer?", "c").speech
 
 
 def test_v2_small_talk_and_goodbye_classes(v2):

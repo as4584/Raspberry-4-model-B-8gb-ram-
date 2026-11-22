@@ -1,9 +1,10 @@
 """Business profile (deploy/business_profile.json): the owner's facts, nothing else.
 The brain greets with the name, books within the hours, and answers questions only
-from `faq`; an empty or missing answer means "I'll have someone call you back"."""
+from `faq`; an empty or missing answer means "offer a free call with Alex"."""
 from __future__ import annotations
 
 import json
+import re
 from datetime import time
 
 DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
@@ -14,7 +15,8 @@ TOPICS = {
                     "demo", "free trial"),
     "price": ("price", "cost", "charge", "how much", "rate", "fee", "pricing", "expensive"),
     "services": ("service", "do you do", "what do you", "what does", "offer", "what kind", "specialize", "help with",
-                 "make it do", "makes it do"),
+                 "make it do", "makes it do", "business about", "company about", "about your", "tell me about",
+                 "you guys do", "what you do", "what is lex", "what's lex"),
     "location": ("where", "address", "located", "location", "directions", "area", "serve", "work with businesses in",
                  "passaic", "pasei", "paterson", "north jersey"),
     "parking": ("parking", "park"),
@@ -58,7 +60,12 @@ def answer(profile: dict | None, text: str) -> tuple[str, str | None]:
     # never the website figure.
     if any(w in t for w in TOPICS["price"]) and any(w in t for w in PRICED_PER_PROJECT) \
             and not any(w in t for w in ("website", "web site", "teaching", "lesson", "class")):
-        return "price", "That's priced for each business, so I can have someone call you back with a quote."
+        return "price", ("That's priced for each business after a free conversation with Alex. "
+                         "I can book that for you right now. What day works for you?")
+    if any(w in t for w in TOPICS["price"]) and any(w in t for w in ("teaching", "lesson", "class", "session")):
+        lesson = [x for x in re.split(r"(?<=\.) ", faq.get("price") or "") if "session" in x]
+        if lesson:
+            return "price", lesson[0]
     for topic, words in TOPICS.items():
         if any(w in t for w in words):
             return topic, (faq.get(topic) or None)
