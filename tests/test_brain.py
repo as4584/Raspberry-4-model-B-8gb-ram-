@@ -408,3 +408,34 @@ def test_passay_it_is_passaic():
     for heard, meant in MISHEARD:
         t = heard.sub(meant, t)
     assert "Passaic" in t
+
+
+@pytest.fixture
+def lex(tmp_path):
+    from pathlib import Path
+    from receptionist.profile import load_profile
+    prof = load_profile(str(Path(__file__).resolve().parents[1] / "deploy" / "business_profile.json"))
+    return Brain(BookingStore(str(tmp_path / "lex.sqlite")), intents=FakeIntents(), clock=lambda: NOW, profile=prof)
+
+
+@pytest.mark.parametrize("q", ["What day is it?", "What's today's date?", "What time is it?"])
+def test_tells_the_date_and_time(lex, q):
+    r = lex.handle(q, "c", caller_id=CALLER)
+    assert "Wednesday" in r.speech or "nine" in r.speech
+
+
+@pytest.mark.parametrize("q", ["Hi, so I just wanted to know like what's your business about",
+                               "Tell me about your company.", "What do you guys do?"])
+def test_what_the_business_is(lex, q):
+    assert "website" in lex.handle(q, "c", caller_id=CALLER).speech.lower()
+
+
+def test_lesson_price_is_the_lesson_price(lex):
+    s = lex.handle("Do you do automation lessons? How much are they?", "c", caller_id=CALLER).speech
+    assert "one hundred dollars" in s and "thousand" not in s
+
+
+@pytest.mark.parametrize("q", ["How much is a receptionist?", "Can you fix my printer?"])
+def test_handles_it_without_a_callback(lex, q):
+    s = lex.handle(q, "c", caller_id=CALLER).speech.lower()
+    assert "call you back" not in s and "book" in s
