@@ -110,7 +110,7 @@ def load_knowledge(env,intents):
     from receptionist.knowledge import Knowledge
     path=env.get('KNOWLEDGE',str(Path(__file__).resolve().parents[1]/'deploy'/'knowledge.json'))
     try:
-        threshold=float(env.get('KNOWLEDGE_THRESHOLD','0.6'))
+        threshold=float(env.get('KNOWLEDGE_THRESHOLD','0.45'))
         return Knowledge.from_file(path,intents.embed,threshold=threshold)
     except (OSError,ValueError,KeyError):
         log.warning('knowledge unavailable',exc_info=True)
