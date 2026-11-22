@@ -237,6 +237,32 @@ class Brain:
             intent, conf = "book", max(conf, 0.5)
         when = parse_when(text, now)
         has_when = bool(when.date or when.time or when.part)
+        # v2 model classes (conversational moves) -- regexes above already caught the clear cases.
+        if conf >= 0.6 and not has_when:
+            if intent == "affirm":
+                if pending:
+                    return self.dialogue.handle("yes", session_id, caller_id=caller_id)
+                if st.date and st.time:
+                    return self.dialogue.handle(f"book {datetime.combine(st.date, st.time):%Y-%m-%d %H:%M}",
+                                                session_id, caller_id=caller_id)
+                if st.offered:
+                    return Reply("Which time works best?", "ask_which", speech="Sure. Which time works best for you?")
+                return Reply("Great! What can I help you with?", "reply", speech="Okay. What can I help you with?")
+            if intent == "negate":
+                self._calls[session_id] = _Call()
+                if pending:
+                    return self.dialogue.handle("no", session_id, caller_id=caller_id)
+                return Reply("Okay. Is there anything else I can help with?", "reply",
+                             speech="Okay. Is there anything else I can help with?")
+            if intent == "goodbye":
+                self._calls[session_id] = _Call()
+                return Reply("Thanks for calling. Have a great day!", "goodbye",
+                             speech="Okay. Thanks for calling. Have a great day!")
+            if intent == "small_talk":
+                return Reply("I'm doing well, thanks for asking! How can I help you today?", "small_talk",
+                             speech="Okay. I'm doing well, thanks for asking! How can I help you today?")
+            if intent == "business":
+                return self._faq(text)
         if OPEN_DAY.search(low) and when.date:
             return self._open_on(when.date)
         if LOCATION.search(low) and not has_when:
