@@ -20,7 +20,7 @@ from receptionist.dialogue import DEFAULT_HOURS, Dialogue, Reply
 from receptionist.profile import answer as profile_answer
 from receptionist.speech_format import spoken_time
 
-AFFIRM = re.compile(r"^(yes|yeah|yep|yup|yo|sure|correct|right|that'?s right|sounds good|perfect|ok(ay)?|please do)\b")
+AFFIRM = re.compile(r"^(yes|yeah|yep|yup|yo|sure|correct|right|that'?s right|sounds? good|perfect|ok(ay)?|please do)\b")
 NEGATE = re.compile(r"^(no|nope|nah|never ?mind|cancel that|not really)\b")
 PARTS = {"morning": (time(0), time(12)), "afternoon": (time(12), time(17)), "evening": (time(17), time(23, 59))}
 PREFERRED_HOURS = (10, 14, 11, 15, 9, 13, 16, 12)        # spread offers across the day
@@ -47,7 +47,11 @@ ORDINALS = {"first": 0, "earliest": 0, "1st": 0, "second": 1, "2nd": 1, "middle"
 # expected (times were just offered or a day is chosen) and a time word follows.
 # ... also glued to "o clock" ("Preo clock"). The "o" stays so "o clock" still parses.
 THREE_MISHEARD = re.compile(r"\b(free|pre|tree|pretty)(?=o[\s'-]*clock\b|\b[\s-]*(o[\s'-]*clock|pm|p m|am|a m|works|is good|sounds|please))")
-CONFIRM_TAIL = re.compile(r"\b(yes|yeah|yep|yes please|please book it|book it|that works|sounds good)\s*(please)?\s*$")
+MISHEARD = [(re.compile(p, re.I), w) for p, w in (
+    (r"\b(into|in to|to) ?more\b(?! than)", "tomorrow"), (r"\bto morrow\b", "tomorrow"),
+    (r"\bpoint ?meant\b", "appointment"), (r"\bhour\b(?= *\?| on| today)", "hours"),
+    (r"\b(puff?ake|pasaic|passaick)\b", "Passaic"))]
+CONFIRM_TAIL = re.compile(r"\b(yes|yeah|yep|yes please|please book it|book it|that works|sounds? good)\s*(please|thank you|thanks)?\s*$")
 LOCATION = re.compile(r"\b(where|address|located|location|directions|parking)\b")
 OPEN_DAY = re.compile(r"\b(are you|you guys|is it|is the office)\s+open\b|\bopen on\b")
 
@@ -212,6 +216,9 @@ class Brain:
 
     def _handle(self, utterance: str, session_id: str, caller_id: str | None = None) -> Reply:
         text = " ".join(utterance.strip().split())
+        # Words phone-quality ASR mishears for common booking words.
+        for heard, meant in MISHEARD:
+            text = heard.sub(meant, text)
         expecting_time = self._calls.get(session_id) is not None and bool(
             self._calls[session_id].offered or self._calls[session_id].date)
         if expecting_time:
@@ -262,8 +269,8 @@ class Brain:
         intent, conf = self.intents.classify(text)
         if intent in CUES and not CUES[intent].search(low):
             intent, conf = ("book", 0.5) if BOOK_WORDS.search(low) else ("faq_unknown", 0.3)
-        if intent not in ("book", "availability", "reschedule") and BOOK_WORDS.search(low) and intent not in CUES:
-            intent, conf = "book", max(conf, 0.5)
+        if BOOK_WORDS.search(low) and (intent in ("book", "availability", "reschedule") or intent not in CUES):
+            intent, conf = (intent if intent in ("availability", "reschedule") else "book"), max(conf, 0.5)
         when = parse_when(text, now)
         has_when = bool(when.date or when.time or when.part)
         # v2 model classes (conversational moves) -- regexes above already caught the clear cases.

@@ -371,7 +371,7 @@ def test_singular_hour_answers_hours(brain):
 @pytest.mark.parametrize("heard", ["Can I come into more at 10?", "Can I come in to morrow at 10?"])
 def test_tomorrow_misheard(brain, heard):
     r = talk(brain, heard, "Yes.")
-    assert booked(brain) and booked(brain)[0].start.day == 19
+    assert booked(brain) and booked(brain)[0]["starts"].startswith("2026-11-19")
 
 
 @pytest.mark.parametrize("yes", ["Sound good.", "Yes, thank you.", "Three works for me. Yes, thank you."])
