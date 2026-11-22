@@ -325,3 +325,8 @@ def test_variation_is_reproducible_with_a_seed(tmp_path):
     a, b = mk(), mk()
     assert [a.handle("What are your hours?", f"s{i}").speech for i in range(5)] == \
            [b.handle("What are your hours?", f"s{i}").speech for i in range(5)]
+
+
+def test_time_then_yes_please_in_one_breath_books(brain):
+    brain.handle("Anything tomorrow?", "c", caller_id=CALLER)
+    assert brain.handle("Two in the afternoon works. Yes, please.", "c", caller_id=CALLER).action == "booked"

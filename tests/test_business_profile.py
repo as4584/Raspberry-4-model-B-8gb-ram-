@@ -75,3 +75,11 @@ def test_get_started_and_receptionist_questions_are_answered(tmp_path):
     assert "receptionist" in b.handle("What services do you offer?", "c").speech
     r = b.handle("How much is the AI receptionist?", "c")
     assert "one thousand" not in r.speech and r.action in ("faq", "unknown")    # not a website price
+
+
+def test_more_ways_to_ask_business_questions(tmp_path):
+    prof = load_profile(str(ROOT / "deploy" / "business_profile.json"))
+    from receptionist.profile import answer
+    assert answer(prof, "What's your phone number?")[0] == "contact"
+    assert answer(prof, "Hi, what does Lex makes it do?")[0] == "services"
+    assert answer(prof, "Do you work with businesses in Pasei it?")[0] == "location"
