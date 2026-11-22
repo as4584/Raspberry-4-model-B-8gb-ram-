@@ -227,7 +227,7 @@ class Brain:
         st = self._calls.setdefault(session_id, _Call())
         pending = session_id in self.dialogue._pending
         # Whisper garbage (a decode loop like "[inainain...") or nothing intelligible: ask again.
-        if not re.search(r"[a-z]{2,}", low) or re.search(r"(\w{2,4})\1{3,}", low):
+        if not re.search(r"[a-z]{2,}|[0-9]", low) or re.search(r"(\w{2,4})\1{3,}", low):
             return Reply("Sorry, I didn't catch that.", "repeat",
                          speech="Sorry, I didn't catch that. Could you say that again?")
         if pending and AFFIRM.match(low):
