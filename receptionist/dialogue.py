@@ -54,7 +54,8 @@ OPENERS=("Okay, let me check that.","Great, you're all set.","Okay, all done.",
          "Hi, thanks for calling.","How can I help you today?","Sure.","Okay.","Hmm, okay.","One moment.",
          # polite variants used by the brain so it doesn't repeat itself (all cached)
          "Of course.","Absolutely.","Happy to help.","Alright.","Got it.","Ah, okay.","I see.",
-         "Perfect, you're all booked.","Wonderful, you're all set.","Let me take a look.","Sure, let me check.")
+         "Perfect, you're all booked.","Wonderful, you're all set.","Let me take a look.","Sure, let me check.",
+         "Sorry, was that a yes?","Sorry, I didn't catch that.")
 # Opener per reply kind for replies that don't start with one (real call: 'help' replies
 # had none, so each misunderstood turn waited ~1.5 s for synthesis before any audio).
 _OPENER_FOR={"help":"Sure.","clarify":"Sure.","cancelled":"Okay, all done.","handoff":"Okay."}

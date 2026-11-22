@@ -219,8 +219,17 @@ class Brain:
         low = re.sub(r"[.!?,]+", "", text.lower()).strip()
         st = self._calls.setdefault(session_id, _Call())
         pending = session_id in self.dialogue._pending
+        # Whisper garbage (a decode loop like "[inainain...") or nothing intelligible: ask again.
+        if not re.search(r"[a-z]{2,}", low) or re.search(r"(\w{2,4})\1{3,}", low):
+            return Reply("Sorry, I didn't catch that.", "repeat",
+                         speech="Sorry, I didn't catch that. Could you say that again?")
         if pending and AFFIRM.match(low):
             return self.dialogue.handle("yes", session_id, caller_id=caller_id)
+        # Waiting for yes/no and heard a short word that is neither (Ryan voice: "Yes." -> "Just"):
+        # a person asks again rather than guessing either way.
+        if pending and len(low.split()) <= 2 and not NEGATE.match(low) \
+                and not any(vars(parse_when(text, self.clock())).values()) and not GOODBYE.search(low):
+            return Reply("Sorry, was that a yes?", "confirm_again", speech="Sorry, was that a yes?")
         if NEGATE.match(low) and not any(vars(parse_when(text, self.clock())).values()):
             self._calls[session_id] = _Call()
             if pending:
