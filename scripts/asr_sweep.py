@@ -45,15 +45,23 @@ PHRASES = [
 
 def synth(phrase, cache: Path):
     """Piper wav -> 8 kHz u-law (phone path). Cached so reruns reuse fixtures."""
-    f = cache / (re.sub(r"[^a-z0-9]+", "_", phrase)[:60] + ".ulaw")
+    voice = Path(os.environ["PIPER_MODEL"]).stem
+    f = cache / (re.sub(r"[^a-z0-9]+", "_", phrase.lower())[:60] + f"-{voice}.ulaw")
     if not f.exists():
+        # Piper sometimes clips a short word ("Yes." -> 0.18 s "Ye"); a real caller says all of it,
+        # so short phrases keep the longest of a few takes.
+        takes = 5 if len(phrase.split()) <= 3 else 1
+        best = b""
         with tempfile.TemporaryDirectory() as d:
             wav = Path(d) / "p.wav"
-            subprocess.run([os.environ["PIPER_CLI"], "--model", os.environ["PIPER_MODEL"], "--output_file", str(wav)],
-                           input=(phrase + "\n").encode(), capture_output=True, check=True, timeout=120)
-            with wave.open(str(wav)) as w:
-                pcm, rate = w.readframes(w.getnframes()), w.getframerate()
-        f.write_bytes(audio.mulaw_from_pcm16(audio.resample_pcm16(pcm, rate, 8000)))
+            for _ in range(takes):
+                subprocess.run([os.environ["PIPER_CLI"], "--model", os.environ["PIPER_MODEL"], "--output_file", str(wav)],
+                               input=(phrase + "\n").encode(), capture_output=True, check=True, timeout=120)
+                with wave.open(str(wav)) as w:
+                    pcm, rate = w.readframes(w.getnframes()), w.getframerate()
+                take = audio.mulaw_from_pcm16(audio.resample_pcm16(pcm, rate, 8000))
+                best = take if len(take) > len(best) else best
+        f.write_bytes(best)
     return f.read_bytes()
 
 
