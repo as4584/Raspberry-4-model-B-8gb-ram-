@@ -83,7 +83,14 @@ def select_tts(env) -> tuple[object,str]:
     dialogue's openers (PIPER_RESIDENT=1), else per-call Piper, else the mock."""
     if env.get('VOICE_BACKEND')!='local' or not env.get('PIPER_MODEL'):return MockTTS(),'mock'
     if env.get('PIPER_RESIDENT')=='1':
-        tts=CachingTTS(PiperDaemonTTS([env.get('PIPER_CLI','piper')],env['PIPER_MODEL']))
+        # Expressiveness ('change pitch like a human'): intonation variation, rhythm variation, pace.
+        args=[env.get('PIPER_CLI','piper')]
+        for key,flag in (('PIPER_NOISE_SCALE','--noise_scale'),('PIPER_NOISE_W','--noise_w'),('PIPER_LENGTH_SCALE','--length_scale')):
+            if env.get(key):
+                value=float(env[key])               # ValueError on anything that isn't a number
+                if not 0.1<=value<=2.0:raise ValueError(f'{key} out of range')
+                args+=[flag,str(value)]
+        tts=CachingTTS(PiperDaemonTTS(args,env['PIPER_MODEL']))
         tts.prewarm_phrases=OPENERS
         return tts,'resident'
     return PiperTTS(env.get('PIPER_CLI','piper'),env['PIPER_MODEL']),'cli'
