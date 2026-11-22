@@ -20,7 +20,7 @@ from receptionist.dialogue import DEFAULT_HOURS, Dialogue, Reply
 from receptionist.profile import answer as profile_answer
 from receptionist.speech_format import spoken_time
 
-AFFIRM = re.compile(r"^(yes|yeah|yep|yup|sure|correct|right|that'?s right|sounds good|perfect|ok(ay)?|please do)\b")
+AFFIRM = re.compile(r"^(yes|yeah|yep|yup|yo|sure|correct|right|that'?s right|sounds good|perfect|ok(ay)?|please do)\b")
 NEGATE = re.compile(r"^(no|nope|nah|never ?mind|cancel that|not really)\b")
 PARTS = {"morning": (time(0), time(12)), "afternoon": (time(12), time(17)), "evening": (time(17), time(23, 59))}
 PREFERRED_HOURS = (10, 14, 11, 15, 9, 13, 16, 12)        # spread offers across the day
@@ -34,7 +34,7 @@ CUES = {"injection": re.compile(r"\b(ignore|pretend|override|admin|system prompt
         "cancel": re.compile(r"\bcancel")}
 BOOK_WORDS = re.compile(r"\b(book|appointment|schedule|reserve|come in|slot|opening|availability|available)\b")
 SMALL_TALK = re.compile(r"^(hi|hello|hey|good (morning|afternoon|evening))?\W*(there\W*)?(how are you|how's it going|how are things)|^(hi|hello|hey)( there)?$")
-GOODBYE = re.compile(r"\b(bye|goodbye|that's all|that is all|that'll be all|have a (good|nice|great) day)\b")
+GOODBYE = re.compile(r"\b(bye|goodbye|thanks,? by|thank you,? by|that's all|that is all|that'll be all|have a (good|nice|great) day)\b")
 ORDINALS = {"first": 0, "earliest": 0, "1st": 0, "second": 1, "2nd": 1, "middle": 1, "third": 2, "3rd": 2,
             "last": -1, "latest": -1}
 # whisper writes "three" as "free"/"pre"/"tree" (Pi suite); only rewrite when a time is
@@ -199,7 +199,7 @@ class Brain:
         pending = session_id in self.dialogue._pending
         if pending and AFFIRM.match(low):
             return self.dialogue.handle("yes", session_id, caller_id=caller_id)
-        if NEGATE.match(low):
+        if NEGATE.match(low) and not any(vars(parse_when(text, self.clock())).values()):
             self._calls[session_id] = _Call()
             if pending:
                 return self.dialogue.handle("no", session_id, caller_id=caller_id)
@@ -289,9 +289,12 @@ class Brain:
                 st.date, day = nxt, self._day_words(nxt, now.date())
                 if self._open_at(nxt, asked):
                     st.time = asked
-                    return Reply(f"{note} {day} at {spoken_time(datetime.combine(nxt, asked))}?", "offer_slots",
-                                 speech=f"Hmm, okay. {note} I do have {day[0].upper() + day[1:]} at "
-                                        f"{spoken_time(datetime.combine(nxt, asked))}. Would that work?")
+                    r = self.dialogue.handle(f"book {datetime.combine(nxt, asked):%Y-%m-%d %H:%M}", session_id,
+                                             caller_id=caller_id)
+                    if r.action == "confirm_required":
+                        tail = (r.speech or r.text).split(". ", 1)[1] if ". " in (r.speech or r.text) else r.speech
+                        return Reply(r.text, r.action, r.committed_id, speech=f"Hmm, okay. {note} {tail}")
+                    return r
             slots = self._free_slots(st.date, st.part)
             if not slots:
                 return Reply(f"{note} Nothing else is open {day}.", "no_slots",
@@ -302,10 +305,25 @@ class Brain:
         if st.date:
             slots = self._free_slots(st.date, st.part)
             day = self._day_words(st.date, now.date())
+            note = ""
             if not slots:
-                return Reply(f"Sorry, nothing is open {day}.", "no_slots",
-                             speech=f"Hmm, okay. Sorry, nothing is open {day}. Would another day work?")
+                note = f"We're closed {day}. " if not self.hours.get(st.date.weekday()) else f"{day[0].upper() + day[1:]} is full. "
+                nxt = st.date
+                for _ in range(7):
+                    nxt = self._next_open_day(nxt)
+                    if nxt is None:
+                        break
+                    slots = self._free_slots(nxt, st.part) or self._free_slots(nxt, None)
+                    if slots:
+                        break
+                if not slots:
+                    return Reply(f"{note}Nothing is open soon.", "no_slots",
+                                 speech=f"Hmm, okay. {note}Would another day work?")
+                st.date, day = nxt, self._day_words(nxt, now.date())
             st.offered = slots
+            if note:
+                return Reply(f"{note}{day}: {self._list(slots)}", "offer_slots",
+                             speech=f"Hmm, okay. {note}{day[0].upper() + day[1:]} I have {self._list(slots)}. Which works best?")
             return Reply(f"{day}: {self._list(slots)}", "offer_slots",
                          speech=f"Sure. {day[0].upper() + day[1:]} I have {self._list(slots)}. Which works best?")
         return Reply("What day works for you?", "ask_day", speech="Sure, I can check. What day works for you?")

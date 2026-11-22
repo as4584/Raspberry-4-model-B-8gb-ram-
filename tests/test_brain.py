@@ -126,10 +126,10 @@ def test_closed_day_offers_the_next_opening_instead_of_a_dead_end(sat_brain):
     # Pi conversation suite, Saturday 2026-11-21: "tomorrow at ten" is a Sunday and the reply
     # was 'That time is outside our business hours.' A receptionist offers the next opening.
     r = sat_brain.handle("Can I come in tomorrow at ten?", "c", caller_id=CALLER)
-    assert r.action == "offer_slots"
+    # Proposing the same time on the next open day doubles as the confirmation question.
+    assert r.action == "confirm_required"
     assert "closed" in r.speech.lower() and "Monday" in r.speech and "ten a m" in r.speech
-    r2 = sat_brain.handle("Yes, Monday at ten works.", "c", caller_id=CALLER)
-    assert r2.action == "confirm_required"
+    assert sat_brain.handle("Yes.", "c", caller_id=CALLER).action == "booked"
 
 
 def test_after_hours_time_offers_that_days_openings(brain):
