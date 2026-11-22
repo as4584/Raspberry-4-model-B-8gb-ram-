@@ -106,7 +106,7 @@ class _Call:
 
 class Brain:
     def __init__(self, store: BookingStore, intents, timezone_name: str = "America/New_York",
-                 hours=None, profile: dict | None = None, require_caller_id: bool = False, clock=None,
+                 hours=None, profile: dict | None = None, require_caller_id: bool = False, clock=None, knowledge=None,
                  seed: int | None = None):
         self.store, self.intents = store, intents
         self.tz = ZoneInfo(timezone_name)
@@ -114,6 +114,7 @@ class Brain:
         self.hours = hours if hours is not None else (self.profile.get('hours_parsed') or DEFAULT_HOURS)
         self.clock = clock or (lambda: datetime.now(self.tz))
         self._last: dict[str, str] = {}
+        self.knowledge = knowledge
         self.dialogue = Dialogue(store, timezone_name=timezone_name, hours=self.hours,
                                  require_caller_id=require_caller_id, clock=self.clock)
         self._calls: dict[str, _Call] = {}
@@ -217,6 +218,10 @@ class Brain:
             r = Reply("Sorry, which day was that?", "ask_again", speech="Sorry, which day was that?")
             last = "ask_again_day"
         else:
+            if r.action == "unknown" and self.knowledge is not None:
+                hit = self.knowledge.best(" ".join(utterance.split()))
+                if hit:
+                    r = Reply(hit[1], "knowledge", speech=hit[1])
             last = r.action
         self._last[session_id] = last
         return self._vary(r)

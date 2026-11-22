@@ -103,6 +103,19 @@ def load_business_profile(env) -> tuple[dict|None,str]:
     except (OSError,ValueError):prof=None
     return prof,greeting_for(prof)
 
+def load_knowledge(env,intents):
+    """Checked answers (KNOWLEDGE, default deploy/knowledge.json), embedded once at startup with the
+    brain's encoder. None when the model can't embed or the file is missing: the brain still works."""
+    if not hasattr(intents,'embed'):return None
+    from receptionist.knowledge import Knowledge
+    path=env.get('KNOWLEDGE',str(Path(__file__).resolve().parents[1]/'deploy'/'knowledge.json'))
+    try:
+        threshold=float(env.get('KNOWLEDGE_THRESHOLD','0.6'))
+        return Knowledge.from_file(path,intents.embed,threshold=threshold)
+    except (OSError,ValueError,KeyError):
+        log.warning('knowledge unavailable',exc_info=True)
+        return None
+
 def select_dialogue_factory(env, store, require_caller_id: bool, load_intents=None, profile=None) -> tuple[Callable[[],object],str]:
     """The tiny-model Brain when BRAIN_DIR holds a loadable bundle; otherwise the rule Dialogue."""
     if env.get('BRAIN_DIR'):
@@ -111,7 +124,9 @@ def select_dialogue_factory(env, store, require_caller_id: bool, load_intents=No
                 from receptionist.intent_model import load as load_intents
             intents=load_intents(env['BRAIN_DIR'])
             from receptionist.brain import Brain
-            return (lambda: Brain(store,intents=intents,require_caller_id=require_caller_id,profile=profile)),'brain'
+            knowledge=load_knowledge(env,intents)
+            return (lambda: Brain(store,intents=intents,require_caller_id=require_caller_id,profile=profile,
+                                  knowledge=knowledge)),'brain'
         except Exception:
             log.warning('brain unavailable, using rule dialogue',exc_info=True)
     return (lambda: Dialogue(store,require_caller_id=require_caller_id)),'rules'

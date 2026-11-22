@@ -19,11 +19,16 @@ class OnnxIntents:
         head = np.load(b / "intent_head.npz")
         self._W, self._b, self._classes = head["W"], head["b"], [str(c) for c in head["classes"]]
 
-    def classify(self, text: str) -> tuple[str, float]:
+    def embed(self, text: str):
+        """Sentence vector (also what the intent head reads); used to match checked answers."""
         np = self._np
         e = self._tok.encode(text)
-        v = self._s.run(None, {"input_ids": np.array([e.ids], dtype=np.int64),
-                               "attention_mask": np.array([e.attention_mask], dtype=np.int64)})[0][0]
+        return self._s.run(None, {"input_ids": np.array([e.ids], dtype=np.int64),
+                                  "attention_mask": np.array([e.attention_mask], dtype=np.int64)})[0][0]
+
+    def classify(self, text: str) -> tuple[str, float]:
+        np = self._np
+        v = self.embed(text)
         z = v @ self._W.T + self._b
         p = np.exp(z - z.max()); p /= p.sum()
         k = int(p.argmax())
