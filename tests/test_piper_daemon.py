@@ -127,3 +127,21 @@ def test_server_selects_cached_resident_piper_and_prewarms_openers(monkeypatch, 
     assert kind == "cli"
     _, kind = select_tts({})
     assert kind == "mock"
+
+
+def test_voice_expressiveness_comes_from_the_environment():
+    # 'Change pitch like a human': Piper's noise_scale (intonation variation), noise_w
+    # (rhythm variation) and length_scale (pace) are tunable without code changes.
+    from receptionist.server import select_tts
+    tts, _ = select_tts({"VOICE_BACKEND": "local", "PIPER_MODEL": "/v.onnx", "PIPER_CLI": "/opt/piper",
+                         "PIPER_RESIDENT": "1", "PIPER_NOISE_SCALE": "0.8", "PIPER_NOISE_W": "0.9",
+                         "PIPER_LENGTH_SCALE": "0.95"})
+    assert tts.inner.argv == ["/opt/piper", "--noise_scale", "0.8", "--noise_w", "0.9", "--length_scale", "0.95"]
+
+
+def test_expressiveness_values_are_validated():
+    import pytest
+    from receptionist.server import select_tts
+    with pytest.raises(ValueError):
+        select_tts({"VOICE_BACKEND": "local", "PIPER_MODEL": "/v.onnx", "PIPER_RESIDENT": "1",
+                    "PIPER_NOISE_SCALE": "9; rm -rf /"})
