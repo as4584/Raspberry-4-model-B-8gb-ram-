@@ -42,7 +42,7 @@ def turn_audio(text: str, folder: Path, lead_ms: int = 0) -> Path:
 
 
 def bookings_for(callers: list[str]) -> list[tuple]:
-    q = ("import sqlite3,json,sys;d=sqlite3.connect(sys.argv[1]);"
+    q = ("import sqlite3,json,sys;d=sqlite3.connect(sys.argv[1],timeout=30);"
          "print(json.dumps(d.execute('SELECT caller_id,status,starts FROM bookings WHERE caller_id IN (%s)'"
          "%','.join('?'*len(sys.argv[2:])),sys.argv[2:]).fetchall()))")
     out = subprocess.run(["sudo", "-u", "receptionist", "/opt/pi-receptionist/app/.venv/bin/python", "-c", q, DB, *callers],
@@ -52,7 +52,7 @@ def bookings_for(callers: list[str]) -> list[tuple]:
 
 def cleanup(callers: list[str]) -> None:
     """Cancel this run's test bookings so the live calendar is left as we found it."""
-    q = ("import sqlite3,sys;d=sqlite3.connect(sys.argv[1]);c=sys.argv[3:];"
+    q = ("import sqlite3,sys;d=sqlite3.connect(sys.argv[1],timeout=30);c=sys.argv[3:];"
          "d.execute('UPDATE bookings SET status=? WHERE caller_id IN (%s)'%','.join('?'*len(c)),[sys.argv[2]]+c);"
          "d.commit()")
     subprocess.run(["sudo", "-u", "receptionist", "/opt/pi-receptionist/app/.venv/bin/python", "-c", q, DB,

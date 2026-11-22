@@ -50,7 +50,7 @@ THREE_MISHEARD = re.compile(r"\b(free|pre|tree|pretty)(?=o[\s'-]*clock\b|\b[\s-]
 MISHEARD = [(re.compile(p, re.I), w) for p, w in (
     (r"\b(into|in to|to) ?more\b(?! than)", "tomorrow"), (r"\bto morrow\b", "tomorrow"),
     (r"\bpoint ?meant\b", "appointment"), (r"\bhour\b(?= *\?| on| today)", "hours"),
-    (r"\b(puff?ake|pasaic|passaick)\b", "Passaic"))]
+    (r"\b(puff?ake|pasaic|passaick|passay it|pass a ick)\b", "Passaic"))]
 CONFIRM_TAIL = re.compile(r"\b(yes|yeah|yep|yes please|please book it|book it|that works|sounds? good)\s*(please|thank you|thanks)?\s*$")
 LOCATION = re.compile(r"\b(where|address|located|location|directions|parking)\b")
 OPEN_DAY = re.compile(r"\b(are you|you guys|is it|is the office)\s+open\b|\bopen on\b")
@@ -112,6 +112,7 @@ class Brain:
         self.profile = profile or {}
         self.hours = hours if hours is not None else (self.profile.get('hours_parsed') or DEFAULT_HOURS)
         self.clock = clock or (lambda: datetime.now(self.tz))
+        self._last: dict[str, str] = {}
         self.dialogue = Dialogue(store, timezone_name=timezone_name, hours=self.hours,
                                  require_caller_id=require_caller_id, clock=self.clock)
         self._calls: dict[str, _Call] = {}
@@ -204,7 +205,20 @@ class Brain:
 
     # ---- the conversation ----------------------------------------------------------
     def handle(self, utterance: str, session_id: str, caller_id: str | None = None) -> Reply:
-        return self._vary(self._handle(utterance, session_id, caller_id))
+        r = self._handle(utterance, session_id, caller_id)
+        # Mid-booking, a reply we can't place is almost always a misheard short answer ("Ten." -> "Pen"):
+        # a person asks the question again instead of changing the subject.
+        last = self._last.get(session_id)
+        if r.action == "unknown" and last in ("offer_slots", "ask_which", "ask_again_time"):
+            r = Reply("Sorry, which time was that?", "ask_again", speech="Sorry, which time was that?")
+            last = "ask_again_time"
+        elif r.action == "unknown" and last in ("ask_day", "ask_again_day"):
+            r = Reply("Sorry, which day was that?", "ask_again", speech="Sorry, which day was that?")
+            last = "ask_again_day"
+        else:
+            last = r.action
+        self._last[session_id] = last
+        return self._vary(r)
 
     def _vary(self, r: Reply) -> Reply:
         sp = r.speech or ""

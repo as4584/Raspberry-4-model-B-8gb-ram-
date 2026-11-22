@@ -392,7 +392,7 @@ def test_misheard_answer_mid_booking_asks_again(brain):
 
 
 def test_misheard_day_after_day_question_asks_again(brain):
-    r = talk(brain, "Do you have any openings next week?")[0]
+    r = talk(brain, "Do you have any availability next week?")[0]
     assert r.action == "ask_day"
     r = talk(brain, "Who's there?")[0]
     assert r.action == "ask_again" and "day" in r.speech
