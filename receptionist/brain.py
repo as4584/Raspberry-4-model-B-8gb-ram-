@@ -40,7 +40,7 @@ CUES = {"injection": re.compile(r"\b(ignore|pretend|override|admin|system prompt
         "cancel": re.compile(r"\bcancel")}
 BOOK_WORDS = re.compile(r"\b(book|appointment|schedule|reserve|come in|slot|opening|availability|available)\b")
 SMALL_TALK = re.compile(r"^(hi|hello|hey|good (morning|afternoon|evening))?\W*(there\W*)?(how are you|how's it going|how are things)|^(hi|hello|hey)( there)?$")
-GOODBYE = re.compile(r"\b(bye|goodbye|thanks,? by|thank you,? by|that's all|that is all|that'll be all|have a (good|nice|great) day)\b")
+GOODBYE = re.compile(r"\b(that'?s everything|that'?s it for now|nothing else|i'?m all set|bye|goodbye|thanks,? by|thank you,? by|that's all|that is all|that'll be all|have a (good|nice|great) day)\b")
 ORDINALS = {"first": 0, "earliest": 0, "1st": 0, "second": 1, "2nd": 1, "middle": 1, "third": 2, "3rd": 2,
             "last": -1, "latest": -1}
 # whisper writes "three" as "free"/"pre"/"tree" (Pi suite); only rewrite when a time is
@@ -53,6 +53,10 @@ MISHEARD = [(re.compile(p, re.I), w) for p, w in (
     (r"\b(puff?ake|pasaic|passaick|passay it|pass a ick)\b", "Passaic"))]
 DATE_Q = re.compile(r"\bwhat('?s| is)? (the )?(day|date|time)( is it| today)?\b|\btoday'?s date\b|\bwhat day is (it|today)\b")
 STRONG_MATCH = 0.75          # override a keyword FAQ hit only when clearly closer (Pi: good 0.85+, wrong 0.61)
+# A question ABOUT the receptionist ("am I talking to a real person?") is not a transfer request.
+IDENTITY_Q = re.compile(r"^(so |wait |hold on |hi |hey )?(am i|are you|is (this|it|that)|was that)\b.*\b(real|person|human|robot|bot|machine|computer|ai|a i|recording)\b")
+AVAIL_Q = re.compile(r"\bwhen (are|is) (you|alex|someone|anyone|somebody)( guys)? (free|available|around)\b|\bare you (free|available) (on|at|this|next|tomorrow)\b")
+REAL_PERSON = ("I'm LexMakesIt's A I receptionist. Alex built me, and I can answer questions or book you a free call with Alex.")
 CONFIRM_TAIL = re.compile(r"\b(yes|yeah|yep|yes please|please book it|book it|that works|sounds? good)\s*(please|thank you|thanks)?\s*$")
 LOCATION = re.compile(r"\b(where|address|located|location|directions|parking)\b")
 OPEN_DAY = re.compile(r"\b(are you|you guys|is it|is the office)\s+open\b|\bopen on\b")
@@ -260,6 +264,9 @@ class Brain:
                          speech=f"It's {day}, and it's about {clock}. What can I help you with?")
         if pending and AFFIRM.match(low):
             return self.dialogue.handle("yes", session_id, caller_id=caller_id)
+        if IDENTITY_Q.search(low):
+            words = self.knowledge.answer("real_person") if self.knowledge is not None else None
+            return Reply(words or REAL_PERSON, "knowledge", speech=words or REAL_PERSON)
         # Waiting for yes/no and heard a short word that is neither (Ryan voice: "Yes." -> "Just"):
         # a person asks again rather than guessing either way.
         if pending and len(low.split()) <= 2 and not NEGATE.match(low) \
@@ -295,6 +302,8 @@ class Brain:
             return Reply("Great! What can I help you with?", "reply", speech="Okay. What can I help you with?")
 
         intent, conf = self.intents.classify(text)
+        if AVAIL_Q.search(low):                   # "when are you free?" is a scheduling question
+            intent, conf = "availability", max(conf, 0.9)
         if intent in CUES and not CUES[intent].search(low):
             intent, conf = ("book", 0.5) if BOOK_WORDS.search(low) else ("faq_unknown", 0.3)
         if BOOK_WORDS.search(low) and (intent in ("book", "availability", "reschedule") or intent not in CUES):
@@ -340,7 +349,12 @@ class Brain:
             if intent == "emergency":
                 return Reply("If this is an emergency, please hang up and dial 911.", "handoff",
                              speech="Okay. If this is an emergency, please hang up and dial nine one one.")
-            return self.dialogue.handle("human", session_id, caller_id=caller_id)
+            r = self.dialogue.handle("human", session_id, caller_id=caller_id)
+            contact = (self.profile.get("faq") or {}).get("contact")
+            if contact:   # a real next step, never a vague "callback"
+                r = Reply(r.text, r.action, r.committed_id,
+                          speech=f"Sure. {contact} That reaches Alex directly. Or I can book you a free call.")
+            return r
         if intent == "cancel" or low.startswith("cancel"):
             if re.search(r"\d", text) or any(w in low.split() for w in dr._UNITS):
                 return self.dialogue.handle(low if low.startswith("cancel") else "cancel " + low, session_id,

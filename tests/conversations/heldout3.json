@@ -1,0 +1,13 @@
+[
+  {"name": "h3_intro", "note": "Held-out v3: written before any v3 result was seen; scoring only, never tuned on.",
+   "turns": ["Hi, I found you guys online, can you tell me a little about what you offer?"], "expect": {"booked": false, "reply_mentions": ["website", "app"]}},
+  {"name": "h3_robot", "turns": ["Wait, are you a robot?"], "expect": {"booked": false, "reply_mentions": ["receptionist"]}},
+  {"name": "h3_price_app", "turns": ["How much do you charge to build an app?"], "expect": {"booked": false, "reply_mentions": ["free"]}},
+  {"name": "h3_teach_price", "turns": ["What do your teaching sessions cost?"], "expect": {"booked": false, "reply_mentions": ["one hundred"]}},
+  {"name": "h3_paterson", "turns": ["Do you only work with businesses around Paterson?"], "expect": {"booked": false, "reply_mentions": ["Paterson", "North Jersey"]}},
+  {"name": "h3_off", "turns": ["What's a good place to get lunch?"], "expect": {"booked": false, "reply_mentions": ["LexMakesIt"]}},
+  {"name": "h3_book_day", "turns": ["Could we meet Wednesday afternoon?", "Two is great.", "Yes."], "expect": {"booked": true}},
+  {"name": "h3_book_direct", "turns": ["Book me for tomorrow at one, please.", "Yep."], "expect": {"booked": true}},
+  {"name": "h3_person", "turns": ["Can I just speak with Alex?"], "expect": {"booked": false, "reply_mentions": ["five five one"]}},
+  {"name": "h3_done", "turns": ["Okay, I think I'm all set, thanks so much."], "expect": {"booked": false, "action": "goodbye"}}
+]

@@ -31,6 +31,9 @@ class Knowledge:
         with open(path, encoding="utf-8") as f:
             return cls(json.load(f)["entries"], embed, threshold)
 
+    def answer(self, entry_id: str) -> str | None:
+        return self._answers.get(entry_id)
+
     def best(self, text: str) -> tuple[str, str, float] | None:
         """(id, answer, similarity) of the closest checked answer, or None below the threshold."""
         if not self._rows:
