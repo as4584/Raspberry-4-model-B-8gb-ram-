@@ -83,3 +83,25 @@ def test_more_ways_to_ask_business_questions(tmp_path):
     assert answer(prof, "What's your phone number?")[0] == "contact"
     assert answer(prof, "Hi, what does Lex makes it do?")[0] == "services"
     assert answer(prof, "Do you work with businesses in Pasei it?")[0] == "location"
+
+
+def _lex():
+    return load_profile(str(ROOT / "deploy" / "business_profile.json"))
+
+
+def test_the_word_website_alone_is_not_a_contact_question():
+    from receptionist.profile import answer
+    assert answer(_lex(), "what would a website set me back")[0] == "price"
+    assert answer(_lex(), "what's your website")[0] == "contact"
+
+
+def test_everyday_price_idioms():
+    from receptionist.profile import answer
+    for q in ("ballpark for an online store", "what's the budget for something like that", "what would that run me"):
+        assert answer(_lex(), q)[0] == "price", q
+
+
+def test_town_and_city_are_location_questions():
+    from receptionist.profile import answer
+    for q in ("which city are you in", "where are you based", "what part of jersey"):
+        assert answer(_lex(), q)[0] == "location", q
