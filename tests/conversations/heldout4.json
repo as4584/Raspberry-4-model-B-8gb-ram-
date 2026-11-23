@@ -1,0 +1,13 @@
+[
+  {"name": "h4_new_shop", "note": "Held-out v4: written before any v4 result was seen; scoring only, never tuned on.",
+   "turns": ["I just opened a bakery, how could you help me?"], "expect": {"booked": false, "reply_mentions": ["website", "app", "business"]}},
+  {"name": "h4_ai_check", "turns": ["Is this an AI I'm talking to?"], "expect": {"booked": false, "reply_mentions": ["receptionist"]}},
+  {"name": "h4_site_price", "turns": ["What do you charge for a basic website?"], "expect": {"booked": false, "reply_mentions": ["thousand"]}},
+  {"name": "h4_contact", "turns": ["What's the best number to reach you?"], "expect": {"booked": false, "reply_mentions": ["five five one"]}},
+  {"name": "h4_area", "turns": ["Do you serve Clifton?"], "expect": {"booked": false, "reply_mentions": ["Passaic", "North Jersey", "Paterson"]}},
+  {"name": "h4_unrelated", "turns": ["Can you help me with my taxes?"], "expect": {"booked": false, "reply_mentions": ["LexMakesIt"]}},
+  {"name": "h4_book_friday", "turns": ["Is Friday at ten open?", "Great, book it."], "expect": {"booked": true}},
+  {"name": "h4_book_slots", "turns": ["What times do you have Thursday?", "The first one.", "Yes."], "expect": {"booked": true}},
+  {"name": "h4_owner", "turns": ["I'd rather talk to the owner directly."], "expect": {"booked": false, "reply_mentions": ["five five one"]}},
+  {"name": "h4_wrapup", "turns": ["Cool, that's all I needed, have a good one."], "expect": {"booked": false, "action": "goodbye"}}
+]

@@ -35,7 +35,7 @@ VARIANTS = {"Sure.": ("Sure.", "Of course.", "Absolutely.", "Happy to help."),
 # Cue words: the tiny model may only take drastic routes when the words support it
 # (Pi suite: "Yeah." -> human, "Perfect." -> emergency, "Tomorrow is fine." -> injection).
 CUES = {"injection": re.compile(r"\b(ignore|pretend|override|admin|system prompt|instructions|rules|jailbreak|developer mode)\b"),
-        "human": re.compile(r"\b(someone|somebody|person|human|operator|representative|staff|manager|receptionist|real)\b"),
+        "human": re.compile(r"\b(someone|somebody|person|human|operator|representative|staff|manager|receptionist|real|alex|owner)\b"),
         "emergency": re.compile(r"\b(emergency|urgent|hurt|injur|bleed|pain|911|ambulance|right now)\w*"),
         "cancel": re.compile(r"\bcancel")}
 BOOK_WORDS = re.compile(r"\b(book|appointment|schedule|reserve|come in|slot|opening|availability|available)\b")
@@ -56,6 +56,7 @@ STRONG_MATCH = 0.75          # override a keyword FAQ hit only when clearly clos
 # A question ABOUT the receptionist ("am I talking to a real person?") is not a transfer request.
 IDENTITY_Q = re.compile(r"^(so |wait |hold on |hi |hey )?(am i|are you|is (this|it|that)|was that)\b.*\b(real|person|human|robot|bot|machine|computer|ai|a i|recording)\b")
 AVAIL_Q = re.compile(r"\bwhen (are|is) (you|alex|someone|anyone|somebody)( guys)? (free|available|around)\b|\bare you (free|available) (on|at|this|next|tomorrow)\b")
+TALK_TO = re.compile(r"\b(speak|talk) (with|to) (alex|the owner|someone|somebody|anyone|a person|a human|a real person)\b|\b(can|could) i (get|reach) (alex|the owner)\b")
 REAL_PERSON = ("I'm LexMakesIt's A I receptionist. Alex built me, and I can answer questions or book you a free call with Alex.")
 UNKNOWN_SPEECH = "Hmm, that's outside what I can help with. But I can answer questions about LexMakesIt, or book you a free call with Alex."
 CONFIRM_TAIL = re.compile(r"\b(yes|yeah|yep|yes please|please book it|book it|that works|sounds? good)\s*(please|thank you|thanks)?\s*$")
@@ -305,6 +306,8 @@ class Brain:
         intent, conf = self.intents.classify(text)
         if AVAIL_Q.search(low):                   # "when are you free?" is a scheduling question
             intent, conf = "availability", max(conf, 0.9)
+        elif TALK_TO.search(low) and not IDENTITY_Q.search(low):
+            intent, conf = "human", max(conf, 0.9)
         if intent in CUES and not CUES[intent].search(low):
             intent, conf = ("book", 0.5) if BOOK_WORDS.search(low) else ("faq_unknown", 0.3)
         if BOOK_WORDS.search(low) and (intent in ("book", "availability", "reschedule") or intent not in CUES):
