@@ -1,0 +1,16 @@
+[
+  {"name": "h_what_is_it", "note": "Held-out scoring set: written once, never used to tune answers or rules.",
+   "turns": ["Hey, quick question, what is it that you guys actually do?"], "expect": {"booked": false, "reply_mentions": ["website"]}},
+  {"name": "h_bot_check", "turns": ["Hold on, is this a computer talking?"], "expect": {"booked": false, "reply_mentions": ["receptionist"]}},
+  {"name": "h_website_price", "turns": ["Roughly what would a website run me?"], "expect": {"booked": false, "reply_mentions": ["thousand"]}},
+  {"name": "h_lesson", "turns": ["I'd like somebody to show me how to automate my emails, do you do that?"], "expect": {"booked": false, "reply_mentions": ["session"]}},
+  {"name": "h_where", "turns": ["What town are you guys in?"], "expect": {"booked": false, "reply_mentions": ["Paterson"]}},
+  {"name": "h_number", "turns": ["Is there a number I can text you at?"], "expect": {"booked": false, "reply_mentions": ["five five one"]}},
+  {"name": "h_salon_bot", "turns": ["I run a barbershop and I'm always missing calls, can you help with that?"], "expect": {"booked": false, "reply_mentions": ["text"]}},
+  {"name": "h_off_topic", "turns": ["Do you know a good plumber around here?"], "expect": {"booked": false, "reply_mentions": ["LexMakesIt"]}},
+  {"name": "h_today", "turns": ["Sorry, what's the date today?"], "expect": {"booked": false, "reply_mentions": ["November", "December"]}},
+  {"name": "h_book_next_friday", "turns": ["Could I set up a call for this Friday around one?", "Yeah, that's perfect."], "expect": {"booked": true}},
+  {"name": "h_book_morning", "turns": ["I want to grab a time tomorrow morning.", "The ten works.", "Yes please."], "expect": {"booked": true}},
+  {"name": "h_change_time", "turns": ["Put me down for tomorrow at eleven.", "Actually, could we do three instead?", "Yeah."], "expect": {"booked": true}},
+  {"name": "h_no_thanks", "turns": ["What do you charge for a website?", "Okay, thanks, that's all."], "expect": {"booked": false, "action": "goodbye"}}
+]
