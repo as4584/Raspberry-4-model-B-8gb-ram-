@@ -26,14 +26,14 @@ def test_confirm_prompt_speech(d):
     r = d.handle("book december tenth at two pm", "s")
     assert r.text == "Please confirm: Thursday, December 10 at 02:00 PM for 30 minutes. Say yes or no."
     # 'Feel human': a short cached opener plays instantly while the rest synthesises.
-    assert r.speech == "Okay, let me check that. Thursday, December tenth at two p m. For thirty minutes. Shall I book it?"
+    assert r.speech == "Okay, let me check that. Thursday, December tenth at two p m is open. Want me to book it?"
 
 
 def test_booked_speech_has_no_uuid(d):
     d.handle("book december tenth at two pm", "s")
     r = d.handle("yes", "s")
     assert UUID.search(r.text)                          # screen still shows the reference
-    assert r.speech == "Great, you're all set. Thursday, December tenth at two p m. Thank you for calling."
+    assert r.speech == "Great, you're all set. That's Thursday, December tenth at two p m. Is there anything else I can help with?"
     assert not UUID.search(r.speech)
 
 
@@ -97,3 +97,16 @@ def test_every_reply_kind_opens_with_a_cached_opener(d):
         r = d.handle(said, "s" + said, caller_id="+15550000001")
         first = split_sentences(r.speech or r.text)[0]
         assert first in OPENERS, (said, first)
+
+
+def test_slot_taken_asks_for_another_time_in_plain_words(d):
+    from receptionist.dialogue import Reply
+    r = d.handle("book december tenth at two pm", "a"); d.handle("yes", "a")
+    d.handle("book december tenth at two pm", "b")
+    r = d.handle("yes", "b")
+    assert r.action == "slot_taken" and r.speech == "Sorry, that time was just taken. What other time works for you?"
+
+
+def test_non_default_length_is_said(d):
+    r = d.handle("book 2027-12-10 14:00 60", "s")
+    assert "for sixty minutes" in r.speech

@@ -25,7 +25,7 @@ class SentenceTTS:
 
     async def synthesize(self, text):
         self.calls.append(text)
-        if text == "Shall I book it?":
+        if text == "Want me to book it?":
             await asyncio.sleep(SLOW_S)
         return bytes([0x10] * 320)
 
@@ -55,10 +55,10 @@ def test_first_sentence_streams_before_slow_second_sentence_is_synthesised(tmp_p
     tts = SentenceTTS()
     first_s, events = run_call(tts)
     assert first_s < SLOW_S / 2, f"first audio after {first_s:.2f}s: reply not streamed per sentence"
-    # The confirm prompt is spoken as four sentences, opener first (feel-human wording).
-    assert tts.calls == ["Okay, let me check that.", "Friday, December tenth at two p m.", "For thirty minutes.",
-                         "Shall I book it?"]
-    assert events.count("media") == 8 and events[-1] == "mark"
+    # The confirm prompt is spoken as three sentences, opener first (feel-human wording).
+    assert tts.calls == ["Okay, let me check that.", "Friday, December tenth at two p m is open.",
+                         "Want me to book it?"]
+    assert events.count("media") == 6 and events[-1] == "mark"
 
 
 @pytest.mark.parametrize("text,expect", [
