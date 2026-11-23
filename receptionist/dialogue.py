@@ -50,13 +50,23 @@ def _code_speech(code: str | None) -> str:
 # Spoken when the call is answered, like a person picking up. Two short sentences so each
 # is cached by the TTS (callers wait for a greeting before they talk).
 GREETING="Hi, thanks for calling. How can I help you today?"
+ANYTHING_ELSE="Is there anything else I can help with?"
+
+
+def _confirm_speech(starts,duration,tz)->str:
+    """Said like a person: the slot, then one short question. The usual 30 minutes goes unsaid."""
+    length="" if duration==30 else f", for {_cardinal(duration)} minutes,"
+    return f"Okay, let me check that. {spoken_when(starts,tz)}{length} is open. Want me to book it?"
+
+
 OPENERS=("Okay, let me check that.","Great, you're all set.","Okay, all done.",
          "Hi, thanks for calling.","How can I help you today?","Sure.","Okay.","Hmm, okay.","One moment.",
          # polite variants used by the brain so it doesn't repeat itself (all cached)
          "Of course.","Absolutely.","Happy to help.","Alright.","Got it.","Ah, okay.","I see.",
          "Perfect, you're all booked.","Wonderful, you're all set.","Let me take a look.","Sure, let me check.",
          "Sorry, was that a yes?","Sorry, I didn't catch that.",
-         "Sorry, which time was that?","Sorry, which day was that?",
+         "Sorry, which time was that?","Sorry, which day was that?","Want me to book it?",ANYTHING_ELSE,
+         "Sorry, that time was just taken.",
          "Sorry, there's a lot of background noise on your end, and I'm having a hard time hearing you.",
          "Could you move somewhere quieter, or speak a little closer to the phone?")
 # Opener per reply kind for replies that don't start with one (real call: 'help' replies
@@ -157,9 +167,10 @@ class Dialogue:
                                  speech=f"Okay, all done. Your appointment is now {spoken_when(starts,self.tz)}.")
                 result=self.store.book("primary",starts,ends,key,caller_id=caller_id)
                 return Reply(f"Confirmed for {starts:%Y-%m-%d %I:%M %p}. Your reference is {result['id']}.","booked",result['id'],
-                             speech=f"Great, you're all set. {spoken_when(starts,self.tz)}.{_code_speech(result.get('code'))} Thank you for calling.")
+                             speech=f"Great, you're all set. That's {spoken_when(starts,self.tz)}.{_code_speech(result.get('code'))} {ANYTHING_ELSE}")
             except SlotTaken:
-                return Reply("That time was just taken. Please choose another slot.","slot_taken")
+                return Reply("That time was just taken. Please choose another slot.","slot_taken",
+                             speech="Sorry, that time was just taken. What other time works for you?")
             except InvalidBooking:
                 if reference:
                     return Reply("I couldn't find an active appointment with that reference.","not_found")
@@ -176,7 +187,7 @@ class Dialogue:
             if reference:
                 return Reply(f"Please confirm moving your appointment to {starts:%A, %B %d at %I:%M %p} for {duration} minutes. Say yes or no.","confirm_required")
             return Reply(f"Please confirm: {starts:%A, %B %d at %I:%M %p} for {duration} minutes. Say yes or no.","confirm_required",
-                         speech=f"Okay, let me check that. {spoken_when(starts,self.tz)}. For {_cardinal(duration)} minutes. Shall I book it?")
+                         speech=_confirm_speech(starts,duration,self.tz))
         if s=="book" or s.startswith("book "):
             # Spoken request: the deterministic resolver decides the instant (or we ask).
             when=resolve(s.removeprefix("book").strip(),self._now().astimezone(self.tz))
@@ -188,7 +199,7 @@ class Dialogue:
             starts,ends,duration=slot
             self._pending[session_id]=(None,starts,ends)
             return Reply(f"Please confirm: {starts:%A, %B %d at %I:%M %p} for {duration} minutes. Say yes or no.","confirm_required",
-                         speech=f"Okay, let me check that. {spoken_when(starts,self.tz)}. For {_cardinal(duration)} minutes. Shall I book it?")
+                         speech=_confirm_speech(starts,duration,self.tz))
         if s.startswith("cancel "):
             self._pending.pop(session_id,None)
             reference=s.removeprefix("cancel ").strip()
