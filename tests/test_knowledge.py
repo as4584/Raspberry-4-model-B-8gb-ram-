@@ -105,3 +105,8 @@ def test_when_are_you_free_asks_for_a_day(lexkb):
 def test_asking_to_talk_to_alex_or_a_person_gets_the_direct_line(lexkb, q):
     r = lexkb.handle(q, "c", caller_id=CALLER)
     assert r.action == "handoff" and "five five one" in r.speech
+
+
+@pytest.mark.parametrize("q", ["Can you help me book an appointment?", "Could you help us set up an appointment?"])
+def test_booking_request_beats_a_services_keyword(lexkb, q):
+    assert lexkb.handle(q, "c", caller_id=CALLER).action in ("ask_day", "offer_slots")

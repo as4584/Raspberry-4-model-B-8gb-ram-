@@ -365,7 +365,8 @@ class Brain:
                                             caller_id=caller_id)
             return Reply("What's your four digit booking code?", "ask_code",
                          speech="Sure. What's your four digit booking code?")
-        if (intent in ("faq", "faq_unknown") or profile_answer(self.profile, text)[1]) and not has_when:
+        booking_ask = intent in ("book", "availability", "reschedule") and BOOK_WORDS.search(low)
+        if (intent in ("faq", "faq_unknown") or profile_answer(self.profile, text)[1]) and not has_when                 and not booking_ask:
             if intent == "faq_unknown" and not profile_answer(self.profile, text)[1]:
                 return self._unknown()
             return self._faq(text)
