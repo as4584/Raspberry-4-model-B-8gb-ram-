@@ -13,15 +13,17 @@ DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 TOPICS = {
     "get_started": ("get started", "getting started", "how do i start", "sign up", "first step", "consultation",
                     "demo", "free trial"),
-    "price": ("price", "cost", "charge", "how much", "rate", "fee", "pricing", "expensive"),
+    "price": ("price", "cost", "charge", "how much", "rate", "fee", "pricing", "expensive", "set me back", "run me",
+              "would run", "ballpark", "budget", "estimate", "quote"),
     "services": ("service", "do you do", "what do you", "what does", "offer", "what kind", "specialize", "help with",
                  "make it do", "makes it do", "business about", "company about", "about your", "tell me about",
                  "you guys do", "what you do", "what is lex", "what's lex"),
-    "location": ("where", "address", "located", "location", "directions", "area", "serve", "work with businesses in",
+    "location": ("where", "address", "located", "location", "directions", "area", "serve", "work with businesses in", "town", "city", "based",
+                 "part of",
                  "passaic", "pasei", "paterson", "north jersey"),
     "parking": ("parking", "park"),
     "payment": ("pay", "payment", "card", "cash", "venmo", "zelle"),
-    "contact": ("email", "website", "contact", "phone number", "your number", "call you", "text you", "reach you"),
+    "contact": ("email", "your website", "website address", "web address", "contact", "phone number", "your number", "call you", "text you", "reach you"),
 }
 
 

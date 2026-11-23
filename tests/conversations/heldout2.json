@@ -1,0 +1,13 @@
+[
+  {"name": "h2_pitch", "note": "Held-out v2: written before any v2 result was seen; scoring only, never tuned on.",
+   "turns": ["So what kind of stuff can you build for a small business like mine?"], "expect": {"booked": false, "reply_mentions": ["app", "website"]}},
+  {"name": "h2_human", "turns": ["Am I speaking with a real person right now?"], "expect": {"booked": false, "reply_mentions": ["receptionist"]}},
+  {"name": "h2_cost", "turns": ["What's the starting price for a site?"], "expect": {"booked": false, "reply_mentions": ["thousand"]}},
+  {"name": "h2_monthly", "turns": ["Is there a monthly charge after the site is done?"], "expect": {"booked": false, "reply_mentions": ["ten dollars"]}},
+  {"name": "h2_location", "turns": ["Are you local to North Jersey?"], "expect": {"booked": false, "reply_mentions": ["Paterson", "North Jersey"]}},
+  {"name": "h2_reviews", "turns": ["I want more customers to leave reviews, is that something you do?"], "expect": {"booked": false, "reply_mentions": ["review"]}},
+  {"name": "h2_weird", "turns": ["Can you order me a pizza?"], "expect": {"booked": false, "reply_mentions": ["LexMakesIt"]}},
+  {"name": "h2_book_simple", "turns": ["Can I schedule a call with you on Thursday at two?", "Yes, please."], "expect": {"booked": true}},
+  {"name": "h2_book_vague", "turns": ["I'd like to talk to someone about a website, when are you free?", "Tomorrow works.", "Eleven.", "Sure."], "expect": {"booked": true}},
+  {"name": "h2_bye", "turns": ["Alright, that's everything, thank you."], "expect": {"booked": false, "action": "goodbye"}}
+]
