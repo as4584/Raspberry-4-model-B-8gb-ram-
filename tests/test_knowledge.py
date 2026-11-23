@@ -78,3 +78,24 @@ def test_close_checked_answer_beats_a_keyword_hit(lexkb):
 def test_off_topic_is_declined_politely_not_sent_to_alex(lexkb):
     s = lexkb.handle("purple elephant quantum soup", "c", caller_id=CALLER).speech
     assert "LexMakesIt" in s and "go over it" not in s
+
+
+@pytest.mark.parametrize("q", ["Am I speaking with a real person right now?", "Are you a real person?", "Is this a human?"])
+def test_asking_if_it_is_a_person_is_not_a_transfer_request(lexkb, q):
+    r = lexkb.handle(q, "c", caller_id=CALLER)
+    assert r.action != "handoff" and "receptionist" in r.speech
+
+
+def test_transfer_request_has_a_real_next_step(lexkb):
+    s = lexkb.handle("Can I talk to a real person?", "c", caller_id=CALLER).speech
+    assert "five five one" in s and "callback" not in s
+
+
+@pytest.mark.parametrize("q", ["Alright, that's everything, thank you.", "That's it for now, thanks.", "Nothing else, thanks."])
+def test_closings_end_the_call_politely(lexkb, q):
+    assert lexkb.handle(q, "c", caller_id=CALLER).action == "goodbye"
+
+
+def test_when_are_you_free_asks_for_a_day(lexkb):
+    r = lexkb.handle("I'd like to talk to someone about a website, when are you free?", "c", caller_id=CALLER)
+    assert r.action in ("ask_day", "offer_slots")
