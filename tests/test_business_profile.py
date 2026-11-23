@@ -105,3 +105,9 @@ def test_town_and_city_are_location_questions():
     from receptionist.profile import answer
     for q in ("which city are you in", "where are you based", "what part of jersey"):
         assert answer(_lex(), q)[0] == "location", q
+
+
+def test_how_can_you_help_me_is_a_services_question():
+    from receptionist.profile import answer
+    for q in ("how could you help me", "how can you help my business", "what can you do for my shop"):
+        assert answer(_lex(), q)[0] == "services", q
