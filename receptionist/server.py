@@ -103,6 +103,24 @@ def load_business_profile(env) -> tuple[dict|None,str]:
     except (OSError,ValueError):prof=None
     return prof,greeting_for(prof)
 
+def answer_phrases(env,profile) -> list[str]:
+    """Every sentence the brain can answer with (business facts, checked answers, fixed lines), so
+    the cache holds them before the first call: an uncached first sentence took 1-2.5 s on the Pi."""
+    texts=[t for t in ((profile or {}).get('faq') or {}).values() if t]
+    path=env.get('KNOWLEDGE',str(Path(__file__).resolve().parents[1]/'deploy'/'knowledge.json'))
+    try:
+        with open(path,encoding='utf-8') as f:texts+=[e['a'] for e in json.load(f)['entries']]
+    except (OSError,ValueError,KeyError):pass
+    try:
+        from receptionist import brain
+        texts+=[brain.REAL_PERSON,brain.UNKNOWN_SPEECH]
+    except Exception:pass
+    out=[]
+    for t in texts:
+        for sentence in split_sentences(t):
+            if sentence not in out:out.append(sentence)
+    return out
+
 def load_knowledge(env,intents):
     """Checked answers (KNOWLEDGE, default deploy/knowledge.json), embedded once at startup with the
     brain's encoder. None when the model can't embed or the file is missing: the brain still works."""
@@ -149,7 +167,7 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
         warm=None
         if getattr(tts,'prewarm_phrases',None):
             async def prewarm():
-                try:await tts.prewarm(list(tts.prewarm_phrases)+split_sentences(greeting))
+                try:await tts.prewarm(list(tts.prewarm_phrases)+split_sentences(greeting)+answer_phrases(os.environ,profile))
                 except Exception:log.warning('tts prewarm failed',exc_info=True)
             warm=asyncio.create_task(prewarm())
         async def checkpoints():

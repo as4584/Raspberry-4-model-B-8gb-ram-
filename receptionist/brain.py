@@ -57,6 +57,7 @@ STRONG_MATCH = 0.75          # override a keyword FAQ hit only when clearly clos
 IDENTITY_Q = re.compile(r"^(so |wait |hold on |hi |hey )?(am i|are you|is (this|it|that)|was that)\b.*\b(real|person|human|robot|bot|machine|computer|ai|a i|recording)\b")
 AVAIL_Q = re.compile(r"\bwhen (are|is) (you|alex|someone|anyone|somebody)( guys)? (free|available|around)\b|\bare you (free|available) (on|at|this|next|tomorrow)\b")
 REAL_PERSON = ("I'm LexMakesIt's A I receptionist. Alex built me, and I can answer questions or book you a free call with Alex.")
+UNKNOWN_SPEECH = "Hmm, that's outside what I can help with. But I can answer questions about LexMakesIt, or book you a free call with Alex."
 CONFIRM_TAIL = re.compile(r"\b(yes|yeah|yep|yes please|please book it|book it|that works|sounds? good)\s*(please|thank you|thanks)?\s*$")
 LOCATION = re.compile(r"\b(where|address|located|location|directions|parking)\b")
 OPEN_DAY = re.compile(r"\b(are you|you guys|is it|is the office)\s+open\b|\bopen on\b")
@@ -160,7 +161,7 @@ class Brain:
     @staticmethod
     def _unknown() -> Reply:
         return Reply("That's outside what I can help with, but I can answer questions about LexMakesIt or book you a free call with Alex.", "unknown",
-                     speech="Hmm, that's outside what I can help with. But I can answer questions about LexMakesIt, or book you a free call with Alex.")
+                     speech=UNKNOWN_SPEECH)
 
     # ---- calendar ------------------------------------------------------------------
     def _free_slots(self, day: date, part: str | None, n: int = 3) -> list[datetime]:
@@ -369,7 +370,7 @@ class Brain:
         follow_up = has_when and (st.date or st.time or st.offered or pending)
         if not (booking_turn or follow_up or has_when):
             return Reply("That's outside what I can help with, but I can answer questions about LexMakesIt or book you a free call with Alex.", "unknown",
-                         speech="Hmm, that's outside what I can help with. But I can answer questions about LexMakesIt, or book you a free call with Alex.")
+                         speech=UNKNOWN_SPEECH)
 
         # Merge what this turn said into what we already know.
         if when.date:
