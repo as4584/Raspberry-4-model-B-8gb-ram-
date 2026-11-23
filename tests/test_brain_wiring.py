@@ -110,3 +110,20 @@ def test_model_without_embed_still_gets_a_brain(tmp_path):
     store = BookingStore(str(tmp_path / "s.sqlite"))
     factory, kind = select_dialogue_factory({"BRAIN_DIR": "x"}, store, False, load_intents=lambda d: Fake())
     assert kind == "brain" and factory().knowledge is None
+
+
+def test_every_answer_sentence_is_prewarmed():
+    # Pi: a checked answer's long first sentence took 1-2.5 s to synthesise live.
+    import json
+    from receptionist.server import answer_phrases, load_business_profile
+    prof, _ = load_business_profile({})
+    phrases = set(answer_phrases({}, prof))
+    kb = json.loads((ROOT / "deploy" / "knowledge.json").read_text(encoding="utf-8"))
+    from receptionist.telephony import split_sentences
+    for e in kb["entries"]:
+        assert set(split_sentences(e["a"])) <= phrases, e["id"]
+    for text in prof["faq"].values():
+        if text:
+            assert set(split_sentences(text)) <= phrases
+    from receptionist.brain import REAL_PERSON
+    assert set(split_sentences(REAL_PERSON)) <= phrases
