@@ -55,10 +55,21 @@ DATE_Q = re.compile(r"\bwhat('?s| is)? (the )?(day|date|time)( is it| today)?\b|
 STRONG_MATCH = 0.75          # override a keyword FAQ hit only when clearly closer (Pi: good 0.85+, wrong 0.61)
 # A question ABOUT the receptionist ("am I talking to a real person?") is not a transfer request.
 IDENTITY_Q = re.compile(r"^(so |wait |hold on |hi |hey )?(am i|are you|is (this|it|that)|was that)\b.*\b(real|person|human|robot|bot|machine|computer|ai|a i|recording)\b")
-AVAIL_Q = re.compile(r"\bwhen (are|is) (you|alex|someone|anyone|somebody)( guys)? (free|available|around)\b|\bare you (free|available) (on|at|this|next|tomorrow)\b")
+AVAIL_Q = re.compile(r"\bwhat (times|days|slots) do you (have|guys have)\b|\bwhen can i come in\b|\bwhen (are|is) (you|alex|someone|anyone|somebody)( guys)? (free|available|around)\b|\bare you (free|available) (on|at|this|next|tomorrow)\b")
 TALK_TO = re.compile(r"\b(speak|talk) (with|to) (alex|the owner|someone|somebody|anyone|a person|a human|a real person)\b|\b(can|could) i (get|reach) (alex|the owner)\b")
 REAL_PERSON = ("I'm LexMakesIt's A I receptionist. Alex built me, and I can answer questions or book you a free call with Alex.")
 UNKNOWN_SPEECH = "Hmm, that's outside what I can help with. But I can answer questions about LexMakesIt, or book you a free call with Alex."
+# Thinking noises and speech-to-text noise tags: a person waits, they don't answer them.
+FILLER = re.compile(r"^\W*((um+|uh+|hmm+|so|you know|whoa|like|well|[\[(][^\])]*[\])])\W*)+$")
+# A leading "okay, like ..." / "so ..." is a discourse marker, not an answer.
+LEAD_IN = re.compile(r"^(okay|ok|alright|so|well|um|uh)\b[\s,]*(so\s+|like\s+|um\s+|uh\s+)*")
+# A vague period ("next week") still needs a day; otherwise offer the soonest times.
+VAGUE_PERIOD = re.compile(r"\b(next week|this week|sometime|some time|later|weekend)\b")
+REPHRASE = {"ask_again_time": "Sorry, I missed the time. You can say something like ten a m.",
+            "ask_again_day": "Sorry, I didn't catch the day. Something like tomorrow, or Thursday?",
+            "confirm_again": "Sorry, I just need a yes or a no. Should I book it?",
+            "repeat": "Sorry, it's a little hard to hear. Could you say that one more time?"}
+FILLER_REPLIES = ("Take your time.", "Mm-hm.")
 CONFIRM_TAIL = re.compile(r"\b(yes|yeah|yep|yes please|please book it|book it|that works|sounds? good)\s*(please|thank you|thanks)?\s*$")
 LOCATION = re.compile(r"\b(where|address|located|location|directions|parking)\b")
 OPEN_DAY = re.compile(r"\b(are you|you guys|is it|is the office)\s+open\b|\bopen on\b")
@@ -69,6 +80,12 @@ class When:
     date: date | None = None
     time: time | None = None
     part: str | None = None
+
+
+def split_first(text: str) -> str:
+    """The first sentence of a reply."""
+    m = re.match(r"(.+?[.!?])(\s|$)", text)
+    return m.group(1) if m else text
 
 
 def parse_when(phrase: str, now: datetime) -> When:
@@ -121,6 +138,8 @@ class Brain:
         self.hours = hours if hours is not None else (self.profile.get('hours_parsed') or DEFAULT_HOURS)
         self.clock = clock or (lambda: datetime.now(self.tz))
         self._last: dict[str, str] = {}
+        self._last_speech: dict[str, str | None] = {}
+        self._fillers: dict[str, int] = {}
         self.knowledge = knowledge
         self.dialogue = Dialogue(store, timezone_name=timezone_name, hours=self.hours,
                                  require_caller_id=require_caller_id, clock=self.clock)
@@ -233,7 +252,17 @@ class Brain:
                     r = Reply(hit[1], "knowledge", speech=hit[1])
             last = r.action
         self._last[session_id] = last
-        return self._vary(r)
+        r = self._vary(r)
+        if r.speech and r.speech == self._last_speech.get(session_id):
+            # People rephrase when they repeat themselves; identical twice sounds like a recording.
+            again = REPHRASE.get(last) or REPHRASE.get(r.action)
+            if again is None:
+                first = split_first(r.speech)
+                again = f"{first} Was there something specific you wanted to know?" if first != r.speech else \
+                    f"Like I said, {r.speech[0].lower()}{r.speech[1:]}"
+            r = Reply(r.text, r.action, r.committed_id, speech=again)
+        self._last_speech[session_id] = r.speech
+        return r
 
     def _vary(self, r: Reply) -> Reply:
         sp = r.speech or ""
@@ -259,6 +288,14 @@ class Brain:
         if not re.search(r"[a-z]{2,}|[0-9]", low) or re.search(r"(\w{2,4})\1{3,}", low):
             return Reply("Sorry, I didn't catch that.", "repeat",
                          speech="Sorry, I didn't catch that. Could you say that again?")
+        if FILLER.match(low) or (not pending and re.fullmatch(r"(okay|ok)\W*(um+|uh+)\W*", low)):
+            n = self._fillers.get(session_id, 0); self._fillers[session_id] = n + 1
+            words = FILLER_REPLIES[n % 2]
+            return Reply(words, "filler", speech=words)
+        self._fillers[session_id] = 0
+        stripped = LEAD_IN.sub("", low).strip()
+        if stripped != low and len(stripped.split()) >= 3:
+            low, text = stripped, LEAD_IN.sub("", text.lower()).strip()
         if DATE_Q.search(low) and not parse_when(text, self.clock()).time:
             now = self.clock()
             day, _, clock = spoken_when(now).partition(" at ")
@@ -441,4 +478,18 @@ class Brain:
                              speech=f"Hmm, okay. {note}{day[0].upper() + day[1:]} I have {self._list(slots)}. Which works best?")
             return Reply(f"{day}: {self._list(slots)}", "offer_slots",
                          speech=f"Sure. {day[0].upper() + day[1:]} I have {self._list(slots)}. Which works best?")
+        if not VAGUE_PERIOD.search(low) and not st.date:
+            day = now.date()
+            for _ in range(8):
+                slots = self._free_slots(day, st.part)
+                if slots:
+                    st.date, st.offered = day, slots
+                    words = self._day_words(day, now.date())
+                    return Reply(f"{words}: {self._list(slots)}", "offer_slots",
+                                 speech=f"Sure. The soonest I have is {words} at {self._list(slots)}. "
+                                        f"Or is there a day that works better?")
+                nxt = self._next_open_day(day)
+                if nxt is None:
+                    break
+                day = nxt
         return Reply("What day works for you?", "ask_day", speech="Sure, I can check. What day works for you?")

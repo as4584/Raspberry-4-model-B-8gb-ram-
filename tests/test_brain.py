@@ -48,7 +48,8 @@ def booked(brain):
 def test_owner_call_word_for_word_books(brain):
     r = talk(brain, "Hi, I want to know what your availability is like.", "How about tomorrow?",
              "Two in the afternoon works.", "Yes please.")
-    assert r[0].action == "ask_day" and "day" in r[0].speech.lower()
+    # Owner call 2026-11-23: a receptionist names the soonest times instead of asking "what day?".
+    assert r[0].action == "offer_slots" and "day" in r[0].speech.lower()
     assert r[1].action == "offer_slots" and "two p m" in r[1].speech
     assert r[2].action == "confirm_required" and r[3].action == "booked"
     (row,) = booked(brain)
@@ -171,7 +172,7 @@ def test_injection_needs_trick_words(mis):
 
 
 def test_booking_words_win_over_a_weak_model(mis):
-    assert mis.handle("Great, I need to book an appointment.", "c", caller_id=CALLER).action == "ask_day"
+    assert mis.handle("Great, I need to book an appointment.", "c", caller_id=CALLER).action in ("ask_day", "offer_slots")
 
 
 def test_small_talk_gets_a_human_answer_not_a_calendar(brain):
