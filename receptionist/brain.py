@@ -78,7 +78,8 @@ VAGUE_PERIOD = re.compile(r"\b(next week|this week|sometime|some time|later|week
 REPHRASE = {"ask_again_time": "Sorry, I missed the time. You can say something like ten a m.",
             "ask_again_day": "Sorry, I didn't catch the day. Something like tomorrow, or Thursday?",
             "confirm_again": "Sorry, I just need a yes or a no. Should I book it?",
-            "repeat": "Sorry, it's a little hard to hear. Could you say that one more time?"}
+            "repeat": "Sorry, it's a little hard to hear. Could you say that one more time?",
+            "presence": "Yep, still here. What can I help you with?"}
 PRESENCE = re.compile(r"\b(are you (still )?there|can you hear me|you still there|is anyone there)\b")
 PRESENCE_REPLY = "Yes, I'm here! How can I help?"
 OWN_BUSINESS = re.compile(r"\bi (have|own|run|operate|started|just opened|opened) (a|an|my)\b.*\b(business|shop|store|salon|"
