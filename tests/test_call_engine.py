@@ -122,7 +122,47 @@ def test_speech_before_any_reply_is_carried_into_the_next_utterance(tmp_path):
     first, second = speech(), speech()
     asyncio.run(engine.run(FakeTransport([CallStart("C1", None), *first, 0.2, *second, 1.5])))
     assert len(asr.packets) == 2
-    assert asr.packets[1] >= asr.packets[0] + 10 * 160          # carried first utterance + new one
+    # Owner call 2026-11-23: re-transcribing the merged audio each time the caller spoke again
+    # grew to 16 s and the receptionist went silent. The words carry over now, not the audio.
+    assert abs(asr.packets[1] - asr.packets[0]) <= 2400
+
+
+class Heard:
+    """Records what the dialogue was asked to handle."""
+    def __init__(self): self.texts = []
+    def handle(self, text, session, caller_id=None):
+        from receptionist.dialogue import Reply
+        self.texts.append(text); return Reply("ok", "reply", speech="Okay.")
+
+
+def test_words_from_an_interrupted_turn_reach_the_dialogue(tmp_path):
+    class Slow:
+        def __init__(self): self.n = 0
+        async def transcribe(self, b):
+            self.n += 1
+            if self.n == 1:
+                await asyncio.sleep(0.8); return "can I talk to"
+            return "a real person"
+    d = Heard()
+    engine = CallEngine(BookingStore(str(tmp_path / "w.sqlite")), asr=Slow(), tts=MockTTS(), dialogue_factory=lambda: d)
+    asyncio.run(engine.run(FakeTransport([CallStart("C1", None), *speech(), 0.2, *speech(), 1.5])))
+    assert d.texts == ["can I talk to a real person"]
+
+
+def test_caller_speaking_in_short_bursts_still_gets_an_answer(tmp_path):
+    # Owner call 2026-11-23: quiet speech in bursts every ~0.7 s while each transcription took
+    # ~1 s. Every burst cancelled the work in flight; 30 s of silence followed.
+    class OneSecond:
+        async def transcribe(self, b):
+            await asyncio.sleep(1.0); return "hello"
+    d = Heard()
+    engine = CallEngine(BookingStore(str(tmp_path / "b.sqlite")), asr=OneSecond(), tts=MockTTS(), dialogue_factory=lambda: d)
+    script = [CallStart("C1", None)]
+    for _ in range(6):
+        script += [*speech(n_loud=6, n_quiet=16), 0.35]
+    script += [2.5]
+    asyncio.run(engine.run(FakeTransport(script)))
+    assert d.texts, "the caller never got an answer"
 
 
 def test_speech_after_a_reply_started_is_not_carried(tmp_path):
