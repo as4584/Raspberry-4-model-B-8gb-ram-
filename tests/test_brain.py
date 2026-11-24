@@ -475,3 +475,9 @@ def test_everyday_sign_offs_end_the_call(brain, said):
 
 def test_see_you_with_a_day_is_not_a_goodbye(brain):
     assert brain.handle("Okay, I'll see you Thursday at two.", "c", caller_id=CALLER).action != "goodbye"
+
+
+def test_asked_are_you_there_twice_says_still_here(brain):
+    brain.handle("Hello, are you there?", "p", caller_id=CALLER)
+    r = brain.handle("Hello? Are you there?", "p", caller_id=CALLER)
+    assert "like i said" not in r.speech.lower() and "still here" in r.speech.lower()
