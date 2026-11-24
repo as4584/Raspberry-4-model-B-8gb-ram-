@@ -41,6 +41,15 @@ CUES = {"injection": re.compile(r"\b(ignore|pretend|override|admin|system prompt
 BOOK_WORDS = re.compile(r"\b(book|appointment|schedule|reserve|come in|slot|opening|availability|available)\b")
 SMALL_TALK = re.compile(r"^(hi|hello|hey|good (morning|afternoon|evening))?\W*(there\W*)?(how are you|how's it going|how are things)|^(hi|hello|hey)( there)?$")
 GOODBYE = re.compile(r"\b(that'?s everything|that'?s it for now|nothing else|i'?m all set|bye|goodbye|thanks,? by|thank you,? by|that's all|that is all|that'll be all|have a (good|nice|great) day)\b")
+
+
+def closing(low: str) -> bool:
+    """A goodbye that ends what they said. A "bye" to someone in the room, followed by
+    more talking, hung up on a real call."""
+    found = list(GOODBYE.finditer(low))
+    return bool(found) and (len(low.split()) <= 6 or len(low[found[-1].end():].split()) <= 3)
+
+
 ORDINALS = {"first": 0, "earliest": 0, "1st": 0, "second": 1, "2nd": 1, "middle": 1, "third": 2, "3rd": 2,
             "last": -1, "latest": -1}
 # whisper writes "three" as "free"/"pre"/"tree" (Pi suite); only rewrite when a time is
@@ -337,7 +346,7 @@ class Brain:
             return Reply("Okay. Is there anything else I can help with?", "reply",
                          speech="Okay. Is there anything else I can help with?")
 
-        if GOODBYE.search(low):
+        if closing(low):
             self._calls[session_id] = _Call()
             return Reply("Thanks for calling. Have a great day!", "goodbye",
                          speech="Okay. Thanks for calling. Have a great day!")
@@ -387,7 +396,7 @@ class Brain:
                     return self.dialogue.handle("no", session_id, caller_id=caller_id)
                 return Reply("Okay. Is there anything else I can help with?", "reply",
                              speech="Okay. Is there anything else I can help with?")
-            if intent == "goodbye":
+            if intent == "goodbye" and (closing(low) or len(low.split()) <= 6):
                 self._calls[session_id] = _Call()
                 return Reply("Thanks for calling. Have a great day!", "goodbye",
                              speech="Okay. Thanks for calling. Have a great day!")
