@@ -440,3 +440,18 @@ def test_lesson_price_is_the_lesson_price(lex):
 def test_handles_it_without_a_callback(lex, q):
     s = lex.handle(q, "c", caller_id=CALLER).speech.lower()
     assert "call you back" not in s and "book" in s
+
+
+@pytest.mark.parametrize("said", [
+    "Also, bye bye. That's a lot. He was probably going to go a lot of work, and it's all mine.",
+    "Bye, see you later. Anyway, how much would a website cost me?",
+])
+def test_side_talk_with_a_bye_in_it_does_not_hang_up(brain, said):
+    # Owner's call: a "bye bye" to someone in the room, then more talking, ended the call.
+    assert brain.handle(said, "c", caller_id=CALLER).action != "goodbye"
+
+
+@pytest.mark.parametrize("said", ["Okay, thanks so much, that's all I needed. Bye!",
+                                  "Alright that's everything, have a great day."])
+def test_a_goodbye_at_the_end_still_ends_the_call(brain, said):
+    assert brain.handle(said, "c", caller_id=CALLER).action == "goodbye"
