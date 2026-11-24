@@ -19,11 +19,11 @@ BUSINESS = ("LexMakesIt, a small tech business in Paterson, New Jersey: websites
             "automation teaching sessions (one hundred dollars each). Callers can book a free call with Alex, the owner.")
 
 CLASSES = {
-    "availability": "asks what times or days are open, without picking one yet",
+    "availability": "asks which APPOINTMENT times or days are free to book with Alex, without picking one yet (NOT the business opening hours)",
     "book": "asks to book or schedule a call or appointment, possibly naming a day or time",
     "reschedule": "wants to move an existing appointment to another time",
     "cancel": "wants to cancel an existing appointment",
-    "faq": "asks about opening hours or which days and times the business is open",
+    "faq": "asks about the business OPENING HOURS (what time it opens or closes, which days it is open), not about booking",
     "business": "asks what LexMakesIt does, its services, prices, location, area served, phone number, or how it could help their business",
     "faq_unknown": "asks something unrelated to LexMakesIt (other businesses, general trivia, personal favors)",
     "human": "asks to talk to Alex, the owner, or a real person",
