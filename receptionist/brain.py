@@ -40,7 +40,7 @@ CUES = {"injection": re.compile(r"\b(ignore|pretend|override|admin|system prompt
         "cancel": re.compile(r"\bcancel")}
 BOOK_WORDS = re.compile(r"\b(book|appointment|schedule|reserve|come in|slot|opening|availability|available)\b")
 SMALL_TALK = re.compile(r"^(hi|hello|hey|good (morning|afternoon|evening))?\W*(there\W*)?(how are you|how's it going|how are things)|^(hi|hello|hey)( there)?$")
-GOODBYE = re.compile(r"\b(that'?s everything|that'?s it for now|nothing else|i'?m all set|bye|goodbye|thanks,? by|thank you,? by|that's all|that is all|that'll be all|have a (good|nice|great) day)\b")
+GOODBYE = re.compile(r"\b(that'?s everything|that'?s it for now|nothing else|i'?m all set|talk (to you )?soon|take care|see ya|see you (later|soon)|bye|goodbye|thanks,? by|thank you,? by|that's all|that is all|that'll be all|have a (good|nice|great) day)\b")
 
 
 def closing(low: str) -> bool:

@@ -471,3 +471,7 @@ def test_a_long_ramble_it_cannot_place_gets_a_human_check_in(brain):
 @pytest.mark.parametrize("said", ["Talk soon.", "Okay, talk to you soon.", "Alright, take care.", "See ya."])
 def test_everyday_sign_offs_end_the_call(brain, said):
     assert brain.handle(said, "c", caller_id=CALLER).action == "goodbye"
+
+
+def test_see_you_with_a_day_is_not_a_goodbye(brain):
+    assert brain.handle("Okay, I'll see you Thursday at two.", "c", caller_id=CALLER).action != "goodbye"
