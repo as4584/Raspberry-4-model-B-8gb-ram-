@@ -113,7 +113,7 @@ def answer_phrases(env,profile) -> list[str]:
     except (OSError,ValueError,KeyError):pass
     try:
         from receptionist import brain
-        texts+=[brain.REAL_PERSON,brain.UNKNOWN_SPEECH,*brain.REPHRASE.values(),*brain.FILLER_REPLIES,brain.PRESENCE_REPLY,brain.PITCH]
+        texts+=[brain.REAL_PERSON,brain.UNKNOWN_SPEECH,*brain.REPHRASE.values(),*brain.FILLER_REPLIES,brain.PRESENCE_REPLY,brain.PITCH,brain.LOST_SPEECH]
     except Exception:pass
     out=[]
     for t in texts:

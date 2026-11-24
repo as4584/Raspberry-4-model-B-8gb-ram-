@@ -67,6 +67,7 @@ IDENTITY_Q = re.compile(r"^(so |wait |hold on |hi |hey )?(am i|are you|is (this|
 AVAIL_Q = re.compile(r"\bwhat (times|days|slots) do you (have|guys have)\b|\bwhen can i come in\b|\bwhen (are|is) (you|alex|someone|anyone|somebody)( guys)? (free|available|around)\b|\bare you (free|available) (on|at|this|next|tomorrow)\b")
 TALK_TO = re.compile(r"\b(speak|talk) (with|to) (alex|the owner|someone|somebody|anyone|a person|a human|a real person)\b|\b(can|could) i (get|reach) (alex|the owner)\b")
 REAL_PERSON = ("I'm LexMakesIt's A I receptionist. Alex built me, and I can answer questions or book you a free call with Alex.")
+LOST_SPEECH = "Sorry, I think I lost you there. What can I help you with?"
 UNKNOWN_SPEECH = "Hmm, that's outside what I can help with. But I can answer questions about LexMakesIt, or book you a free call with Alex."
 # Thinking noises and speech-to-text noise tags: a person waits, they don't answer them.
 FILLER = re.compile(r"^\W*((um+|uh+|hmm+|so|you know|whoa|like|well|[\[(][^\])]*[\])])\W*)+$")
@@ -265,6 +266,10 @@ class Brain:
                 # ("how long does a website take" -> timeline); an unknown takes any match.
                 if hit and (r.action == "unknown" or hit[2] >= STRONG_MATCH):
                     r = Reply(hit[1], "knowledge", speech=hit[1])
+            if r.action == "unknown" and len(utterance.split()) > 15:
+                # A long stretch we can't place is side talk or a garbled line, not an off-topic
+                # question: a person checks back in instead of declining.
+                r = Reply(LOST_SPEECH, "lost", speech=LOST_SPEECH)
             last = r.action
         self._last[session_id] = last
         r = self._vary(r)
