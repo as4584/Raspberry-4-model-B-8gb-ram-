@@ -466,3 +466,8 @@ def test_a_long_ramble_it_cannot_place_gets_a_human_check_in(brain):
         assert "lost you" in r.speech.lower() and "outside" not in r.speech.lower()
     else:
         assert r.action not in ("unknown",)
+
+
+@pytest.mark.parametrize("said", ["Talk soon.", "Okay, talk to you soon.", "Alright, take care.", "See ya."])
+def test_everyday_sign_offs_end_the_call(brain, said):
+    assert brain.handle(said, "c", caller_id=CALLER).action == "goodbye"
