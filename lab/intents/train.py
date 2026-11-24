@@ -96,6 +96,8 @@ def main(argv=None):
     ap.add_argument("--lab-train", required=True); ap.add_argument("--lab-dev", required=True)
     ap.add_argument("--out", required=True); ap.add_argument("--real", default="")
     ap.add_argument("--per-class", type=int, default=500); ap.add_argument("--cap", type=int, default=650)
+    ap.add_argument("--extra", nargs="*", default=[], help="more training jsonl (e.g. teacher distillation data)")
+    ap.add_argument("--skip-b", action="store_true", help="only the frozen-encoder candidate (fast)")
     a = ap.parse_args(argv)
     torch.manual_seed(0)
     dev = "cuda" if torch.cuda.is_available() else "cpu"
@@ -104,7 +106,8 @@ def main(argv=None):
     idx = {c: i for i, c in enumerate(CLASSES)}
 
     lab = [{"text": r["text"], "intent": r["intent"], "source": "lab"} for r in load_jsonl(a.lab_train)]
-    train = dedupe(lab + generate(seed=11, per_class=a.per_class))
+    extra = [{"text": r["text"], "intent": r["intent"], "source": r.get("source", "extra")} for p in a.extra for r in load_jsonl(p)]
+    train = dedupe(lab + extra + generate(seed=11, per_class=a.per_class))
     seen = {normalise(r["text"]) for r in train}
     held_new = [r for r in dedupe(generate(seed=99, per_class=60)) if normalise(r["text"]) not in seen]
     held_lab = [{"text": r["text"], "intent": r["intent"]} for r in load_jsonl(a.lab_dev)]
@@ -135,6 +138,9 @@ def main(argv=None):
     XA = embed(base, tok, texts, dev)
     WA = train_head(XA, y, len(CLASSES))
     scores = {"A": {k: round(accuracy(WA, *v), 4) for k, v in sets(base).items()}}
+    if a.skip_b:
+        print("scores", json.dumps(scores), flush=True)
+        return finish(a, tok, base, WA, "A", scores, train, n_near, n_noise)
     # Candidate B: fine-tune encoder + head end to end (small LR, 3 epochs)
     ft = Encoder(AutoModel.from_pretrained(ENCODER)).to(dev).train()
     head = torch.nn.Linear(384, len(CLASSES)).to(dev)
@@ -154,6 +160,10 @@ def main(argv=None):
 
     pick = "B" if sum(scores["B"].values()) > sum(scores["A"].values()) else "A"
     enc, W = (ft, WB) if pick == "B" else (base, WA)
+    return finish(a, tok, enc, W, pick, scores, train, n_near, n_noise)
+
+
+def finish(a, tok, enc, W, pick, scores, train, n_near, n_noise):
     out = Path(a.out); shutil.rmtree(out, ignore_errors=True); out.mkdir(parents=True)
     tok.save_pretrained(out / "tokenizer")
     np.savez(out / "intent_head.npz", W=W.weight.detach().cpu().numpy(), b=W.bias.detach().cpu().numpy(),
