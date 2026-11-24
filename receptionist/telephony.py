@@ -116,6 +116,11 @@ class CallEngine:
         # Audio of utterances whose reply hasn't started playing yet. If the caller speaks
         # again first, it is carried into the next utterance instead of being lost.
         unanswered: dict[int, bytes] = {}
+        # Words of a turn the caller talked over, waiting to be heard with what they say next.
+        # Carrying text (not audio) keeps every transcription short: re-transcribing merged audio
+        # grew to 16 s on the owner's call and the receptionist went silent for 30 s.
+        carried: dict[int, str] = {}
+        hearing: dict[int, asyncio.Future] = {}   # transcriptions still running, by turn
         review: ReviewLog | None = None
         last_voiced = time.monotonic()
         speech_end: dict[int, float] = {}       # generation -> time of its last voiced frame
@@ -175,13 +180,35 @@ class CallEngine:
             try:
                 t0 = time.monotonic()
                 unanswered[this_generation] = packet
-                utterance = await asr.transcribe(packet)
-                if not utterance:
-                    unanswered.pop(this_generation, None)        # noise: nothing to carry
+                heard = asyncio.ensure_future(asr.transcribe(packet))
+                # Talking over a turn must not throw its words away: transcription finishes on its own
+                # and the words wait for the caller's next turn.
+                def keep(t, g=this_generation):
+                    if g != generation and not t.cancelled() and t.exception() is None and t.result():
+                        carried[g] = t.result()
+                heard.add_done_callback(keep)
+                hearing[this_generation] = heard
+                heard.add_done_callback(lambda _t, g=this_generation: hearing.pop(g, None))
+                utterance = await asyncio.shield(heard)
+                unanswered.pop(this_generation, None)
                 t_asr = time.monotonic()
                 log.info('call=%s gen=%d phase=asr audio_s=%.2f took_s=%.2f stale=%s', call_id, this_generation,
                          len(packet) / 8000, t_asr - t0, this_generation != generation)
-                if this_generation != generation or not utterance or not dialogue:
+                if this_generation != generation:
+                    if utterance:
+                        carried[this_generation] = utterance
+                    return
+                # An earlier turn may still be transcribing (slow): its words come first.
+                still = [t for g, t in hearing.items() if g < this_generation]
+                if still:
+                    await asyncio.wait(still, timeout=3.0)
+                if this_generation != generation:
+                    if utterance:
+                        carried[this_generation] = utterance
+                    return
+                earlier = [carried.pop(g) for g in sorted(carried) if g < this_generation]
+                utterance = " ".join(earlier + ([utterance] if utterance else [])).strip()
+                if not utterance or not dialogue:
                     return
                 # Booking does blocking SQLite I/O (busy waits up to 15 s); keep it off the
                 # event loop so other calls keep streaming.
@@ -286,8 +313,6 @@ class CallEngine:
                         for task in list(jobs):
                             task.cancel()
                         await transport.flush()
-                        for g in sorted(unanswered):
-                            audio.extend(unanswered.pop(g))
                         audio.extend(preroll); preroll.clear()
                     heard_speech = True; silence_ms = 0; spoken_ms += ms
                     if len(audio) + len(data) > MAX_UTTERANCE_BYTES:
