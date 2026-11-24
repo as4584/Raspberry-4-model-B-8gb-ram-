@@ -69,6 +69,12 @@ REPHRASE = {"ask_again_time": "Sorry, I missed the time. You can say something l
             "ask_again_day": "Sorry, I didn't catch the day. Something like tomorrow, or Thursday?",
             "confirm_again": "Sorry, I just need a yes or a no. Should I book it?",
             "repeat": "Sorry, it's a little hard to hear. Could you say that one more time?"}
+PRESENCE = re.compile(r"\b(are you (still )?there|can you hear me|you still there|is anyone there)\b")
+PRESENCE_REPLY = "Yes, I'm here! How can I help?"
+OWN_BUSINESS = re.compile(r"\bi (have|own|run|operate|started|just opened|opened) (a|an|my)\b.*\b(business|shop|store|salon|"
+                          r"restaurant|bakery|barbershop|company|place|cafe|gym|studio|agency|clinic|practice|truck)\b")
+PITCH = ("Nice! For a business like yours, we can set up a website, online booking, and automations like "
+         "missed call text back. Want to book a free call with Alex to talk it over?")
 FILLER_REPLIES = ("Take your time.", "Mm-hm.")
 CONFIRM_TAIL = re.compile(r"\b(yes|yeah|yep|yes please|please book it|book it|that works|sounds? good)\s*(please|thank you|thanks)?\s*$")
 LOCATION = re.compile(r"\b(where|address|located|location|directions|parking)\b")
@@ -293,6 +299,17 @@ class Brain:
             words = FILLER_REPLIES[n % 2]
             return Reply(words, "filler", speech=words)
         self._fillers[session_id] = 0
+        if PRESENCE.search(low):
+            return Reply(PRESENCE_REPLY, "presence", speech=PRESENCE_REPLY)
+        offered_call = "free call" in (self._last_speech.get(session_id) or "")
+        if offered_call and not pending and (AFFIRM.match(low) or re.search(r"\b(let'?s|sounds good|sure)\b", low)) \
+                and not any(vars(parse_when(text, self.clock())).values()):
+            # "Yeah, let's go over that" right after offering a free call: start booking it.
+            self._last_speech[session_id] = None
+            return self._handle("what times do you have", session_id, caller_id)
+        st0 = self._calls.get(session_id)
+        if OWN_BUSINESS.search(low) and not pending and not (st0 and st0.offered):
+            return Reply(PITCH, "pitch", speech=PITCH)
         stripped = LEAD_IN.sub("", low).strip()
         if stripped != low and len(stripped.split()) >= 3:
             low, text = stripped, LEAD_IN.sub("", text.lower()).strip()
