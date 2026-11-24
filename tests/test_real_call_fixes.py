@@ -60,3 +60,8 @@ def test_yes_to_a_free_call_offer_starts_booking(lexkb):
 def test_caller_describing_their_business_gets_a_tailored_pitch(lexkb, q):
     r = say(lexkb, q)[0]
     assert r.action == "pitch" and "free call" in r.speech
+
+
+def test_repeated_offer_keeps_the_times(lexkb):
+    a, b = say(lexkb, "What available appointments do you have?", "What available appointments do you have?")
+    assert a.speech != b.speech and " a m" in b.speech

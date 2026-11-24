@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 
 from receptionist import datetime_resolve as dr
 from receptionist.booking import BookingStore
-from receptionist.dialogue import DEFAULT_HOURS, Dialogue, Reply
+from receptionist.dialogue import DEFAULT_HOURS, OPENERS, Dialogue, Reply
 from receptionist.profile import answer as profile_answer
 from receptionist.speech_format import spoken_time, spoken_when
 
@@ -263,9 +263,11 @@ class Brain:
             # People rephrase when they repeat themselves; identical twice sounds like a recording.
             again = REPHRASE.get(last) or REPHRASE.get(r.action)
             if again is None:
-                first = split_first(r.speech)
-                again = f"{first} Was there something specific you wanted to know?" if first != r.speech else \
-                    f"Like I said, {r.speech[0].lower()}{r.speech[1:]}"
+                body = r.speech
+                first = split_first(body)
+                if first in OPENERS and first != body:          # drop "Sure." / "Of course." before restating
+                    body = body[len(first):].strip()
+                again = f"Like I said, {body[0].lower()}{body[1:]}"
             r = Reply(r.text, r.action, r.committed_id, speech=again)
         self._last_speech[session_id] = r.speech
         return r
