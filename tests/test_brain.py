@@ -455,3 +455,14 @@ def test_side_talk_with_a_bye_in_it_does_not_hang_up(brain, said):
                                   "Alright that's everything, have a great day."])
 def test_a_goodbye_at_the_end_still_ends_the_call(brain, said):
     assert brain.handle(said, "c", caller_id=CALLER).action == "goodbye"
+
+
+def test_a_long_ramble_it_cannot_place_gets_a_human_check_in(brain):
+    # Owner's call: 49 words of side talk got "that's outside what I can help with".
+    said = ("I'm not going to do anything for me. Oh, it's not going to be anything, and it's a great "
+            "experience of brain and then the whole day. I've just been afraid right over it.")
+    r = brain.handle(said, "c", caller_id=CALLER)
+    if r.action == "lost":
+        assert "lost you" in r.speech.lower() and "outside" not in r.speech.lower()
+    else:
+        assert r.action not in ("unknown",)
