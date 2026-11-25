@@ -31,6 +31,12 @@ NOISY_FLOOR_RMS = 1500         # background this loud makes short words hard to 
 HARD_TO_HEAR = ("repeat", "ask_again", "confirm_again", "unknown")
 NOISE_NOTICE = ("Sorry, there's a lot of background noise on your end, and I'm having a hard time hearing you. "
                 "Could you move somewhere quieter, or speak a little closer to the phone?")
+# With a voice detector (Silero): speech must be loud AND human. Plain background noise lets the
+# loudness margin relax (Silero tells voice from noise); background people talking keep it strict.
+VAD_ON, VAD_OFF = 0.5, 0.35         # start / keep-going speech probability
+LOOSE_MARGIN = 1.5
+BACKGROUND_SPEECH = 0.3             # average probability between turns that means 'people talking nearby'
+TURN_CAP_BYTES = 64000              # 8 s: background voices can't hold a turn open
 NOISE_MARGIN = 2.5             # speech must be this many times the call's noise floor
 CALIBRATION_FRAMES = 25        # first 0.5 s of a greeted call: measure line noise
 FILLER = "One moment."
@@ -96,7 +102,7 @@ class CallEngine:
     def __init__(self, store: BookingStore, asr, tts, require_caller_id: bool = False, greet: bool = False,
                  transfer_to: str | None = None, review_dir: str | None = None,
                  review_callers: set[str] | None = None, dialogue_factory=None,
-                 greeting: str | None = None):
+                 greeting: str | None = None, vad_factory=None):
         self.store, self.asr, self.tts, self.require_caller_id = store, asr, tts, require_caller_id
         self.review_dir, self.review_callers = review_dir, set(review_callers or ())
         # One conversation object per call (rule Dialogue, or the tiny-model Brain).
@@ -104,6 +110,7 @@ class CallEngine:
         self.transfer_to = transfer_to   # a human's number; None -> offer a callback instead
         self.greet = greet           # answer like a person; the legacy Twilio path keeps its old behaviour
         self.greeting = greeting or GREETING
+        self.vad_factory = vad_factory   # per-call voice detector stream (Silero), or None
 
     async def run(self, transport: CallTransport) -> None:
         asr, tts = self.asr, self.tts
@@ -126,6 +133,8 @@ class CallEngine:
         speech_end: dict[int, float] = {}       # generation -> time of its last voiced frame
         noise_floor = 0.0      # this call's line-noise level (u-law RMS), learned from non-speech
         frames_seen = 0
+        vad = self.vad_factory() if self.vad_factory else None
+        background_speech = 0.0   # how much the between-turns background sounds like people
         # Serialises this call's dialogue across worker threads: a barge-in cancels the
         # awaiting task, but its thread keeps running until handle() returns.
         dialogue_lock = threading.Lock()
@@ -299,13 +308,22 @@ class CallEngine:
                 # (a 1-word turn reached whisper as 3.5 s); a silent line behaves as before.
                 level = rms_mulaw(data)
                 frames_seen += 1
+                p = vad.feed(data) if vad else 1.0
                 if self.greet and frames_seen <= CALIBRATION_FRAMES:
                     # Caller is listening to the greeting: learn the line's noise, never trigger.
                     noise_floor = level if frames_seen == 1 else 0.8 * noise_floor + 0.2 * level
+                    background_speech = p if frames_seen == 1 else 0.8 * background_speech + 0.2 * p
                     continue
-                voiced = level > max(VOICE_MIN_RMS, NOISE_MARGIN * noise_floor)
+                margin = NOISE_MARGIN
+                if vad and background_speech <= BACKGROUND_SPEECH:
+                    margin = LOOSE_MARGIN
+                voiced = level > max(VOICE_MIN_RMS, margin * noise_floor)
+                if vad:
+                    voiced = voiced and p >= (VAD_OFF if heard_speech else VAD_ON)
                 if not voiced and not heard_speech:
                     noise_floor = 0.95 * noise_floor + 0.05 * level
+                    if vad:
+                        background_speech = 0.98 * background_speech + 0.02 * p
                 if voiced:
                     last_voiced = time.monotonic()
                     if not heard_speech:
@@ -321,6 +339,8 @@ class CallEngine:
                         spawn(bytes(audio), generation)
                         audio.clear()
                     audio.extend(data)
+                    if vad and len(audio) >= TURN_CAP_BYTES:
+                        end_turn()             # background voices held it open: answer what we have
                 elif not heard_speech:
                     # Soft onsets ("b" in "book") sit below the trigger: keep the last 300 ms.
                     preroll.extend(data)

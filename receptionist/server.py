@@ -79,6 +79,15 @@ def select_asr_factory(env) -> tuple[Callable[[],object],str]:
     return (lambda: WhisperCppASR(env.get('WHISPER_CLI','whisper-cli'),env['WHISPER_MODEL'])),'cli'
 
 PARADEE_VOICES=('af_heart','am_puck','bf_isabella','bm_fable')
+def select_vad(env):
+    """VAD_ENGINE=silero: a per-call Silero stream factory (model loads once); else None (loudness only)."""
+    if env.get('VAD_ENGINE')!='silero':return None
+    if not env.get('SILERO_VAD_MODEL'):raise ValueError('SILERO_VAD_MODEL required for VAD_ENGINE=silero')
+    from receptionist import vad as vad_mod
+    model=vad_mod.SileroVAD(env['SILERO_VAD_MODEL'])
+    return model.stream
+
+
 def select_tts(env) -> tuple[object,str]:
     """TTS per environment: resident Piper behind a phrase cache prewarmed with the
     dialogue's openers (PIPER_RESIDENT=1), else per-call Piper, else the mock."""
@@ -169,6 +178,7 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
     store=BookingStore(settings.db_path)
     profile,greeting=load_business_profile(os.environ)
     dialogue_factory,brain_kind=select_dialogue_factory(os.environ,store,settings.require_caller_id,profile=profile)
+    vad_factory=select_vad(os.environ)
     asr_kind='custom'
     if asr_factory is None:
         asr_factory,asr_kind=select_asr_factory(os.environ)
@@ -199,13 +209,14 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
             if closer:await closer()
     app=FastAPI(title='Pi Local Receptionist',version='0.1.0',lifespan=lifespan)
     app.state.store=store
+    app.state.vad_kind='silero' if vad_factory else 'loudness'
     # Bounded LRU: an unbounded map of session_id -> Dialogue is a memory leak.
     sessions:OrderedDict[str,Dialogue]=OrderedDict()
     app.state.sessions=sessions
     sessions_lock=threading.Lock()  # sync endpoints run on a thread pool
 
     @app.get('/healthz')
-    def healthz():return {'status':'ok','voice_backend':os.getenv('VOICE_BACKEND','mock'),'asr':asr_kind,'tts':tts_kind,'brain':brain_kind}
+    def healthz():return {'status':'ok','voice_backend':os.getenv('VOICE_BACKEND','mock'),'asr':asr_kind,'tts':tts_kind,'brain':brain_kind,'vad':app.state.vad_kind}
 
     @app.get('/readyz')
     def readyz():
@@ -244,7 +255,7 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
         # chan_websocket asks for the "media" sub-protocol; echo it or the handshake fails.
         await ws.accept(subprotocol='media' if 'media' in ws.scope.get('subprotocols',[]) else None)
         engine=CallEngine(store,asr=asr_factory(),tts=tts,require_caller_id=settings.require_caller_id,greet=True,
-                          dialogue_factory=dialogue_factory,greeting=greeting,
+                          dialogue_factory=dialogue_factory,greeting=greeting,vad_factory=vad_factory,
                           transfer_to=caller_number(os.getenv('TRANSFER_TO')),
                           review_dir=os.getenv('REVIEW_DIR','/var/lib/pi-receptionist/data/review'),
                           review_callers={k for k in (review_key(x) for x in os.getenv('REVIEW_CALLERS','').split(',')) if k})
