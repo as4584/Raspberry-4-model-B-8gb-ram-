@@ -78,9 +78,23 @@ def select_asr_factory(env) -> tuple[Callable[[],object],str]:
         return (lambda: shared),'daemon'
     return (lambda: WhisperCppASR(env.get('WHISPER_CLI','whisper-cli'),env['WHISPER_MODEL'])),'cli'
 
+PARADEE_VOICES=('af_heart','am_puck','bf_isabella','bm_fable')
 def select_tts(env) -> tuple[object,str]:
     """TTS per environment: resident Piper behind a phrase cache prewarmed with the
     dialogue's openers (PIPER_RESIDENT=1), else per-call Piper, else the mock."""
+    if env.get('VOICE_BACKEND')=='local' and env.get('TTS_ENGINE')=='paradee':
+        # Paradee: 8 MB voice distilled from Kokoro; ~2x faster than Piper on the Pi 4 and far less robotic.
+        voice=env.get('PARADEE_VOICE','af_heart')
+        if voice not in PARADEE_VOICES:raise ValueError('PARADEE_VOICE not allowed')
+        threads=int(env.get('PARADEE_THREADS','2'))
+        if not 1<=threads<=4:raise ValueError('PARADEE_THREADS out of range')
+        speed=float(env.get('PARADEE_SPEED','1.0'))
+        if not 0.5<=speed<=2.0:raise ValueError('PARADEE_SPEED out of range')
+        script=str(Path(__file__).resolve().parents[1]/'scripts'/'paradee_daemon.py')
+        args=[env['PARADEE_PYTHON'],script,'--voice',voice,'--threads',str(threads),'--speed',str(speed)]
+        tts=CachingTTS(PiperDaemonTTS(args,env['PARADEE_MODEL']))
+        tts.prewarm_phrases=OPENERS
+        return tts,'paradee'
     if env.get('VOICE_BACKEND')!='local' or not env.get('PIPER_MODEL'):return MockTTS(),'mock'
     if env.get('PIPER_RESIDENT')=='1':
         # Expressiveness ('change pitch like a human'): intonation variation, rhythm variation, pace.
