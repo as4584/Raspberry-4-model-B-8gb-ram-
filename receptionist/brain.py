@@ -68,6 +68,15 @@ AVAIL_Q = re.compile(r"\bwhat (times|days|slots) do you (have|guys have)\b|\bwhe
 TALK_TO = re.compile(r"\b(speak|talk) (with|to) (alex|the owner|someone|somebody|anyone|a person|a human|a real person)\b|\b(can|could) i (get|reach) (alex|the owner)\b")
 REAL_PERSON = ("I'm LexMakesIt's A I receptionist. Alex built me, and I can answer questions or book you a free call with Alex.")
 LOST_SPEECH = "Sorry, I think I lost you there. What can I help you with?"
+# No dead ends (owner): a miss is usually a noisy line, so ask again; a second miss in a row
+# offers the way forward instead of declining.
+LOUD_SPEECH = "Sorry, it's a bit loud where you are. Could you say that again?"
+STILL_LOST_SPEECH = ("Sorry, I'm still having trouble hearing you. I can tell you what we do, our prices, "
+                     "or book you a free call with Alex. Which would help?")
+OFF_TOPIC_SPEECH = ("I'm not sure about that one. But I can tell you what we do, our prices, "
+                    "or book you a free call with Alex. Which would help?")
+# A clear question we just can't answer (vs garbled noise): understood, so don't blame the line.
+CLEAR_QUESTION = re.compile(r"^(can|could|do|does|did|what|what's|how|is|are|will|would|where|who|why|when|which)\b(\s+\S+){2,}")
 UNKNOWN_SPEECH = "Hmm, that's outside what I can help with. But I can answer questions about LexMakesIt, or book you a free call with Alex."
 # Thinking noises and speech-to-text noise tags: a person waits, they don't answer them.
 FILLER = re.compile(r"^\W*((um+|uh+|hmm+|so|you know|whoa|like|well|[\[(][^\])]*[\])])\W*)+$")
@@ -157,6 +166,7 @@ class Brain:
         self._last: dict[str, str] = {}
         self._last_speech: dict[str, str | None] = {}
         self._fillers: dict[str, int] = {}
+        self._misses: dict[str, int] = {}
         self.knowledge = knowledge
         self.dialogue = Dialogue(store, timezone_name=timezone_name, hours=self.hours,
                                  require_caller_id=require_caller_id, clock=self.clock)
@@ -271,8 +281,17 @@ class Brain:
                 # A long stretch we can't place is side talk or a garbled line, not an off-topic
                 # question: a person checks back in instead of declining.
                 r = Reply(LOST_SPEECH, "lost", speech=LOST_SPEECH)
+            if r.action == "unknown":
+                missed = self._misses.get(session_id, 0)
+                if CLEAR_QUESTION.match(" ".join(utterance.lower().split())):
+                    words = OFF_TOPIC_SPEECH
+                else:
+                    words = LOUD_SPEECH if missed == 0 else STILL_LOST_SPEECH
+                r = Reply(words, "unknown", speech=words)
             last = r.action
         self._last[session_id] = last
+        if r.action not in ("filler",):
+            self._misses[session_id] = self._misses.get(session_id, 0) + 1 if r.action == "unknown" else 0
         r = self._vary(r)
         if r.speech and r.speech == self._last_speech.get(session_id):
             # People rephrase when they repeat themselves; identical twice sounds like a recording.

@@ -79,8 +79,8 @@ def test_close_checked_answer_beats_a_keyword_hit(lexkb):
 
 
 def test_off_topic_is_declined_politely_not_sent_to_alex(lexkb):
-    s = lexkb.handle("purple elephant quantum soup", "c", caller_id=CALLER).speech
-    assert "LexMakesIt" in s and "go over it" not in s
+    s = lexkb.handle("What is the capital of France?", "c", caller_id=CALLER).speech
+    assert "outside what" not in s and "go over it" not in s and "loud" not in s
 
 
 @pytest.mark.parametrize("q", ["Am I speaking with a real person right now?", "Are you a real person?", "Is this a human?"])
