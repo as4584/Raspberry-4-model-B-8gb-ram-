@@ -78,3 +78,14 @@ def test_server_builds_a_silero_factory_only_when_asked(monkeypatch):
     monkeypatch.setattr("receptionist.vad.SileroVAD", lambda path: type("S", (), {"stream": lambda self: path})())
     factory = select_vad({"VAD_ENGINE": "silero", "SILERO_VAD_MODEL": "/m/silero_vad.onnx"})
     assert factory() == "/m/silero_vad.onnx"
+
+
+def test_asterisk_calls_get_the_configured_voice_detector(monkeypatch, tmp_path):
+    import receptionist.server as srv
+    made = []
+    monkeypatch.setattr(srv, "select_vad", lambda env: (lambda: made.append(1) or ScriptedVAD([])))
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "s.sqlite"))
+    app = srv.create_app(tts=MockTTS(), asr_factory=RecordingASR)
+    assert app.state.vad_kind == "silero"
+    from fastapi.testclient import TestClient
+    assert TestClient(app).get("/healthz").json()["vad"] == "silero"
