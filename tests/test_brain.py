@@ -481,3 +481,17 @@ def test_asked_are_you_there_twice_says_still_here(brain):
     brain.handle("Hello, are you there?", "p", caller_id=CALLER)
     r = brain.handle("Hello? Are you there?", "p", caller_id=CALLER)
     assert "like i said" not in r.speech.lower() and "still here" in r.speech.lower()
+
+
+def test_no_reply_is_ever_a_dead_end(brain):
+    # Owner's noisy call: background turned into "famously" and got "that's outside what I can help with".
+    for said in ("famously", "directional um", "is a capital friends", "So what they said?"):
+        r = brain.handle(said, "d", caller_id=CALLER)
+        assert "outside what i can help" not in (r.speech or "").lower(), said
+
+
+def test_a_miss_after_a_good_turn_asks_again_not_the_menu(brain):
+    brain.handle("famously", "e", caller_id=CALLER)
+    brain.handle("What are your hours?", "e", caller_id=CALLER)
+    r = brain.handle("famously", "e", caller_id=CALLER)
+    assert "loud where you are" in r.speech
