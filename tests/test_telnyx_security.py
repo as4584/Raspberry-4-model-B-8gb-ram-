@@ -75,3 +75,11 @@ def test_only_sipp_rec_calls_and_owner_review_numbers_are_recorded():
     mm = next(i for i, l in enumerate(rec) if "MixMonitor" in l)
     # The only recording in the real-call path sits right behind the review-number gate.
     assert 'GotoIf($["${GLOBAL(REVIEW_${CALLERID(num):-10})}" != "1"]?go)' in rec[mm - 1]
+
+
+def test_registration_never_gives_up_after_a_brief_rejection():
+    # Nov 24: Telnyx refused one login during a short outage; Asterisk stopped retrying and
+    # calls had nowhere to land for ~23 h until a manual re-register.
+    reg = section(SEC, "telnyx-reg", "registration")
+    assert re.search(r"^auth_rejection_permanent\s*=\s*no\s*$", reg, re.M)
+    assert int(re.search(r"^max_retries\s*=\s*(\d+)", reg, re.M).group(1)) >= 1000
