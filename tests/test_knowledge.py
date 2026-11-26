@@ -59,7 +59,9 @@ def test_brain_without_a_match_still_offers_the_free_call(brain):
 
 def test_mid_booking_reask_beats_knowledge(brain):
     brain.handle("Appointment tomorrow.", "c", caller_id=CALLER)
-    assert brain.handle("tell me a joke", "c", caller_id=CALLER).action == "ask_again"
+    assert brain.handle("Pen.", "c", caller_id=CALLER).action == "ask_again"
+    # A real question mid-booking gets an answer, not "which time was that?" (simulated callers, 2026-11-26).
+    assert brain.handle("tell me a joke", "c", caller_id=CALLER).action != "ask_again"
 
 
 @pytest.fixture

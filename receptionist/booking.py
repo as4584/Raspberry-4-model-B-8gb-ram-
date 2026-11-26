@@ -45,6 +45,13 @@ class BookingStore:
             if "code" not in cols:
                 db.execute("ALTER TABLE bookings ADD COLUMN code TEXT")
             db.execute("CREATE INDEX IF NOT EXISTS active_slot ON bookings(resource,status,starts,ends)")
+            if "name" not in cols:
+                db.execute("ALTER TABLE bookings ADD COLUMN name TEXT")
+            # Messages a caller asked us to pass to the owner (their words, kept for that only).
+            db.execute("""CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY, created TEXT NOT NULL, caller_id TEXT, name TEXT,
+                callback TEXT, body TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'new'
+            )""")
         # Keeper connection: while one connection stays open, closing a booking's session is
         # never the *last* close, so SQLite doesn't checkpoint+fsync the whole WAL on the
         # caller's time (Pi: 2-6 s saves on the USB stick). Checkpoints run via checkpoint().
@@ -204,3 +211,18 @@ class BookingStore:
     def active(self) -> list[dict]:
         with self._session() as db:
             return [dict(x) for x in db.execute("SELECT * FROM bookings WHERE status='active' ORDER BY starts")]
+
+    def set_name(self, reference: str, name: str, caller_id: str | None = None) -> bool:
+        with self._session() as db:
+            return db.execute("UPDATE bookings SET name=? WHERE id=? AND caller_id IS ?",
+                              (name, reference, caller_id)).rowcount == 1
+
+    def add_message(self, name: str | None, callback: str | None, body: str, caller_id: str | None = None) -> int:
+        with self._session() as db:
+            return db.execute("INSERT INTO messages (created, caller_id, name, callback, body) VALUES (?, ?, ?, ?, ?)",
+                              (datetime.now(timezone.utc).isoformat(), caller_id, name, callback, body)).lastrowid
+
+    def messages(self, status: str | None = None) -> list[dict]:
+        with self._session() as db:
+            q, a = ("SELECT * FROM messages WHERE status=? ORDER BY id", (status,)) if status else                 ("SELECT * FROM messages ORDER BY id", ())
+            return [dict(x) for x in db.execute(q, a)]

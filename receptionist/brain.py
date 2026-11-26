@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 
 from receptionist import datetime_resolve as dr
 from receptionist.booking import BookingStore
-from receptionist.dialogue import DEFAULT_HOURS, OPENERS, Dialogue, Reply
+from receptionist.dialogue import ANYTHING_ELSE, DEFAULT_HOURS, OPENERS, Dialogue, Reply
 from receptionist.profile import answer as profile_answer
 from receptionist.speech_format import spoken_time, spoken_when
 
@@ -40,7 +40,7 @@ CUES = {"injection": re.compile(r"\b(ignore|pretend|override|admin|system prompt
         "cancel": re.compile(r"\bcancel")}
 BOOK_WORDS = re.compile(r"\b(book|appointment|schedule|reserve|come in|slot|opening|availability|available)\b")
 SMALL_TALK = re.compile(r"^(hi|hello|hey|good (morning|afternoon|evening))?\W*(there\W*)?(how are you|how's it going|how are things)|^(hi|hello|hey)( there)?$")
-GOODBYE = re.compile(r"\b(that'?s everything|that'?s it for now|nothing else|i'?m all set|talk (to you )?soon|take care|see ya|see you (later|soon)|bye|goodbye|thanks,? by|thank you,? by|that's all|that is all|that'll be all|have a (good|nice|great) day)\b")
+GOODBYE = re.compile(r"\b(that'?s everything|that'?s it for now|nothing else|i'?m all set|talk (to you )?soon|take care|see ya|see you (later|soon)|bye|goodbye|thanks,? by|thank you,? by|that's all|that is all|that'll be all|have a (good|nice|great) day|bye bye|god bless|(i )?(gotta|got to|have to|need to) (go|run|hop off|jump)|gotta run|i'?ll call (you )?back|i'?ll try (you )?(again )?later)\b")
 
 
 def closing(low: str) -> bool:
@@ -61,14 +61,66 @@ MISHEARD = [(re.compile(p, re.I), w) for p, w in (
     (r"\bpoint ?meant\b", "appointment"), (r"\bhour\b(?= *\?| on| today)", "hours"),
     (r"\b(puff?ake|pasaic|passaick|passay it|pass a ick)\b", "Passaic"))]
 DATE_Q = re.compile(r"\bwhat('?s| is)? (the )?(day|date|time)( is it| today)?\b|\btoday'?s date\b|\bwhat day is (it|today)\b")
+UNKNOWN_MATCH = 0.6           # an unplaced question takes a checked answer only when it's a fair match
 STRONG_MATCH = 0.75          # override a keyword FAQ hit only when clearly closer (Pi: good 0.85+, wrong 0.61)
 # A question ABOUT the receptionist ("am I talking to a real person?") is not a transfer request.
 IDENTITY_Q = re.compile(r"^(so |wait |hold on |hi |hey )?(am i|are you|is (this|it|that)|was that)\b.*\b(real|person|human|robot|bot|machine|computer|ai|a i|recording)\b")
 AVAIL_Q = re.compile(r"\bwhat (times|days|slots) do you (have|guys have)\b|\bwhen can i come in\b|\bwhen (are|is) (you|alex|someone|anyone|somebody)( guys)? (free|available|around)\b|\bare you (free|available) (on|at|this|next|tomorrow)\b")
 TALK_TO = re.compile(r"\b(speak|talk) (with|to) (alex|the owner|someone|somebody|anyone|a person|a human|a real person)\b|\b(can|could) i (get|reach) (alex|the owner)\b")
 REAL_PERSON = ("I'm LexMakesIt's A I receptionist. Alex built me, and I can answer questions or book you a free call with Alex.")
-LOST_SPEECH = "Sorry, I think I lost you there. What can I help you with?"
-UNKNOWN_SPEECH = "Hmm, that's outside what I can help with. But I can answer questions about LexMakesIt, or book you a free call with Alex."
+LOST_SPEECH = "I'm sorry, I didn't quite follow all of that. What would you like help with today?"
+# Never "outside what I can help with": an honest "I don't want to guess" plus a real next step.
+UNKNOWN_SPEECH = ("That's a good question, and I don't want to guess. I can book you a free call with Alex "
+                  "to go over it, or take a message for him. Which would you prefer?")
+NOT_FOLLOW_SPEECH = ("Sorry, I'm not sure I follow. I can tell you about LexMakesIt's websites and prices, "
+                     "or book you a free call with Alex. What would help?")
+QUESTION = re.compile(r"^(so |and |but |wait |also |hey |um |uh )*(can|could|do|does|did|what|what's|how|is|are|will|would|"
+                      r"where|who|why|when|which|any|have)\b|\?\s*$")
+# Six simulated callers, 2026-11-26 (tests/test_kindness.py).
+MESSAGE = re.compile(r"\b(take|leave|pass( on| along)?) (a |him a |alex a )?message\b|\b(have|ask|get) (him|alex|someone|somebody) (to )?call\b"
+                     r"|\b(call|get back to) me( back)?\b|\bcall ?back\b|\bcallback\b")
+WAIT = re.compile(r"^(hold on|hang on|one (sec|second|moment|minute)|give me (a|one) (sec|second|minute|moment)|"
+                  r"just a (sec|second|moment|minute)|wait a (sec|second|minute))\b")
+REAL_EMERGENCY = re.compile(r"\b(fire|ambulance|bleeding|hurt|injured|heart attack|can'?t breathe|police|overdose|gas leak|unconscious)\b")
+SITE_TROUBLE = re.compile(r"\b(site|website|page|email)\b.*\b(down|broken|not working|crashed|offline|hacked|isn'?t working)\b")
+DISTRESS = re.compile(r"\b(drowning|overwhelmed|stressed|stressful|struggling|burned|burnt|ripped off|scammed|vanished|ghosted|"
+                      r"took my money|lost (my |all my )?money|sales are (way |really )?down|can'?t afford|frustrat\w*|upset|worried|"
+                      r"scared|nervous|don'?t know where to start|hard time|tough time|rough time|losing customers)\b")
+BURNED = re.compile(r"\b(burned|burnt|ripped off|scammed|vanished|ghosted|took my money|took \w+ (thousand|hundred) dollars)\b")
+MONEY_WORRY = re.compile(r"\b(can'?t afford|money('?s| is) tight|on a budget|lost (my |all my )?money)\b")
+SPANISH = re.compile(r"\b(spanish|espa[nñ]ol|habla)\b")
+SPANISH_SPEECH = ("I'm sorry, I can only speak English right now. I'll keep it simple, "
+                  "and I can take a message for Alex if that's easier.")
+WEATHER = re.compile(r"\b(cold|hot|freezing|rain\w*|snow\w*|weather|humid|chilly)\b.*\b(today|out|outside|isn'?t it|huh)\b")
+REPEAT_ASK = re.compile(r"\b(what was that|say that again|repeat that|come again|pardon|one more time|again,? slowly|"
+                        r"didn'?t catch that|what did you say|could you repeat)\b")
+MOVE = re.compile(r"\b(move|reschedule|change|switch|push)\b.*\b(it|that|appointment|booking|call)\b|\binstead\b")
+CANCEL_IT = re.compile(r"\bcancel (it|that|this|my (appointment|booking|call)|the (appointment|booking|call))\b|^cancel$")
+NAME_LEAD = re.compile(r"^((hi|hey|yeah|yes|oh|sure|okay|ok|well|um|uh|so)\W+)*(it'?s|this is|my name is|name'?s|i'?m|i am|call me)?\s*", re.I)
+DIGIT_WORDS = {"zero": "0", "oh": "0", "o": "0", "one": "1", "two": "2", "three": "3", "four": "4",
+               "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9"}
+TALK_TO_SPEECH = ("Alex isn't available right this second, but I can take a message and have him call you back, "
+                  "or book you a free call with him. Which would you prefer?")
+NOT_A_NAME = {"yes", "yeah", "no", "nope", "sure", "okay", "ok", "hello", "hi", "um", "uh", "the", "a", "actually", "wait",
+              "can", "could", "would", "will", "do", "does", "did", "how", "what", "when", "where", "why", "who", "is", "are",
+              "cancel", "move", "book", "thanks", "thank", "never", "i", "it", "that", "this", "just", "hold", "hang",
+              "hmm", "and", "but", "not", "sorry", "please", "great", "perfect", "alright", "cool", "good"}
+
+
+def spoken_digits(text: str) -> str:
+    return "".join(t if t.isdigit() else DIGIT_WORDS.get(t, "") for t in re.findall(r"[a-z]+|\d", text.lower()))
+
+
+DAYTIME = (r"(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow|morning|afternoon|evening|"
+           r"\d{1,2}(?::\d\d)?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|noon)"
+           r"(?:\s*(?:o'?\s?clock|a\.? ?m\.?|p\.? ?m\.?|in the (?:morning|afternoon|evening)))?")
+_SELF_FIX = re.compile(rf"\b{DAYTIME}\W+(?:(?:no|nope|wait|sorry|actually|i mean|scratch that)\W+)+(?={DAYTIME}\b)", re.I)
+_NOT_THAT = re.compile(rf"\bnot (?:at |on )?{DAYTIME}\W*", re.I)
+
+
+def corrected(text: str) -> str:
+    """'Tuesday, no, no, Wednesday' -> 'Wednesday'; 'not ten, two o'clock' -> 'two o'clock'."""
+    return _NOT_THAT.sub("", _SELF_FIX.sub("", text)).strip()
 # Thinking noises and speech-to-text noise tags: a person waits, they don't answer them.
 FILLER = re.compile(r"^\W*((um+|uh+|hmm+|so|you know|whoa|like|well|[\[(][^\])]*[\])])\W*)+$")
 # A leading "okay, like ..." / "so ..." is a discourse marker, not an answer.
@@ -148,7 +200,7 @@ class _Call:
 class Brain:
     def __init__(self, store: BookingStore, intents, timezone_name: str = "America/New_York",
                  hours=None, profile: dict | None = None, require_caller_id: bool = False, clock=None, knowledge=None,
-                 seed: int | None = None):
+                 seed: int | None = None, on_message=None):
         self.store, self.intents = store, intents
         self.tz = ZoneInfo(timezone_name)
         self.profile = profile or {}
@@ -158,9 +210,16 @@ class Brain:
         self._last_speech: dict[str, str | None] = {}
         self._fillers: dict[str, int] = {}
         self.knowledge = knowledge
+        self.on_message = on_message              # called with {name, callback}, never the words
         self.dialogue = Dialogue(store, timezone_name=timezone_name, hours=self.hours,
                                  require_caller_id=require_caller_id, clock=self.clock)
         self._calls: dict[str, _Call] = {}
+        self._msg: dict[str, dict] = {}           # message being taken: step, name, callback, body
+        self._booked: dict[str, str] = {}         # this call's booking reference (move/cancel "it")
+        self._names: dict[str, str] = {}          # the caller's name, once given
+        self._felt: dict[str, int] = {}           # times we've acknowledged feelings this call
+        self._moving: dict[str, bool] = {}        # caller asked to move this call's booking
+        self._utter: dict[str, str] = {}          # the caller's previous words (a repeat vs a new question)
         import random as _random
         self._rng = _random.Random(seed)
 
@@ -250,42 +309,167 @@ class Brain:
 
     # ---- the conversation ----------------------------------------------------------
     def handle(self, utterance: str, session_id: str, caller_id: str | None = None) -> Reply:
+        s, low = session_id, " ".join(re.sub(r"[.!?,]+", " ", utterance.lower()).split())
         r = self._handle(utterance, session_id, caller_id)
-        # Mid-booking, a reply we can't place is almost always a misheard short answer ("Ten." -> "Pen"):
-        # a person asks the question again instead of changing the subject.
+        # Mid-booking, a SHORT reply we can't place is almost always a misheard answer ("Ten." -> "Pen"):
+        # a person asks again. A real question ("do you do payment plans?") gets a real answer.
         last = self._last.get(session_id)
-        if r.action == "unknown" and last in ("offer_slots", "ask_which", "ask_again_time"):
+        short = len(low.split()) <= 3
+        if r.action == "unknown" and short and last in ("offer_slots", "ask_which"):
             r = Reply("Sorry, which time was that?", "ask_again", speech="Sorry, which time was that?")
             last = "ask_again_time"
-        elif r.action == "unknown" and last in ("ask_day", "ask_again_day"):
+        elif r.action == "unknown" and short and last == "ask_day":
             r = Reply("Sorry, which day was that?", "ask_again", speech="Sorry, which day was that?")
             last = "ask_again_day"
         else:
             if r.action in ("unknown", "faq") and self.knowledge is not None:
                 hit = self.knowledge.best(" ".join(utterance.split()))
-                # A keyword answer ("website" -> contact) loses to a close checked answer
-                # ("how long does a website take" -> timeline); an unknown takes any match.
-                if hit and (r.action == "unknown" or hit[2] >= STRONG_MATCH):
+                # A keyword answer ("website" -> contact) loses to a close checked answer; an unknown
+                # takes a fair match only ("see examples of your work" is not the reviews answer).
+                if hit and hit[2] >= (UNKNOWN_MATCH if r.action == "unknown" else STRONG_MATCH):
                     r = Reply(hit[1], "knowledge", speech=hit[1])
             if r.action == "unknown" and len(utterance.split()) > 15:
-                # A long stretch we can't place is side talk or a garbled line, not an off-topic
-                # question: a person checks back in instead of declining.
                 r = Reply(LOST_SPEECH, "lost", speech=LOST_SPEECH)
+            elif r.action == "unknown" and not QUESTION.search(low):
+                # Not a question (side talk, a garbled line): don't send it to Alex.
+                r = Reply(NOT_FOLLOW_SPEECH, "unknown", speech=NOT_FOLLOW_SPEECH)
             last = r.action
         self._last[session_id] = last
+        if r.action in ("booked", "rescheduled") and r.committed_id:
+            self._booked[s] = r.committed_id
+            self._moving.pop(s, None)
+            if r.action == "booked" and s not in self._names:
+                # Alex needs to know who he's calling (every simulated caller noticed it never asked).
+                body = (r.speech or r.text).replace(ANYTHING_ELSE, "").strip()
+                self._msg[s] = {"step": "booking_name", "ref": r.committed_id}
+                r = Reply(r.text, r.action, r.committed_id,
+                          speech=f"{body} Can I get your name, so Alex knows who he's talking to?")
         r = self._vary(r)
+        if DISTRESS.search(low) and r.action != "goodbye":
+            r = self._acknowledge(r, low, s)
         if r.speech and r.speech == self._last_speech.get(session_id):
             # People rephrase when they repeat themselves; identical twice sounds like a recording.
             again = REPHRASE.get(last) or REPHRASE.get(r.action)
-            if again is None:
+            if again is None and r.action == "unknown":
+                again = ("I'm not sure on that one either, I'm sorry. Alex would know, though. "
+                         "Should I take a message for him, or book you a free call?")
+            elif again is None and low != self._utter.get(s) and r.action in ("faq", "knowledge", "pitch"):
+                # A different question that lands on the same answer: that answer doesn't fit.
+                r, again = Reply(UNKNOWN_SPEECH, "unknown", speech=UNKNOWN_SPEECH), UNKNOWN_SPEECH
+            elif again is None:
                 body = r.speech
                 first = split_first(body)
-                if first in OPENERS and first != body:          # drop "Sure." / "Of course." before restating
+                if first in OPENERS and first != body:
                     body = body[len(first):].strip()
-                again = f"Like I said, {body[0].lower()}{body[1:]}"
+                again = f"Sure, once more. {body}"
             r = Reply(r.text, r.action, r.committed_id, speech=again)
         self._last_speech[session_id] = r.speech
+        self._utter[s] = low
         return r
+
+    def _acknowledge(self, r: Reply, low: str, s: str) -> Reply:
+        """Feelings first: 'I'm drowning' got 'Nice! For a business like yours...'."""
+        n = self._felt.get(s, 0)
+        self._felt[s] = n + 1
+        if n:
+            ack = "I hear you."
+        elif BURNED.search(low):
+            ack = "Oh no, I'm really sorry that happened to you. That's awful, and it makes sense to be careful."
+        elif MONEY_WORRY.search(low):
+            ack = "I completely understand. Money is tight for a lot of small businesses right now."
+        else:
+            ack = "I'm really sorry, that sounds really stressful."
+        body = r.speech or r.text
+        if r.action in ("unknown", "lost", "pitch"):
+            body = ("Alex helps small businesses with exactly this, and the first call is free. "
+                    "I can book you one, or take a message so he can call you back. Which would be better?")
+        first = split_first(body)
+        if first in OPENERS and first != body:
+            body = body[len(first):].strip()
+        return Reply(r.text, r.action, r.committed_id, speech=f"{ack} {body}")
+
+    # ---- messages --------------------------------------------------------------------
+    @staticmethod
+    def _name_from(text: str) -> str | None:
+        words = re.findall(r"[A-Za-z][A-Za-z'-]*", NAME_LEAD.sub("", text.strip()))
+        if not words or words[0].lower() in NOT_A_NAME:
+            return None
+        name = [words[0]]
+        if len(words) > 1 and words[1][0].isupper() and words[1].lower() not in NOT_A_NAME | {"my", "i", "and"}:
+            name.append(words[1])
+        return " ".join(w[0].upper() + w[1:] for w in name)
+
+    def _start_message(self, s: str, caller_id: str | None, lead: str, body: str | None = None) -> Reply:
+        flow = self._msg[s] = {"step": "name", "body": body}
+        self._calls[s] = _Call()
+        if s in self._names:
+            flow["name"] = self._names[s]
+            return self._ask_number(flow, caller_id, lead)
+        return Reply(f"{lead} What's your name?", "ask_name", speech=f"{lead} What's your name?")
+
+    def _ask_number(self, flow: dict, caller_id: str | None, lead: str | None = None) -> Reply:
+        flow["step"] = "number"
+        head = lead or f"Thanks, {flow['name']}."
+        q = "Is the number you're calling from the best one to reach you?" if caller_id else \
+            "What's the best number for Alex to call you back on?"
+        return Reply(f"{head} {q}", "ask_number", speech=f"{head} {q}")
+
+    def _message_step(self, flow: dict, text: str, low: str, s: str, caller_id: str | None) -> Reply | None:
+        step = flow["step"]
+        if step == "booking_name":
+            self._msg.pop(s, None)
+            name = self._name_from(text) if len(low.split()) <= 5 else None
+            if not name:
+                return None                       # they moved on; handle the turn normally
+            self._names[s] = name
+            self.store.set_name(flow["ref"], name, caller_id)
+            words = f"Thanks, {name}! {ANYTHING_ELSE}"
+            return Reply(words, "name_taken", speech=words)
+        if step == "name":
+            name = self._name_from(text)
+            if not name:
+                return Reply("Sorry, what was your name?", "ask_name", speech="Sorry, what was your name?")
+            flow["name"] = self._names[s] = name
+            return self._ask_number(flow, caller_id)
+        if step == "number":
+            digits = spoken_digits(text)
+            if len(digits) >= 7:
+                flow["callback"] = digits
+            elif caller_id and (AFFIRM.match(low) or re.search(r"\b(this|that|same) (number|one)\b", low)):
+                flow["callback"] = caller_id
+            else:
+                words = "No problem. What's the best number for Alex to call?"
+                return Reply(words, "ask_number", speech=words)
+            if flow.get("body"):
+                return self._save_message(flow, s, caller_id)
+            flow["step"] = "body"
+            words = "Got it. And what would you like me to tell Alex?"
+            return Reply(words, "ask_message", speech=words)
+        flow["body"] = text.strip()
+        return self._save_message(flow, s, caller_id)
+
+    def _save_message(self, flow: dict, s: str, caller_id: str | None) -> Reply:
+        self._msg.pop(s, None)
+        self.store.add_message(flow.get("name"), flow.get("callback"), flow["body"], caller_id=caller_id)
+        if self.on_message:
+            try:
+                self.on_message({"name": flow.get("name"), "callback": flow.get("callback")})
+            except Exception:
+                pass                              # a notifier problem never breaks the call
+        words = (f"Got it, {flow.get('name') or 'thanks'}. I'll make sure Alex gets your message, and he'll call you "
+                 f"back as soon as he can. {ANYTHING_ELSE}")
+        return Reply(words, "message_taken", speech=words)
+
+    def _book(self, when: str, session_id: str, caller_id: str | None = None) -> Reply:
+        ref = self._booked.get(session_id)
+        if ref and self._moving.get(session_id):
+            r = self.dialogue.handle(f"reschedule {ref} {when}", session_id, caller_id=caller_id)
+            if r.action == "confirm_required":
+                starts = datetime.strptime(when, "%Y-%m-%d %H:%M").replace(tzinfo=self.tz)
+                words = f"Sure, I can move it to {spoken_when(starts, self.tz)}. Should I go ahead?"
+                return Reply(r.text, r.action, r.committed_id, speech=words)
+            return r
+        return self.dialogue.handle(f"book {when}", session_id, caller_id=caller_id)
 
     def _vary(self, r: Reply) -> Reply:
         sp = r.speech or ""
@@ -300,6 +484,7 @@ class Brain:
         # Words phone-quality ASR mishears for common booking words.
         for heard, meant in MISHEARD:
             text = heard.sub(meant, text)
+        text = corrected(text)          # 'Tuesday, no, no, Wednesday' -> 'Wednesday'
         expecting_time = self._calls.get(session_id) is not None and bool(
             self._calls[session_id].offered or self._calls[session_id].date)
         if expecting_time:
@@ -311,6 +496,47 @@ class Brain:
         if not re.search(r"[a-z]{2,}|[0-9]", low) or re.search(r"(\w{2,4})\1{3,}", low):
             return Reply("Sorry, I didn't catch that.", "repeat",
                          speech="Sorry, I didn't catch that. Could you say that again?")
+        flow = self._msg.get(session_id)
+        if flow and not closing(low):
+            r = self._message_step(flow, text, low, session_id, caller_id)
+            if r is not None:
+                return r
+        if closing(low) and not (pending and AFFIRM.match(low)):
+            # "I gotta go" / "No thanks. Bye." / "God bless, goodbye": let them go, warmly.
+            self._calls[session_id] = _Call()
+            self._msg.pop(session_id, None)
+            name = self._names.get(session_id)
+            words = f"No problem{', ' + name if name else ''}. Thanks for calling, and take care!"
+            return Reply("Thanks for calling. Have a great day!", "goodbye", speech=words)
+        if WAIT.match(low) and len(low.split()) <= 5:
+            return Reply("Take your time.", "filler", speech="Sure, take your time.")
+        if REPEAT_ASK.search(low) and self._last_speech.get(session_id):
+            body = self._last_speech[session_id]
+            first = split_first(body)
+            if first in OPENERS and first != body:
+                body = body[len(first):].strip()
+            return Reply(body, "repeat_back", speech=f"Of course. {body}")
+        if SPANISH.search(low):
+            return Reply(SPANISH_SPEECH, "spanish", speech=SPANISH_SPEECH)
+        if WEATHER.search(low) and not BOOK_WORDS.search(low):
+            return Reply("I hear you! What can I help you with today?", "small_talk",
+                         speech="Oh, I hear you! What can I help you with today?")
+        if SITE_TROUBLE.search(low) and not REAL_EMERGENCY.search(low):
+            return self._start_message(session_id, caller_id, body=text,
+                                       lead="Oh no, I'm sorry about that. Let me take a message so Alex can get on it as soon as he can.")
+        last = self._last.get(session_id)
+        if MESSAGE.search(low) or (last in ("unknown", "handoff", "spanish") and re.search(r"\bmessage\b", low)) \
+                or (last == "handoff" and AFFIRM.match(low)):
+            return self._start_message(session_id, caller_id, lead="Of course, I can take a message for Alex.")
+        ref = self._booked.get(session_id)
+        if ref and MOVE.search(low):
+            self._moving[session_id] = True
+        if ref and CANCEL_IT.search(low):
+            self._calls[session_id] = _Call()
+            if self.store.cancel(ref, caller_id=caller_id):
+                self._booked.pop(session_id, None)
+                words = f"Okay, it's cancelled. {ANYTHING_ELSE}"
+                return Reply("Your appointment is cancelled.", "cancelled", speech=words)
         if FILLER.match(low) or (not pending and re.fullmatch(r"(okay|ok)\W*(um+|uh+)\W*", low)):
             n = self._fillers.get(session_id, 0); self._fillers[session_id] = n + 1
             words = FILLER_REPLIES[n % 2]
@@ -366,10 +592,10 @@ class Brain:
             for word, i in ORDINALS.items():
                 if re.search(rf"\b{word}\b", low):
                     pick = st.offered[i]
-                    return self.dialogue.handle(f"book {pick:%Y-%m-%d %H:%M}", session_id, caller_id=caller_id)
+                    return self._book(f"{pick:%Y-%m-%d %H:%M}", session_id, caller_id=caller_id)
         bare = AFFIRM.match(low) and not pending and not any(vars(parse_when(text, now)).values())
         if bare and st.date and st.time:          # "yes" to a single time we just proposed
-            return self.dialogue.handle(f"book {datetime.combine(st.date, st.time):%Y-%m-%d %H:%M}", session_id,
+            return self._book(f"{datetime.combine(st.date, st.time):%Y-%m-%d %H:%M}", session_id,
                                         caller_id=caller_id)
         if bare:
             return Reply("Great! What can I help you with?", "reply", speech="Okay. What can I help you with?")
@@ -391,7 +617,7 @@ class Brain:
                 if pending:
                     return self.dialogue.handle("yes", session_id, caller_id=caller_id)
                 if st.date and st.time:
-                    return self.dialogue.handle(f"book {datetime.combine(st.date, st.time):%Y-%m-%d %H:%M}",
+                    return self._book(f"{datetime.combine(st.date, st.time):%Y-%m-%d %H:%M}",
                                                 session_id, caller_id=caller_id)
                 if st.offered:
                     return Reply("Which time works best?", "ask_which", speech="Sure. Which time works best for you?")
@@ -421,15 +647,20 @@ class Brain:
             return Reply("I can't do that, but I'm happy to help you book or answer a question.", "refuse",
                          speech="Sorry, I can't do that. But I'm happy to help you book, or answer a question.")
         if intent in ("human", "emergency"):
-            if intent == "emergency":
+            if intent == "emergency" and REAL_EMERGENCY.search(low):
                 return Reply("If this is an emergency, please hang up and dial 911.", "handoff",
                              speech="Okay. If this is an emergency, please hang up and dial nine one one.")
-            r = self.dialogue.handle("human", session_id, caller_id=caller_id)
+            if intent == "emergency":
+                # "My site is down, it's an emergency" is urgent business, not a 911 call.
+                return self._start_message(session_id, caller_id, body=text,
+                                           lead="I'm sorry you're dealing with that. Let me take a message so Alex can get back to you as soon as he can.")
+            # The direct line once, and a message as the easy option (simulated callers heard the
+            # number five times a call and still couldn't leave a message).
             contact = (self.profile.get("faq") or {}).get("contact")
-            if contact:   # a real next step, never a vague "callback"
-                r = Reply(r.text, r.action, r.committed_id,
-                          speech=f"Sure. {contact} That reaches Alex directly. Or I can book you a free call.")
-            return r
+            if contact:
+                words = f"Of course. {contact} Or if it's easier, I can take a message and have him call you back."
+                return Reply(words, "handoff", speech=words)
+            return Reply(TALK_TO_SPEECH, "handoff", speech=TALK_TO_SPEECH)
         if intent == "cancel" or low.startswith("cancel"):
             if re.search(r"\d", text) or any(w in low.split() for w in dr._UNITS):
                 return self.dialogue.handle(low if low.startswith("cancel") else "cancel " + low, session_id,
@@ -457,7 +688,7 @@ class Brain:
         if st.date and st.time:
             if self._open_at(st.date, st.time):
                 starts = datetime.combine(st.date, st.time)
-                r = self.dialogue.handle(f"book {starts:%Y-%m-%d %H:%M}", session_id, caller_id=caller_id)
+                r = self._book(f"{starts:%Y-%m-%d %H:%M}", session_id, caller_id=caller_id)
                 # "2 p.m. yes." -- picked the time and confirmed it in one breath.
                 if r.action == "confirm_required" and CONFIRM_TAIL.search(low):
                     return self.dialogue.handle("yes", session_id, caller_id=caller_id)
@@ -475,7 +706,7 @@ class Brain:
                 st.date, day = nxt, self._day_words(nxt, now.date())
                 if self._open_at(nxt, asked):
                     st.time = asked
-                    r = self.dialogue.handle(f"book {datetime.combine(nxt, asked):%Y-%m-%d %H:%M}", session_id,
+                    r = self._book(f"{datetime.combine(nxt, asked):%Y-%m-%d %H:%M}", session_id,
                                              caller_id=caller_id)
                     if r.action == "confirm_required":
                         tail = (r.speech or r.text).split(". ", 1)[1] if ". " in (r.speech or r.text) else r.speech

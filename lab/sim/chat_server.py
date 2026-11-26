@@ -1,0 +1,94 @@
+"""Two-way conversation lab: the live brain (same code, intent model, knowledge and business
+profile as the Pi) answers one caller turn at a time, so a simulated caller can react to each
+reply. With ears on, the caller's words go Piper -> 8 kHz u-law -> whisper base.en, the same
+hearing a phone call gets. Bookings go to a throwaway database, never the real one.
+
+Run on the Pi from a checkout (loopback only):
+    WHISPER_CLI=... LD_LIBRARY_PATH=... PIPER_CLI=... PIPER_MODEL=... BRAIN_DIR=... \
+        .venv/bin/python lab/sim/chat_server.py --port 8099
+
+    POST /start {"session": "s1"}                         -> {"reply": greeting}
+    POST /turn  {"session": "s1", "text": "...", "ears": true}
+                                                          -> {"heard", "reply", "action", "ended"}
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+import tempfile
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path[:0] = [str(ROOT), str(ROOT / "scripts")]
+
+from receptionist.booking import BookingStore  # noqa: E402
+from receptionist.server import load_business_profile, select_dialogue_factory  # noqa: E402
+
+ENDS = {"goodbye", "end", "hangup"}
+WHISPER = "/opt/pi-receptionist/speech/models/ggml-base.en-q5_1.bin"
+
+
+class Lab:
+    def __init__(self):
+        self.db = Path(tempfile.mkdtemp(prefix="simlab-")) / "bookings.sqlite3"
+        store = BookingStore(str(self.db))
+        profile, self.greeting = load_business_profile(os.environ)
+        self.factory, kind = select_dialogue_factory(os.environ, store, require_caller_id=False, profile=profile)
+        if kind != "brain":
+            raise SystemExit("brain bundle did not load (check BRAIN_DIR)")
+        self.sessions: dict[str, object] = {}
+        self.lock = threading.Lock()
+        self.ears_lock = threading.Lock()      # one whisper run at a time on the Pi
+
+    def hear(self, text: str) -> str:
+        import asr_sweep
+        with self.ears_lock, tempfile.TemporaryDirectory() as d:
+            heard, *_ = asr_sweep.transcribe(WHISPER, asr_sweep.synth(text, Path(d)), "adaptive", True)
+        return heard
+
+    def turn(self, session: str, text: str, ears: bool) -> dict:
+        heard = self.hear(text) if ears else text
+        with self.lock:
+            brain = self.sessions.setdefault(session, self.factory())
+        t0 = time.monotonic()
+        r = brain.handle(heard, session, caller_id="+15550001000")
+        return {"heard": heard, "reply": r.speech or r.text, "action": r.action,
+                "ended": r.action in ENDS, "brain_s": round(time.monotonic() - t0, 3)}
+
+
+def serve(lab: Lab, port: int):
+    class H(BaseHTTPRequestHandler):
+        def do_POST(self):
+            try:
+                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
+                if self.path == "/start":
+                    with lab.lock:
+                        lab.sessions.pop(body["session"], None)
+                    out = {"reply": lab.greeting}
+                elif self.path == "/turn":
+                    out = lab.turn(body["session"], str(body["text"])[:500], bool(body.get("ears", True)))
+                else:
+                    self.send_error(404); return
+                data, code = json.dumps(out).encode(), 200
+            except Exception as exc:                      # report, keep serving
+                data, code = json.dumps({"error": f"{type(exc).__name__}: {exc}"}).encode(), 500
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(data)
+
+        def log_message(self, *a):
+            pass
+
+    ThreadingHTTPServer(("127.0.0.1", port), H).serve_forever()
+
+
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--port", type=int, default=8099)
+    serve(Lab(), ap.parse_args().port)
