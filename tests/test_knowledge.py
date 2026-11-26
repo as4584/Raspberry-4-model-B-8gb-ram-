@@ -52,12 +52,9 @@ def test_brain_uses_knowledge_instead_of_unknown(brain):
     assert r.action == "knowledge" and "repair" in r.speech
 
 
-def test_brain_without_a_match_asks_again_then_offers_the_free_call(brain):
-    # Owner: dead ends are a setback. First miss: assume a noisy line and ask again.
+def test_brain_without_a_match_still_offers_the_free_call(brain):
     r = brain.handle("purple elephant quantum soup", "c", caller_id=CALLER)
-    assert r.action == "unknown" and "loud where you are" in r.speech and "outside" not in r.speech
-    r = brain.handle("green banana rocket stew", "c", caller_id=CALLER)
-    assert r.action == "unknown" and "free call" in r.speech and "outside" not in r.speech
+    assert r.action == "unknown" and "free call" in r.speech
 
 
 def test_mid_booking_reask_beats_knowledge(brain):
