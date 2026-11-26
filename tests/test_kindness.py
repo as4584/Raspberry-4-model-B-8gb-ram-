@@ -159,3 +159,65 @@ def test_repeat_request_is_not_like_i_said(brain):
 def test_small_talk_is_not_a_booking(brain):
     (r,) = talk(brain, "Oh it's so cold today, isn't it?")
     assert r.action != "offer_slots"
+
+
+# ---- round 2 (same six callers, new brain: 3-4/10) ----------------------------------------
+def test_price_first_is_not_the_first_slot(brain):
+    r = talk(brain, "Can I book something tomorrow?", "No dear, I just wanted to know the price first. How much does a website cost?")
+    assert r[1].action != "confirm_required"
+
+
+def test_one_time_is_not_one_pm(brain):
+    r = talk(brain, "Can I book something tomorrow?", "Is the price one time or monthly?")
+    assert r[1].action != "confirm_required"
+
+
+def test_not_ready_to_book_stops_offering(brain):
+    r = talk(brain, "Can I book something tomorrow?", "I don't want to book anything yet.")
+    assert r[1].action not in ("confirm_required", "offer_slots")
+
+
+def test_the_first_one_still_books(brain):
+    r = talk(brain, "Can I book something tomorrow?", "The first one.")
+    assert r[1].action == "confirm_required"
+
+
+def test_hold_on_with_a_reason_waits(brain):
+    (r,) = talk(brain, "Hold on, let me get my glasses.")
+    assert r.action == "filler"
+
+
+def test_what_if_my_site_goes_down_is_a_question_not_a_message(brain):
+    (r,) = talk(brain, "What if my site goes down at night?")
+    assert r.action != "ask_name"
+
+
+def test_number_is_read_back_and_a_short_one_is_asked_again(brain):
+    r = talk(brain, "Can you take a message?", "Mike.", "No, call nine oh eight five five oh one four two.",
+             "Nine oh eight five five oh one four two two.")
+    assert r[2].action == "ask_number" and "again" in said(r[2])
+    assert "nine oh eight" in said(r[3]) or "nine zero eight" in said(r[3])
+    assert r[3].action == "ask_message"
+
+
+def test_read_my_number_back(brain):
+    r = talk(brain, "Can you take a message?", "Mike.", "Nine oh eight five five oh one four two two.",
+             "Can you read my number back?")
+    assert "nine" in said(r[3]) and "one four two two" in said(r[3]).replace(",", "")
+
+
+@pytest.mark.parametrize("words,name", [("Carlos, Carlos Diaz.", "Carlos Diaz"), ("Mike MAKE.", "Mike"),
+                                        ("Sí, yes, bueno, my name is Carlos.", "Carlos")])
+def test_names_are_clean(brain, words, name):
+    r = talk(brain, "Can you take a message?", words)
+    assert f"thanks, {name.lower()}." in said(r[1])
+
+
+def test_a_question_during_the_message_is_answered(brain):
+    r = talk(brain, "Can you take a message?", "Wait, what does the ten dollars a month cover?")
+    assert r[1].action != "ask_name"
+
+
+def test_what_is_an_ai_is_explained(brain):
+    (r,) = talk(brain, "What's an AI, dear?")
+    assert "computer" in said(r)
