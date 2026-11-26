@@ -226,3 +226,7 @@ class BookingStore:
         with self._session() as db:
             q, a = ("SELECT * FROM messages WHERE status=? ORDER BY id", (status,)) if status else                 ("SELECT * FROM messages ORDER BY id", ())
             return [dict(x) for x in db.execute(q, a)]
+
+    def mark_message(self, message_id: int, status: str) -> None:
+        with self._session() as db:
+            db.execute("UPDATE messages SET status=? WHERE id=?", (status, message_id))

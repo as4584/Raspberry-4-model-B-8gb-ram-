@@ -221,3 +221,21 @@ def test_a_question_during_the_message_is_answered(brain):
 def test_what_is_an_ai_is_explained(brain):
     (r,) = talk(brain, "What's an AI, dear?")
     assert "computer" in said(r)
+
+
+def test_asking_if_it_was_cancelled_does_not_cancel(brain):
+    r = talk(brain, "Book tomorrow at two p m.", "Yes.", "Is my booking still there, or did you cancel it?")
+    assert r[2].action != "cancelled" and len(brain.store.active()) == 1
+    assert "still booked" in said(r[2]) or "still on" in said(r[2])
+
+
+def test_will_he_call_me_today_is_answered_honestly(brain):
+    r = talk(brain, "Can you take a message?", "Priya.", "Yes.", "Please call me, my site is broken.",
+             "Will he call me today? Can you mark it urgent?")
+    assert r[4].action != "ask_name" and "urgent" in said(r[4])
+    assert brain.store.messages()[0]["status"] == "urgent"
+
+
+def test_no_book_only_matters_when_times_are_offered(brain):
+    (r,) = talk(brain, "Hi, so I just wanted to know like what's your business about")
+    assert "no rush" not in said(r)
