@@ -239,3 +239,56 @@ def test_will_he_call_me_today_is_answered_honestly(brain):
 def test_no_book_only_matters_when_times_are_offered(brain):
     (r,) = talk(brain, "Hi, so I just wanted to know like what's your business about")
     assert "no rush" not in said(r)
+
+
+# ---- round 3 -------------------------------------------------------------------------------
+def test_a_corrected_number_after_read_back_is_saved(brain):
+    r = talk(brain, "Can you take a message?", "Mike.", "Nine oh eight five five oh one four two two.",
+             "Call me back about a quote.", "Can you read my number back?",
+             "No, it's nine oh eight five five five oh one four two.")
+    assert "nine oh eight, five five five, oh one four two" in said(r[5])
+    assert brain.store.messages()[0]["callback"] == "9085550142"
+
+
+@pytest.mark.parametrize("words,name", [("Dorothy, I'm calling about my shop.", "Dorothy"),
+                                        ("It's Dorothy.", "Dorothy")])
+def test_name_with_a_trailing_clause(brain, words, name):
+    r = talk(brain, "Can you take a message?", words)
+    assert f"thanks, {name.lower()}." in said(r[1])
+
+
+def test_one_time_then_monthly_gets_a_straight_answer(brain):
+    (r,) = talk(brain, "Is the thousand one time, then ten a month?")
+    assert "one-time" in said(r) or "one time" in said(r)
+    assert "ten dollars a month" in said(r)
+
+
+def test_real_person_or_computer(brain):
+    (r,) = talk(brain, "Well dear, are you a real person or a computer?")
+    assert "receptionist" in said(r) and r.action != "offer_slots"
+
+
+def test_two_failed_numbers_fall_back_to_the_caller_id(brain):
+    r = talk(brain, "Can you take a message?", "Mike.", "No, call nine oh eight.", "Nine oh eight five.",
+             "Five five oh one.")
+    assert r[3].action == "ask_message" and "calling from" in said(r[3])
+
+
+def test_god_bless_gets_a_warm_goodbye(brain):
+    (r,) = talk(brain, "Okay, thank you, God bless, goodbye.")
+    assert r.action == "goodbye" and "god bless" in said(r)
+
+
+def test_same_blurb_for_a_different_question_is_not_repeated(tmp_path):
+    from receptionist.profile import load_profile
+    from pathlib import Path
+    prof = load_profile(str(Path(__file__).resolve().parents[1] / "deploy" / "business_profile.json"))
+    b = Brain(BookingStore(str(tmp_path / "p.sqlite")), intents=FakeIntents(), clock=lambda: NOW, profile=prof)
+    r = [b.handle(t, "c", caller_id=CALLER) for t in
+         ("How much does a website cost?", "Can I talk to Alex?", "How much is a Shopify store with SEO?")]
+    assert r[2].speech != r[0].speech
+
+
+def test_a_feeling_is_not_a_name(brain):
+    r = talk(brain, "Can you take a message?", "I'm panicking.")
+    assert "panicking" not in said(r[1])

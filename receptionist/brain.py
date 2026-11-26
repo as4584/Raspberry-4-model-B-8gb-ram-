@@ -64,7 +64,7 @@ DATE_Q = re.compile(r"\bwhat('?s| is)? (the )?(day|date|time)( is it| today)?\b|
 UNKNOWN_MATCH = 0.6           # an unplaced question takes a checked answer only when it's a fair match
 STRONG_MATCH = 0.75          # override a keyword FAQ hit only when clearly closer (Pi: good 0.85+, wrong 0.61)
 # A question ABOUT the receptionist ("am I talking to a real person?") is not a transfer request.
-IDENTITY_Q = re.compile(r"^(so |wait |hold on |hi |hey )?(am i|are you|is (this|it|that)|was that)\b.*\b(real|person|human|robot|bot|machine|computer|ai|a i|recording)\b")
+IDENTITY_Q = re.compile(r"\b(am i (talking|speaking) (to|with)|are you|is (this|it|that)|was that)\b.*\b(real|person|human|robot|bot|machine|computer|ai|a i|recording)\b")
 AVAIL_Q = re.compile(r"\bwhat (times|days|slots) do you (have|guys have)\b|\bwhen can i come in\b|\bwhen (are|is) (you|alex|someone|anyone|somebody)( guys)? (free|available|around)\b|\bare you (free|available) (on|at|this|next|tomorrow)\b")
 TALK_TO = re.compile(r"\b(speak|talk) (with|to) (alex|the owner|someone|somebody|anyone|a person|a human|a real person)\b|\b(can|could) i (get|reach) (alex|the owner)\b")
 REAL_PERSON = ("I'm LexMakesIt's A I receptionist. Alex built me, and I can answer questions or book you a free call with Alex.")
@@ -89,6 +89,11 @@ NO_BOOK = re.compile(r"\b(don'?t|do not|not) (want|need|ready) to (book|schedule
 READBACK = re.compile(r"\b(read|say|repeat|give)\b.*\b(number|phone|name)\b.*\bback\b|\bread (it|that|that number|my number) back\b|"
                       r"\bwhat (number|name) did you (get|put|write|take)\b|\b(what'?s|what is|what was) (my|the) (booking )?code\b|"
                       r"\b(repeat|say|give me) (the|my) (booking )?code\b|\bcode again\b")
+PRICE_SHAPE = re.compile(r"\b(onetime|one[- ]?time|once|one off|monthly|every month|per month|a month|each month|up ?front)\b.*\b(or|then|and|plus)\b|\b(is it|is that|is the)\b.*\b(onetime|monthly|every month)\b")
+PRICE_SHAPE_SPEECH = ("The website itself is a one-time cost, starting at one thousand dollars. Then it's ten dollars a month "
+                      "to keep it managed and running. Alex can give you an exact quote on a free call.")
+MONTHLY_Q = re.compile(r"\b(ten|10)( dollars| bucks)?( a| per)? month\b.*\b(cover|for|include|get)\b|\bwhat('?s| is| does) the (monthly|ten dollars?)\b")
+MONTHLY_SPEECH = "The ten dollars a month covers managing your website after it's built. Alex can go over the details on a free call."
 AI_Q = re.compile(r"\bwhat('?s| is| does)( an?)? (ai|a i|artificial intelligence)( mean)?\b")
 AI_SPEECH = ("It just means I'm a computer program that can talk with you, a bit like a very helpful answering machine. "
              "Alex set me up so you can get answers any time. What can I help you with?")
@@ -420,13 +425,18 @@ class Brain:
         m = SAID_NAME.search(text)
         if not m and len(text.split()) > 6:
             return None                       # names come short; a long answer is something else
-        words = re.findall(r"[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'-]*", m.group(1) if m else NAME_LEAD.sub("", text.strip()))
+        src = m.group(1) if m else NAME_LEAD.sub("", text.strip())
+        first = (src.split() or [""])[0].strip(",.")
+        if m and (first.lower() in NOT_A_NAME or not first[:1].isupper()):
+            # "Dorothy, I'm calling about..." / "I'm panicking": the name isn't after "I'm".
+            src = text[:m.start()]
+        words = re.findall(r"[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'-]*", src)
         dedup = [w for i, w in enumerate(words) if i == 0 or w.lower() != words[i - 1].lower()]
         if not dedup or dedup[0].lower() in NOT_A_NAME:
             return None
         name = [dedup[0]]
-        if len(dedup) > 1 and dedup[1][0].isupper() and not dedup[1].isupper() \
-                and dedup[1].lower() not in NOT_A_NAME | {"my", "i", "and"}:
+        if len(dedup) > 1 and len(dedup) <= 3 and dedup[1][0].isupper() and not dedup[1].isupper() \
+                and "'" not in dedup[1] and dedup[1].lower() not in NOT_A_NAME | {"my", "i", "and", "i'm"}:
             name.append(dedup[1])
         return " ".join(w[0].upper() + w[1:] for w in name)
 
@@ -471,7 +481,18 @@ class Brain:
             if len(digits) == 10 or (len(digits) == 11 and digits[0] == "1"):
                 flow["callback"] = digits
                 heard_back = spoken_number(digits)
-            elif len(digits) >= 5:
+            elif len(digits) >= 3 and flow.get("tries", 0) >= 1 and caller_id:
+                # Phone-quality speech drops digits; after two tries, don't loop the caller.
+                flow["callback"] = caller_id
+                flow["step"] = "body"
+                self._callbacks[s] = caller_id
+                words = ("No worries, I'll save the number you're calling from, and Alex can reach you there. "
+                         "What would you like me to tell him?")
+                if flow.get("body"):
+                    return self._save_message(flow, s, caller_id)
+                return Reply(words, "ask_message", speech=words)
+            elif len(digits) >= 3:
+                flow["tries"] = flow.get("tries", 0) + 1
                 words = "Sorry, I think I missed a digit. Could you say the whole number again, slowly?"
                 return Reply(words, "ask_number", speech=words)
             elif caller_id and (AFFIRM.match(low) or re.search(r"\b(this|that|same) (number|one)\b", low)):
@@ -515,7 +536,8 @@ class Brain:
         if not parts:
             words = "I don't have any details from you yet. Would you like to leave a message for Alex?"
             return Reply(words, "read_back", speech=words)
-        words = "Sure. " + ", and ".join(parts) + ". Is that right?"
+        text = ", and ".join(parts)
+        words = text[0].upper() + text[1:] + ". Is that right?"
         return Reply(words, "read_back", speech=words)
 
     def _save_message(self, flow: dict, s: str, caller_id: str | None, heard_back: str | None = None) -> Reply:
@@ -601,12 +623,25 @@ class Brain:
             self._msg.pop(session_id, None)
             name = self._names.get(session_id)
             words = f"No problem{', ' + name if name else ''}. Thanks for calling, and take care!"
+            if "god bless" in low:
+                words = f"God bless you too{', ' + name if name else ''}. Thanks for calling, and take care!"
             return Reply("Thanks for calling. Have a great day!", "goodbye", speech=words)
         if WAIT.match(low) and (len(low.split()) <= 5 or not QUESTION.search(WAIT.sub("", low).strip())) \
                 and not any(vars(parse_when(re.sub(r"\b(one|a|1) (sec|second|moment|minute)\b", "", WAIT.sub("", low)), self.clock())).values()):
             return Reply("Take your time.", "filler", speech="Sure, take your time.")
         if READBACK.search(low):
             return self._read_back(session_id, caller_id)
+        fixed = spoken_digits(text)
+        if self._last.get(session_id) in ("read_back", "message_taken") and (len(fixed) == 10 or (len(fixed) == 11 and fixed[0] == "1")):
+            self._callbacks[session_id] = fixed
+            if self._last_msg.get(session_id):
+                self.store.set_message_callback(self._last_msg[session_id], fixed)
+            words = f"Thanks for catching that. I've got {spoken_number(fixed)}. {ANYTHING_ELSE}"
+            return Reply(words, "number_fixed", speech=words)
+        if PRICE_SHAPE.search(low):
+            return Reply(PRICE_SHAPE_SPEECH, "knowledge", speech=PRICE_SHAPE_SPEECH)
+        if MONTHLY_Q.search(low):
+            return Reply(MONTHLY_SPEECH, "knowledge", speech=MONTHLY_SPEECH)
         if AI_Q.search(low):
             return Reply(AI_SPEECH, "knowledge", speech=AI_SPEECH)
         if REPEAT_ASK.search(low) and self._last_speech.get(session_id):

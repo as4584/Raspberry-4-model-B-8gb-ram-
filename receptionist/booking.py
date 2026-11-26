@@ -230,3 +230,7 @@ class BookingStore:
     def mark_message(self, message_id: int, status: str) -> None:
         with self._session() as db:
             db.execute("UPDATE messages SET status=? WHERE id=?", (status, message_id))
+
+    def set_message_callback(self, message_id: int, callback: str) -> None:
+        with self._session() as db:
+            db.execute("UPDATE messages SET callback=? WHERE id=?", (callback, message_id))
