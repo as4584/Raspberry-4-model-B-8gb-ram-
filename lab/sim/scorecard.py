@@ -83,6 +83,18 @@ CONVERSATIONS = [
     ("es_recep_price", ["Hola, ¿habla español?", "Quiero la recepcionista para mi negocio", "¿Cuánto cuesta?"], [(2, "flexible")]),
     ("book_alex", ["I want to book a call with Alex"], []),
 
+    ("car_ready", ["Can she tell my customers when their car is ready?"], [(0, "customers")]),
+    ("site_booking", ["I want my students to book sessions on a calendar and pay online"], [(0, "online booking")]),
+    ("called_me", ["I got a call from this number, who is this?", "Take me off your list"], [(0, "sorry"), (1, "contact")]),
+    ("demo", ["Can I book a demo with Alex?"], []),
+    ("installments", ["Is there a deposit?", "Can I pay in installments?"], [(1, "payment plans")]),
+    ("volume", ["We get eighty calls a day, does the price change?"], [(0, "flexible")]),
+    ("thanks_bye", ["How much is a website?", "Okay, thanks"], [(1, "take care")]),
+    ("es_buenos", ["Buenos días", "Tengo un negocio de limpieza y quiero una página web", "¿Cuánto cuesta la recepcionista?"],
+     [(0, "español"), (1, "mil dólares"), (2, "flexible")]),
+    ("callback_time", ["Can you take a message?", "Mo, 732 555 0144", "Tell him I want a gym website", "Mornings are best"], [(3, "morning")]),
+    ("hvac", ["Can it tell an emergency from a routine call and text me the urgent ones?"], [(0, "urgent")]),
+
 ]
 
 DEAD = {"unknown", "lost"}
