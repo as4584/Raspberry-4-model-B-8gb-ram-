@@ -30,3 +30,23 @@ def test_owner_fact_answered(q, want):
     entries = json.loads((Path(__file__).resolve().parents[1] / "deploy" / "knowledge.json").read_text(encoding="utf-8"))["entries"]
     a = next(e["a"] for e in entries if e["id"] == hit[0])
     assert want in a, (q, hit[0])
+
+
+@pytest.fixture
+def brain(tmp_path):
+    return Brain(BookingStore(str(tmp_path / "o.sqlite")), intents=FakeIntents(), clock=lambda: NOW, knowledge=kb())
+
+
+def test_deposit_beats_one_time_or_monthly(brain):
+    r = brain.handle("So do I have to pay everything at once or is there like a deposit?", "c", caller_id=CALLER)
+    assert "deposit" in r.speech
+
+
+def test_receptionist_price_is_the_sales_answer(brain):
+    r = brain.handle("How much would it cost to get a receptionist like you for my salon?", "c", caller_id=CALLER)
+    assert "any business" in r.speech
+
+
+def test_stop_paying_reaches_cancel_answer():
+    hit = kb().best("If I stop paying do I lose my website?")
+    assert hit and hit[0] == "contract"
