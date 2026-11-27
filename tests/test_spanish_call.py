@@ -64,3 +64,9 @@ def test_next_call_starts_in_english_again(tmp_path):
     asyncio.run(eng.run(FakeTransport(s)))
     asyncio.run(eng.run(FakeTransport([CallStart("C2", "+15550000002"), 0.1])))
     assert asr.language == "en"
+
+
+def test_spanish_voice_only_when_configured():
+    from receptionist.server import select_tts_es
+    assert select_tts_es({"VOICE_BACKEND": "local"}) is None
+    assert select_tts_es({"VOICE_BACKEND": "local", "PIPER_MODEL_ES": "/m/es.onnx", "PIPER_RESIDENT": "1"}) is not None

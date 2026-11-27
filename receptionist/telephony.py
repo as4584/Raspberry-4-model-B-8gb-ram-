@@ -102,7 +102,7 @@ class CallEngine:
     def __init__(self, store: BookingStore, asr, tts, require_caller_id: bool = False, greet: bool = False,
                  transfer_to: str | None = None, review_dir: str | None = None,
                  review_callers: set[str] | None = None, dialogue_factory=None,
-                 greeting: str | None = None, vad_factory=None):
+                 greeting: str | None = None, vad_factory=None, tts_es=None):
         self.store, self.asr, self.tts, self.require_caller_id = store, asr, tts, require_caller_id
         self.review_dir, self.review_callers = review_dir, set(review_callers or ())
         # One conversation object per call (rule Dialogue, or the tiny-model Brain).
@@ -111,9 +111,13 @@ class CallEngine:
         self.greet = greet           # answer like a person; the legacy Twilio path keeps its old behaviour
         self.greeting = greeting or GREETING
         self.vad_factory = vad_factory   # per-call voice detector stream (Silero), or None
+        self.tts_es = tts_es             # Spanish voice; a Spanish caller gets it for the rest of the call
 
     async def run(self, transport: CallTransport) -> None:
-        asr, tts = self.asr, self.tts
+        asr = self.asr
+        voice = {'tts': self.tts}        # swapped to the Spanish voice when the caller speaks Spanish
+        if hasattr(asr, 'language'):
+            asr.language = 'en'
         call_id: str | None = None
         dialogue: Dialogue | None = None
         caller_id: str | None = None
@@ -150,14 +154,14 @@ class CallEngine:
             # sentence without waiting for the whole reply.
             parts = split_sentences(words) or [words]
             t_tts = time.monotonic()
-            pending = asyncio.create_task(tts.synthesize(parts[0]))
+            pending = asyncio.create_task(voice['tts'].synthesize(parts[0]))
             try:
                 for k in range(len(parts)):
                     outbound = await pending
                     if k == 0:
                         log.info('call=%s gen=%d phase=first_audio_ready tts_first_s=%.2f since_asr_done_s=%.2f',
                                  call_id, this_generation, time.monotonic() - t_tts, time.monotonic() - t_ref)
-                    pending = asyncio.create_task(tts.synthesize(parts[k + 1])) if k + 1 < len(parts) else None
+                    pending = asyncio.create_task(voice['tts'].synthesize(parts[k + 1])) if k + 1 < len(parts) else None
                     if this_generation != generation:
                         return
                     for i in range(0, len(outbound), FRAME_BYTES):
@@ -227,7 +231,7 @@ class CallEngine:
                 if not done:
                     # A human says "one moment" instead of leaving dead air (Pi: bookings sometimes
                     # took 2-5 s on the slow USB stick). Honest: it claims nothing.
-                    filler = await tts.synthesize(FILLER)
+                    filler = await voice['tts'].synthesize(FILLER)
                     if this_generation == generation:
                         for i in range(0, len(filler), FRAME_BYTES):
                             if generation != this_generation:
@@ -240,6 +244,11 @@ class CallEngine:
                 if os.getenv('LOG_TRANSCRIPTS') == '1':      # test runs only: never on by default
                     log.info('call=%s gen=%d heard=%r', call_id, this_generation, utterance)
                 words = reply.speech or reply.text   # phone wording when the dialogue provides it (#38)
+                if reply.action == 'spanish' and self.tts_es is not None:
+                    voice['tts'] = self.tts_es
+                    if hasattr(asr, 'language'):
+                        asr.language = 'es'
+                    log.info('call=%s gen=%d phase=language lang=es', call_id, this_generation)
                 if reply.action in HARD_TO_HEAR and noise_floor >= NOISY_FLOOR_RMS and not noise_told[0]:
                     # It misheard on a loud line: say why, instead of a bare "didn't catch that".
                     noise_told[0] = True

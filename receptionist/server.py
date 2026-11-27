@@ -118,6 +118,12 @@ def select_tts(env) -> tuple[object,str]:
         return tts,'resident'
     return PiperTTS(env.get('PIPER_CLI','piper'),env['PIPER_MODEL']),'cli'
 
+def select_tts_es(env):
+    """Spanish voice (PIPER_MODEL_ES), resident like the English one; None leaves calls English-only."""
+    if env.get('VOICE_BACKEND')!='local' or not env.get('PIPER_MODEL_ES'):return None
+    tts=CachingTTS(PiperDaemonTTS([env.get('PIPER_CLI','piper')],env['PIPER_MODEL_ES']))
+    return tts
+
 def load_business_profile(env) -> tuple[dict|None,str]:
     """(profile, greeting): the owner's facts file, or (None, generic greeting) if absent."""
     from receptionist.profile import greeting_for, load_profile
@@ -183,6 +189,7 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
     if asr_factory is None:
         asr_factory,asr_kind=select_asr_factory(os.environ)
     tts_kind='custom'
+    tts_es=select_tts_es(os.environ)
     if tts is None:
         tts,tts_kind=select_tts(os.environ)
     @asynccontextmanager
@@ -205,7 +212,7 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
         ckpt.cancel()
         await asyncio.to_thread(store.close)
         if warm:warm.cancel()
-        for closer in (getattr(tts,'aclose',None),):
+        for closer in (getattr(tts,'aclose',None),getattr(tts_es,'aclose',None)):
             if closer:await closer()
     app=FastAPI(title='Pi Local Receptionist',version='0.1.0',lifespan=lifespan)
     app.state.store=store
@@ -255,7 +262,7 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
         # chan_websocket asks for the "media" sub-protocol; echo it or the handshake fails.
         await ws.accept(subprotocol='media' if 'media' in ws.scope.get('subprotocols',[]) else None)
         engine=CallEngine(store,asr=asr_factory(),tts=tts,require_caller_id=settings.require_caller_id,greet=True,
-                          dialogue_factory=dialogue_factory,greeting=greeting,vad_factory=vad_factory,
+                          dialogue_factory=dialogue_factory,greeting=greeting,vad_factory=vad_factory,tts_es=tts_es,
                           transfer_to=caller_number(os.getenv('TRANSFER_TO')),
                           review_dir=os.getenv('REVIEW_DIR','/var/lib/pi-receptionist/data/review'),
                           review_callers={k for k in (review_key(x) for x in os.getenv('REVIEW_CALLERS','').split(',')) if k})
