@@ -40,6 +40,14 @@ def test_bare_no_asks_to_spell(brain):
 def test_garbled_name_is_asked_once_more(brain):
     booked(brain)
     r = talk(brain, "Mike Mattel-Garo Mikezzo Garo Mikezzo Garo Mikezzo Garo Mikezzo Garo candles Hello Woody personaje norma")
-    assert "name" in said(r[0]) and "again" in said(r[0])
+    # a looped hallucination collapses to one phrase: read back (caller can fix it) or asked again
+    assert "name" in said(r[0]) and ("again" in said(r[0]) or "right" in said(r[0]))
     r = talk(brain, "Mike Delgado")
     assert "mike delgado" in said(r[0])
+
+
+def test_looped_name_is_collapsed_to_one():
+    from receptionist.brain import collapse_repeats
+    heard = ("Mic dalgato Mic dal avocado Mic Vic dalgato Mic dalgato Mike Dolgaro Mike Dolgaro Mike Dolgaro "
+             "Mike Dolgaro Mike Dolgaro Mike Dolgaro")
+    assert collapse_repeats(heard) == "Mike Dolgaro"

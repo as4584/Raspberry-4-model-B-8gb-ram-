@@ -552,6 +552,15 @@ def collapse_repeats(text: str) -> str:
             out.append(x)
     if len(out) == 1 and len(parts) > 1:
         return out[0]
+    toks = text.split()
+    for n in (1, 2, 3, 4):                             # an ASR loop: one short phrase repeated 3+ times
+        for i in range(0, max(0, len(toks) - 3 * n + 1)):
+            unit = [t.strip(".,!?").lower() for t in toks[i:i + n]]
+            reps = 1
+            while [t.strip(".,!?").lower() for t in toks[i + reps * n:i + (reps + 1) * n]] == unit:
+                reps += 1
+            if reps >= 3 and reps * n >= len(toks) / 2:
+                return " ".join(t.strip(".,!?") for t in toks[i:i + n])
     words = text.split()
     for n in range(3, len(words) // 2 + 1):           # a run of words repeated back to back
         if words[:n] * (len(words) // n) == words[:n * (len(words) // n)] and len(words) // n >= 2:
