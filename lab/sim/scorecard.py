@@ -75,6 +75,14 @@ CONVERSATIONS = [
     ("es_switch", ["Hi, I have a taco truck", "Mira, mejor en español. ¿La recepcionista puede contestar en español?"], [(1, "español")]),
     ("short_num_book", ["Can I book something {day3} at {hour3}?", "Jenny Park, 732 550 198"], [(1, "jenny")]),
 
+    ("law_privacy", ["Hi, I run a two attorney law practice", "Where are the call recordings stored, and who can access them?"], [(1, "local")]),
+    ("liability", ["What if the AI gives someone legal advice by mistake?"], [(0, "advice")]),
+    ("pharmacy", ["Hello, is this the pharmacy? I need my refill"], [(0, "pharmacy")]),
+    ("split_deposit", ["Can I pay the deposit in two parts?"], [(0, "fifty percent")]),
+    ("parent_login", ["I need a website with a parent login for my daycare"], [(0, "log in")]),
+    ("es_recep_price", ["Hola, ¿habla español?", "Quiero la recepcionista para mi negocio", "¿Cuánto cuesta?"], [(2, "flexible")]),
+    ("book_alex", ["I want to book a call with Alex"], []),
+
 ]
 
 DEAD = {"unknown", "lost"}

@@ -103,6 +103,24 @@ WANTS_BOOKING = re.compile(r"\b(book|appointment|schedul\w*|reserve|set up a (ca
                            r"available|availability|free call|slot|opening|open|free|come in|see alex|talk (to|with) (alex|someone|somebody)|"
                            r"consultation|what (do you have|times|days)|when (are|is|can|could)|let'?s (do|go|set)|go over|"
                            r"sounds good|works for me|is fine|that works|lessons?|sessions?)\b")
+ROUND8 = [
+    (re.compile(r"\b(pharmacy|prescription|refill|pills?|doctor'?s office|wrong number|is this (the )?(bank|hospital|pizza|cvs|walgreens|rite aid))\b"),
+     "Oh, I'm sorry, this isn't the pharmacy. This is LexMakesIt, a small business that builds websites. "
+     "Your pharmacy's number should be on your pill bottle or your receipt. Is there anything else I can help you with?"),
+    (re.compile(r"\b(liab\w*|legal advice|medical advice|says? something wrong|gives? (someone |them )?(wrong|bad))\b"),
+     "That's a good question. I only share the facts Alex gives me, and anything I'm not sure about goes to Alex. "
+     "I never give legal or medical advice. Alex can go over the details with you on a free call."),
+    (re.compile(r"\b(two|2) (parts|payments|installments)\b|\bsplit (the|my) deposit\b|\bhalf (now|up front)\b.*\bhalf\b"),
+     "We don't do payment plans, so the deposit is fifty percent to start, and the rest when it's done. "
+     "I can note your question for Alex if you'd like."),
+    (re.compile(r"\b(parent|parents|client|member|customer|student|patient)s? (login|log in|portal|account)\b|\blog ?in\b"),
+     "Yes, Alex can build a portal, where people log in to see their own information privately. "
+     "He can go over how it would work for you on a free call."),
+    (re.compile(r"\b(recordings?|records?|data|information|photos?)\b.*\b(stored|kept|saved|access|private|privacy|confidential|safe)\b|"
+                r"\b(confidential\w*|privacy|private)\b"),
+     "Good question. I run on a small computer in the office, not in the cloud, so calls stay local and private. "
+     "I'm not certified for things like HIPAA, so Alex can go over exactly what's protected on a free call."),
+]
 ROUND7 = [
     (re.compile(r"\b(five|5|six|6|four|4) (in the morning|a\.? ?m)|\b(24 ?/ ?7|twenty four seven|middle of the night|after hours|"
                 r"weekends?|nights?|at night|overnight|all hours)\b"),
@@ -175,7 +193,7 @@ ES_NAME = re.compile(r"\b(?:me llamo|mi nombre es|soy|habla|le habla)\s+([A-ZÁ�
 ES_BYE = re.compile(r"^(no,? )?(muchas )?gracias\W*$|\bdios\W*$|\b(adi[oó]s|chao|bye|eso es todo|es todo|nada m[aá]s|"
                     r"hasta luego|cu[ií]d(ate|ese|ense)|dios (le|te|los) bendiga|que le vaya bien|buenas noches)\b")
 ES_SPEAKS = re.compile(r"\b(habla|hablan|hablas|contesta\w*|atiende\w*|funciona)\b.*\bespa[nñ]ol\b|\bespa[nñ]ol\b.*\?")
-ES_RECEP = re.compile(r"\b(recepcionista|contestar (el|mi|los) tel[eé]fono|contesta(r)? (las )?llamadas|asistente)\b")
+ES_RECEP = re.compile(r"\b(recepcionista|c[oó]mo funciona|contesta (mi|el|los) (n[uú]mero|tel[eé]fono)|contestar (el|mi|los) tel[eé]fono|contesta(r)? (las )?llamadas|asistente)\b")
 ES_TOOLS = re.compile(r"\b(square|clover|toast|quickbooks|conecta\w*|integra\w*)\b")
 ES_ORDER = re.compile(r"\b(pedidos?|ordenar|[oó]rdenes|delivery|para llevar)\b")
 ES_PRICE = re.compile(r"\b(cu[aá]nto|precio|cuesta|cobran|costo)\b")
@@ -245,7 +263,8 @@ DIGIT_WORDS = {"zero": "0", "oh": "0", "o": "0", "one": "1", "two": "2", "three"
                "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9"}
 TALK_TO_SPEECH = ("Alex isn't available right this second, but I can take a message and have him call you back, "
                   "or book you a free call with him. Which would you prefer?")
-NOT_A_NAME = {"my", "tell", "him", "her", "let", "from", "ask", "have", "please", "number", "phone", "blah", "you", "nobody", "whatever", "someone", "somebody", "anybody", "anyone", "me", "test",
+NOT_A_NAME = {"fine", "alright", "good", "great", "perdón", "perdon", "disculpe", "oiga", "mire", "bueno", "pues",
+              "my", "tell", "him", "her", "let", "from", "ask", "have", "please", "number", "phone", "blah", "you", "nobody", "whatever", "someone", "somebody", "anybody", "anyone", "me", "test",
               "yes", "yeah", "no", "nope", "sure", "okay", "ok", "hello", "hi", "um", "uh", "the", "a", "actually", "wait",
               "si", "sí", "bueno", "mira", "hola", "for", "about", "our", "we", "he", "she", "they", "calling", "here", "speaking",
               "can", "could", "would", "will", "do", "does", "did", "how", "what", "when", "where", "why", "who", "is", "are",
@@ -516,7 +535,8 @@ class Brain:
         low = " ".join(re.sub(r"[.!?,]+", " ", utterance.lower()).split())
         in_booking = self._last.get(s) in BOOKING_STEPS or s in self.dialogue._pending or bool(self._calls.get(s) and self._calls[s].offered)
         r = self._handle(utterance, session_id, caller_id)
-        offered_call = any(w in (self._last_speech.get(s) or "") for w in ("free call", "book"))
+        offered_call = any(w in (self._last_speech.get(s) or "") for w in ("free call", "book")) \
+            and bool(AFFIRM.match(low) or re.search(r"\b(let'?s|go over|sounds good|sure)\b", low))
         if r.action in ("offer_slots", "confirm_required", "closed_day") and not in_booking and not offered_call \
                 and not WANTS_BOOKING.search(low):
             # They didn't ask to book ("what's 2+2?", "client portal charges?"): answer, don't schedule.
@@ -685,8 +705,14 @@ class Brain:
             num = d_es
         got = ES_NAME.search(text)
         name = got.group(1).strip() if got else None
+        if name and name[:1].islower() and len(name.split()) == 1:
+            name = None                               # "soy jardinero": a trade, not a name
+        if name and name.split()[0].lower() in NOT_A_NAME:
+            name = None
         if not name and not num and m.get("want") in ("name", "details"):
             name = self._lead_name(text)                # "Carmen Rosario, Panadería La Dominicana"
+            if name and name.split()[0].lower() in NOT_A_NAME:
+                name = None
         if name:
             name = " ".join(w[0].upper() + w[1:] for w in name.split())
         digits = num or (d_es if len(d_es) > len(spoken_digits(text)) else spoken_digits(text))
@@ -750,6 +776,7 @@ class Brain:
         if ES_SPEAKS.search(low):
             return say("speaks", "knowledge")
         if ES_RECEP.search(low):
+            m["topic"] = "recep"
             return say("recep", "pitch")
         if ES_TOOLS.search(low):
             return say("tools", "knowledge")
@@ -760,7 +787,7 @@ class Brain:
         if ES_ORDER.search(low):
             return say("order", "knowledge")
         if ES_PRICE.search(low):
-            return say("price", "knowledge")
+            return say("recep" if m.get("topic") == "recep" else "price", "knowledge")
         if m.get("want") == "body" and len(low.split()) >= 3:
             m["body"] = text.strip()
             save()
@@ -921,6 +948,10 @@ class Brain:
         if self._booked.get(s):
             row = next((b for b in self.store.active() if b["id"] == self._booked[s]), None)
             code = row and row.get("code")
+        if self._booked.get(s):
+            row = next((b for b in self.store.active() if b["id"] == self._booked[s]), None)
+            if row:
+                parts.append("your call with Alex on " + spoken_when(datetime.fromisoformat(row["starts"]), self.tz))
         if code:
             parts.append("your booking code as " + " ".join(spoken_number(c) for c in code))
         if not parts:
@@ -998,7 +1029,7 @@ class Brain:
             return Reply(CARD_PAY_SPEECH, "knowledge", speech=CARD_PAY_SPEECH)
         if LEGIT.search(low) and not BOOK_WORDS.search(low):
             return Reply(LEGIT_SPEECH, "knowledge", speech=LEGIT_SPEECH)
-        for pat, words in ROUND7:
+        for pat, words in ROUND8 + ROUND7:
             if pat.search(low):
                 return Reply(words, "knowledge", speech=words)
         if re.search(r"\b(what'?s|what is|give me|can i (get|have)) (the|your|his|alex'?s) (phone )?number\b", low):
@@ -1063,6 +1094,10 @@ class Brain:
             words = f"Thanks for catching that. I've got {spoken_number(fixed)}. {ANYTHING_ELSE}"
             return Reply(words, "number_fixed", speech=words)
         num, rest = phone_in(text)
+        if num and pending and re.search(r"\b(call me|call me back|callback|call back|have (him|alex) call)\b", low):
+            self.dialogue._pending.pop(session_id, None)
+            self._calls[session_id] = _Call()
+            pending = False
         if not num and pending and session_id not in self._msg and 7 <= len(spoken_digits(text)) <= 9 \
                 and self._lead_name(phone_in(utterance)[1] if False else re.sub(r"[\d\s,.-]+$", "", utterance)):
             # "Jenny Park, 732 550 198": a yes with details, one digit lost on the line.
@@ -1223,8 +1258,9 @@ class Brain:
         if st.offered and AFFIRM.match(low) and not parse_when(text, now).time:
             return Reply("Which time works best?", "ask_which", speech="Sure. Which time works best for you?")
         if st.offered:
+            pick_low = re.split(r"\b(?:no wait|wait no|no no|actually|i mean|sorry)\b\W*", low)[-1].strip() or low
             for word, i in ORDINALS.items():
-                if re.search(ORDINAL_PICK.format(w=word), low):
+                if re.search(ORDINAL_PICK.format(w=word), pick_low):
                     pick = st.offered[i]
                     return self._book(f"{pick:%Y-%m-%d %H:%M}", session_id, caller_id=caller_id)
         bare = AFFIRM.match(low) and not pending and not any(vars(parse_when(text, now)).values())
@@ -1237,7 +1273,7 @@ class Brain:
         intent, conf = self.intents.classify(text)
         if AVAIL_Q.search(low):                   # "when are you free?" is a scheduling question
             intent, conf = "availability", max(conf, 0.9)
-        elif TALK_TO.search(low) and not IDENTITY_Q.search(low) \
+        elif TALK_TO.search(low) and not IDENTITY_Q.search(low) and not re.search(r"\b(book|schedule|set up)\b", low) \
                 and not re.search(r"\b(am i|are you|is this)\b.*\b(human|person|real|bot|robot|ai)\b", low):
             intent, conf = "human", max(conf, 0.9)
         if intent in CUES and not CUES[intent].search(low):
