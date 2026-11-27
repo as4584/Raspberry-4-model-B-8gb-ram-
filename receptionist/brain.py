@@ -20,7 +20,9 @@ from receptionist.dialogue import ANYTHING_ELSE, DEFAULT_HOURS, OPENERS, Dialogu
 from receptionist.profile import answer as profile_answer
 from receptionist.speech_format import spoken_time, spoken_when
 
-AFFIRM = re.compile(r"^(yes|yeah|yep|yup|yo|sure|correct|right|that'?s right|sounds? good|perfect|ok(ay)?|please do)\b")
+AFFIRM = re.compile(r"^(yes|yeah|yea|ya|yep|yup|yo|sure|correct|right|that'?s right|sounds? good|perfect|ok(ay)?|please do|"
+                    r"uh[- ]?huh|mm[- ]?hm+|alright|all right|let'?s do (it|that)|go ahead|do it|book it|that works|works for me|"
+                    r"fine|cool|bet|absolutely|definitely|of course|why not)\b")
 NEGATE = re.compile(r"^(no|nope|nah|never ?mind|cancel that|not really)\b")
 PARTS = {"morning": (time(0), time(12)), "afternoon": (time(12), time(17)), "evening": (time(17), time(23, 59))}
 PREFERRED_HOURS = (10, 14, 11, 15, 9, 13, 16, 12)        # spread offers across the day
@@ -934,8 +936,15 @@ class Brain:
                     and not re.search(r"free call|take a message|\?\s*$", r.speech[-60:]):
                 # They've heard a couple of answers: offer the next step instead of just stopping.
                 self._offered_follow[s] = True
-                r = Reply(r.text, r.action, r.committed_id,
-                          speech=r.speech + " Would you like me to book you a free call with Alex, or take your name and number so he can follow up?")
+                slots = self._handle("What times do you have open?", s, caller_id)
+                st2 = self._calls.get(s)
+                if slots.action == "offer_slots" and st2 and st2.offered:
+                    times = re.sub(r"^(?:\w+[.!]\s+)?(?:the soonest i have is |[a-z]+ i have )", "", (slots.speech or ""), flags=re.I)
+                    times = re.split(r"\. ", times)[0].rstrip(".")
+                    offer = f" I can book you a free call with Alex to go over it. The soonest I have is {times}. Would one of those work?"
+                else:
+                    offer = " Would you like me to book you a free call with Alex, or take your name and number so he can follow up?"
+                r = Reply(r.text, r.action, r.committed_id, speech=r.speech + offer)
         self._last_speech[session_id] = r.speech
         self._utter[s] = low
         return r
@@ -1724,7 +1733,8 @@ class Brain:
         if PRESENCE.search(low):
             return Reply(PRESENCE_REPLY, "presence", speech=PRESENCE_REPLY)
         offered_call = "free call" in (self._last_speech.get(session_id) or "")
-        if offered_call and not pending and (AFFIRM.match(low) or re.search(r"\b(let'?s|sounds good|sure)\b", low)) \
+        has_offered = bool(self._calls.get(session_id) and self._calls[session_id].offered)
+        if offered_call and not pending and not has_offered and (AFFIRM.match(low) or re.search(r"\b(let'?s|sounds good|sure)\b", low)) \
                 and not any(vars(parse_when(text, self.clock())).values()):
             # "Yeah, let's go over that" right after offering a free call: start booking it.
             self._last_speech[session_id] = None
@@ -1772,8 +1782,10 @@ class Brain:
             return Reply("I'm doing well, thanks for asking! How can I help you today?", "small_talk",
                          speech="Okay. I'm doing well, thanks for asking! How can I help you today?")
         now = self.clock()
-        if st.offered and AFFIRM.match(low) and not parse_when(text, now).time:
-            return Reply("Which time works best?", "ask_which", speech="Sure. Which time works best for you?")
+        if st.offered and (AFFIRM.match(low) or re.search(r"\b(whatever|any ?time|anything|either|first one|soonest|earliest|you pick|doesn'?t matter)\b", low)) \
+                and not parse_when(text, now).time:
+            # The easiest path for any caller: a plain "yeah" takes the soonest time, pending one more yes.
+            return self._book(f"{st.offered[0]:%Y-%m-%d %H:%M}", session_id, caller_id=caller_id)
         if st.offered:
             pick_low = re.split(r"\b(?:no wait|wait no|no no|actually|i mean|sorry)\b\W*", low)[-1].strip() or low
             for word, i in ORDINALS.items():

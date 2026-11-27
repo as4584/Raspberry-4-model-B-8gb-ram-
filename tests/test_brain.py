@@ -201,10 +201,12 @@ def test_open_on_a_day_question(brain):
     assert r.action == "faq" and "closed on sunday" in r.speech.lower()
 
 
-def test_yes_to_an_offer_list_asks_which(brain):
+def test_yes_to_an_offer_list_proposes_the_soonest(brain):
+    # Owner, 2026-11-27: "close an appointment for the dumbest of users" - a bare yes takes the soonest
+    # time and asks one more yes, instead of "which time works best?".
     brain.handle("Anything tomorrow?", "c", caller_id=CALLER)
     r = brain.handle("Yes.", "c", caller_id=CALLER)
-    assert r.action == "ask_which"
+    assert r.action == "confirm_required"
 
 
 @pytest.mark.parametrize("heard", ["free works for me.", "Pre-o-clock is good.", "tree o'clock please", "Preo clock is good."])
