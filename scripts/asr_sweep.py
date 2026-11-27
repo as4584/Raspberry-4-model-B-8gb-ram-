@@ -82,7 +82,7 @@ def transcribe(model, mulaw, ctx, greedy, threads=4, timeout=120, lang="en"):
             args += ["-bs", "1", "-bo", "1"]
         t0 = time.monotonic()
         try:
-            r = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+            r = subprocess.run(args, capture_output=True, text=True, timeout=timeout, encoding="utf-8", errors="replace")
             out, err, timed_out = r.stdout, r.stderr, False
         except subprocess.TimeoutExpired:
             out, err, timed_out = "", "", True
