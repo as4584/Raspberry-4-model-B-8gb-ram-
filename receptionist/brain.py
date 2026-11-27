@@ -200,7 +200,11 @@ DISTRESS = re.compile(r"\b(drowning|overwhelmed|stressed|stressful|struggling|bu
 BURNED = re.compile(r"\b(burned|burnt|ripped off|scammed|vanished|ghosted|took my money|took \w+ (thousand|hundred) dollars)\b")
 MONEY_WORRY = re.compile(r"\b(can'?t afford|money('?s| is) tight|on a budget|lost (my |all my )?money|fixed income|"
                          r"tight budget|not (a lot of|much) money|social security check|small budget)\b")
-LEGIT = re.compile(r"\b(legit|legitimate|a scam|scam|examples?|portfolio|references|trust you|past work|sites you'?ve (made|built))\b")
+LEGIT = re.compile(r"\b(legit|legitimate|a scam|scam|references|trust you)\b")
+# "Can I see examples?" gets the owner's private-work answer; "are you legit?" gets the no-commitment call.
+PORTFOLIO_Q = re.compile(r"\b(examples?|portfolio|past work|sites you'?ve (made|built|done)|see (your|some) (work|sites))\b")
+PORTFOLIO_SPEECH = ("We keep client work private, so we don't share a portfolio. The best way to see what Alex can do "
+                    "is a free call, with no commitment, where he talks through your idea and how he'd build it.")
 LEGIT_SPEECH = ("Fair question. The best way to see what Alex can do is a free call, with no commitment, "
                 "where he talks through your idea and exactly how he'd build it, before you pay anything.")
 SPANISH_WORDS = {"hola", "bueno", "mira", "necesito", "quiero", "página", "pagina", "por", "favor", "gracias", "señora",
@@ -1053,6 +1057,8 @@ class Brain:
             return Reply(RECEPTIONIST_SETUP, "knowledge", speech=RECEPTIONIST_SETUP)
         if CARD_PAY.search(low):
             return Reply(CARD_PAY_SPEECH, "knowledge", speech=CARD_PAY_SPEECH)
+        if PORTFOLIO_Q.search(low) and not LEGIT.search(low) and not BOOK_WORDS.search(low):
+            return Reply(PORTFOLIO_SPEECH, "knowledge", speech=PORTFOLIO_SPEECH)
         if LEGIT.search(low) and not BOOK_WORDS.search(low):
             return Reply(LEGIT_SPEECH, "knowledge", speech=LEGIT_SPEECH)
         if self._topic.get(session_id) == "wrong_number":
