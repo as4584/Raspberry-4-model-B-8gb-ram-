@@ -68,3 +68,40 @@ def test_engine_hangs_up_after_a_hangup_reply(tmp_path):
     t = FakeTransport([CallStart("C1", "+15550000001"), *[AudioIn(LOUD)] * 10, *[AudioIn(QUIET)] * 20, 5.0])
     asyncio.run(eng.run(t))
     assert ("hangup",) in t.sent
+
+
+def _engine(tmp_path, **kw):
+    class Talk:
+        def handle(self, text, session, caller_id=None):
+            return Reply("ok", "reply", speech="Okay.")
+    spoken = []
+    class TTS:
+        async def synthesize(self, text):
+            spoken.append(text); return b"\xff" * 160
+    eng = CallEngine(BookingStore(str(tmp_path / "m.sqlite")), asr=MockASR(["hi"] * 50), tts=TTS(),
+                     dialogue_factory=lambda: Talk(), **kw)
+    return eng, spoken
+
+
+def test_call_longer_than_the_limit_is_wrapped_up(tmp_path):
+    eng, spoken = _engine(tmp_path, max_call_s=1.0)
+    script = [CallStart("C1", "+15550000001")]
+    for _ in range(6):
+        script += [*[AudioIn(LOUD)] * 10, *[AudioIn(QUIET)] * 20, 0.4]
+    t = FakeTransport(script + [3.0])
+    asyncio.run(eng.run(t))
+    assert ("hangup",) in t.sent and any("call back" in s.lower() for s in spoken)
+
+
+def test_silent_open_line_is_hung_up(tmp_path):
+    eng, spoken = _engine(tmp_path, idle_hangup_s=0.5)
+    t = FakeTransport([CallStart("C1", "+15550000001"), *[AudioIn(QUIET)] * 5, 2.5])
+    asyncio.run(eng.run(t))
+    assert ("hangup",) in t.sent
+
+
+def test_normal_short_call_is_not_cut(tmp_path):
+    eng, spoken = _engine(tmp_path, max_call_s=30.0, idle_hangup_s=30.0)
+    t = FakeTransport([CallStart("C1", "+15550000001"), *[AudioIn(LOUD)] * 10, *[AudioIn(QUIET)] * 20, 0.5])
+    asyncio.run(eng.run(t))
+    assert ("hangup",) not in t.sent
