@@ -78,3 +78,27 @@ def test_lowercase_its_mike_mid_booking(brain):
 def test_i_said_mike_at_the_name_prompt(brain):
     r = talk(brain, "Can I book Friday at 10 am?", "Yes", "i said mike")
     assert "mike" in said(r[2])
+
+
+# Panel #2: 8/8 booked, but the after-booking state was broken.
+@pytest.mark.parametrize("after", ["yeah", "ok", "sure"])
+def test_after_booking_never_offers_slots_again(brain, after):
+    talk(brain, "can i book something", "yeah", "yeah")
+    assert len(brain.store.active()) == 1
+    r = talk(brain, after, after)
+    assert len(brain.store.active()) == 1
+    assert all(x.action not in ("offer_slots", "confirm_required", "booked", "slot_taken") for x in r)
+
+
+@pytest.mark.parametrize("nm", ["sam", "rob", "dan", "its dan"])
+def test_short_lowercase_name_after_booking(brain, nm):
+    talk(brain, "can i book something", "yeah", "yeah")
+    r = talk(brain, nm)
+    assert nm.split()[-1] in said(r[0])
+    assert brain.store.active()[0]["name"].lower() == nm.split()[-1]
+
+
+@pytest.mark.parametrize("q", ["hey i need a website", "um websites?", "website"])
+def test_website_openers(brain, q):
+    r = talk(brain, q)
+    assert "website" in said(r[0]) and "not sure i follow" not in said(r[0]) and "catch that" not in said(r[0])

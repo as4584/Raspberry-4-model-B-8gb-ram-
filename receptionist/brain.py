@@ -874,6 +874,7 @@ class Brain:
         self._last[session_id] = last
         if r.action in ("booked", "rescheduled") and r.committed_id:
             self._booked[s] = r.committed_id
+            self._calls[s] = _Call()
             self._moving.pop(s, None)
             if r.action == "booked" and closing(low):
                 # "Okay perfect, thanks, bye": confirm it and let them go.
@@ -1004,7 +1005,7 @@ class Brain:
     def _steer_low_effort(self, utterance: str, s: str, caller_id: str | None) -> str | None:
         """'Close an appointment for the dumbest of users' (owner): rewrite vague turns into what they mean."""
         low = " ".join(re.sub(r"[.!?,]+", " ", utterance.lower()).split())
-        if self._lang.get(s) == "es" or self._msg.get(s):
+        if self._lang.get(s) == "es" or self._msg.get(s) or self._booked.get(s):
             return None
         st = self._calls.get(s)
         offered = bool(st and st.offered)
@@ -1013,8 +1014,10 @@ class Brain:
         vague = re.match(r"^(yeah|yea|ya|yes|ok(ay)?|sure|fine|whatever|i guess|idk|i don'?t know|i dunno|maybe|"
                          r"i suppose|alright|all right|cool|sounds good|uh huh|mm hm+)( (i guess|sure|then|ok(ay)?))?$", low)
         # "the call thing" / "i need a website": an easy way into booking
-        if re.match(r"^(um |uh |hey |so |ok |okay )*(the )?(free )?call( thing)?$|^(um |uh |hey |so )*(i )?(need|want) (a )?(website|site|web ?site)( i guess)?$", low):
-            return "What times do you have open?" if "call" in low else None
+        if re.match(r"^(um |uh |hey |so |ok |okay )*(the )?(free )?call( thing)?$", low):
+            return "What times do you have open?"
+        if re.match(r"^(um |uh |hey |so |ok |okay )*((i )?(need|want) (a )?)?(websites?|sites?|web ?sites?)( i guess| please)?$", low):
+            return "I need a website for my business"
         if offered or pending:
             if re.search(r"\b(what else|other (times|days|options)|something else|anything else (open|available)|different (time|day))\b", low):
                 nxt = (st.offered[-1].astimezone(self.tz).date() + timedelta(days=1)) if offered else None
@@ -1292,12 +1295,17 @@ class Brain:
         if step == "booking_name":
             self._msg.pop(s, None)
             first_bit = re.split(r"[.,;:!?]", self._raw.get(s, text).strip())[0]   # original case: names need capitals
-            lowname = re.match(r"^(?:i said|it'?s|my name is|i'?m|call me|this is)\s+([a-z]+(?: [a-z]+)?)$", first_bit.strip(), re.I)
+            lowname = re.match(r"^(?:(?:i said|it'?s|its|my name is|i'?m|call me|this is)\s+)?([a-z]+(?: [a-z]+)?)$", first_bit.strip(), re.I)
             if lowname and lowname.group(1).split()[0].lower() not in NOT_A_NAME:
                 first_bit = " ".join(w.capitalize() for w in lowname.group(1).split())
             name = self._name_from(first_bit) if len(first_bit.split()) <= 4 or SAID_NAME.search(first_bit) else None
             garbled = len(text.split()) > 8 and not QUESTION.search(low) and not WANTS_BOOKING.search(low) \
                 and not MOVE.search(low) and not CANCEL_IT.search(low) and not any(vars(parse_when(text, self.clock())).values())                 or bool(re.search(r"[^\x00-\u024f\s]", self._raw.get(s, text)))
+            if not name and (AFFIRM.match(low) or NEGATE.match(low)) and not flow.get("asked_again"):
+                # "ok" / "yeah" to "can I get your name?": ask once more, plainly.
+                self._msg[s] = {**flow, "asked_again": True}
+                words = "Great! What's your first name, so Alex knows who he's talking to?"
+                return Reply(words, "ask_name", speech=words)
             if not name and garbled and not flow.get("tries"):
                 self._msg[s] = {**flow, "tries": 1}    # the line garbled it: ask once more, don't give up
                 words = "Sorry, the line cut out a little. Could you say your name again?"
