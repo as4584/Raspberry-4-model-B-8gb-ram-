@@ -66,9 +66,14 @@
     "how fast can you finish",
     "when would it be ready",
     "what's the turnaround time",
-    "how long does a project take"
+    "how long does a project take",
+    "how long does it take",
+    "how long to build a website",
+    "when would my site be ready",
+    "how fast can you get it done",
+    "how many weeks does it take"
    ],
-   "a": "It depends on the project, so Alex gives you a timeline on the free call. Want me to book that for you?"
+   "a": "It depends on what you need. A simple site can be ready in about twenty four hours, and a bigger project can take up to a month. That's why the first step is a free call, so Alex can hear your idea and give you a real timeline."
   },
   {
    "id": "social",
@@ -260,6 +265,84 @@
     "that answers my question"
    ],
    "a": "Glad I could help! Is there anything else, or would you like to book a free call?"
+  },
+  {
+   "id": "payment_terms",
+   "q": [
+    "do you offer payment plans",
+    "can I pay in installments",
+    "do I have to pay it all up front",
+    "do you need a deposit",
+    "how does payment work",
+    "can I split the payments",
+    "how much do I pay up front"
+   ],
+   "a": "We don't do payment plans. To get started there's a fifty percent deposit, and the rest is due when the project is done."
+  },
+  {
+   "id": "ownership",
+   "q": [
+    "who owns the website",
+    "do I own my domain",
+    "will I own the site",
+    "do I own the code",
+    "can I take my website somewhere else",
+    "who owns the domain name",
+    "is the website mine"
+   ],
+   "a": "You own your domain name. Alex owns the code that runs the site, but you can buy the code separately if you'd like to have it."
+  },
+  {
+   "id": "contract",
+   "q": [
+    "is there a contract",
+    "do I have to sign a contract",
+    "can I cancel anytime",
+    "what happens if I cancel",
+    "do you give refunds",
+    "what's your refund policy",
+    "am I locked in",
+    "can I get my money back"
+   ],
+   "a": "There's no contract, so you can cancel whenever you want. If you cancel, your website stays up until the end of that month, then it's turned off. We don't offer refunds."
+  },
+  {
+   "id": "scope",
+   "q": [
+    "do you build online stores",
+    "can you do shopify",
+    "do you do SEO",
+    "can you set up my google listing",
+    "do you make logos",
+    "can you do online ordering for my restaurant",
+    "do you do hardware",
+    "can you build an app",
+    "do you build custom software"
+   ],
+   "a": "Alex builds pretty much anything, software and hardware, from websites and online stores to apps and custom tools. Tell me a little about what you have in mind, and I can book a free call so he can go over it with you."
+  },
+  {
+   "id": "portfolio",
+   "q": [
+    "can I see examples of your work",
+    "do you have a portfolio",
+    "can you show me sites you've built",
+    "who have you worked with",
+    "do you have references"
+   ],
+   "a": "We keep client work private, so we don't share a portfolio. The best way to see what Alex can do is a free call, where he can talk through your idea and how he'd build it."
+  },
+  {
+   "id": "buy_receptionist",
+   "q": [
+    "can I buy this receptionist",
+    "can I get an AI receptionist for my business",
+    "how much is the AI receptionist",
+    "can you make one of these for me",
+    "I want a receptionist like you",
+    "do you sell this phone system"
+   ],
+   "a": "Yes, any business can get a receptionist like me. The price is flexible and based on the size of your business, because we want it to work for you. Great service, at a great deal. I can book a free call with Alex to set it up."
   }
  ]
 }
