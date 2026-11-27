@@ -55,7 +55,7 @@ def test_one_miss_then_a_real_question_is_fine(brain):
 @pytest.mark.parametrize("junk", ["Blah", "You", "Nobody", "Whatever"])
 def test_junk_is_not_a_name(brain, junk):
     r = talk(brain, "Can you take a message?", junk)
-    assert junk.lower() not in said(r[1]).replace("thank you", "")
+    assert f", {junk.lower()}" not in said(r[1])
 
 
 def test_engine_hangs_up_after_a_hangup_reply(tmp_path):
@@ -65,6 +65,6 @@ def test_engine_hangs_up_after_a_hangup_reply(tmp_path):
     eng = CallEngine(BookingStore(str(tmp_path / "h.sqlite")), asr=MockASR(["press 1"]), tts=type(
         "T", (), {"synthesize": staticmethod(lambda t: asyncio.sleep(0, b"\xff" * 160))})(),
         dialogue_factory=lambda: Spam())
-    t = FakeTransport([CallStart("C1", "+15550000001"), *[AudioIn(LOUD)] * 10, *[AudioIn(QUIET)] * 20, 1.0])
+    t = FakeTransport([CallStart("C1", "+15550000001"), *[AudioIn(LOUD)] * 10, *[AudioIn(QUIET)] * 20, 5.0])
     asyncio.run(eng.run(t))
     assert ("hangup",) in t.sent

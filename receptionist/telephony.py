@@ -252,6 +252,11 @@ class CallEngine:
                 if transfer:
                     words = TRANSFER_SPEECH
                 await speak(words, this_generation, f'answer-{this_generation}', t_asr)
+                if reply.action == 'hangup' and this_generation == generation:
+                    # Spam or a call going nowhere: let the goodbye play out, then free the line.
+                    await asyncio.sleep(min(8.0, 0.07 * len(words)))
+                    log.info('call=%s gen=%d phase=hangup by=receptionist', call_id, this_generation)
+                    await transport.hangup()
                 if transfer and this_generation == generation:
                     await transport.transfer(self.transfer_to)
             except asyncio.CancelledError:

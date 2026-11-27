@@ -68,6 +68,15 @@ IDENTITY_Q = re.compile(r"\b(am i (talking|speaking) (to|with)|are you|is (this|
 AVAIL_Q = re.compile(r"\bwhat (times|days|slots) do you (have|guys have)\b|\bwhen can i come in\b|\bwhen (are|is) (you|alex|someone|anyone|somebody)( guys)? (free|available|around)\b|\bare you (free|available) (on|at|this|next|tomorrow)\b")
 TALK_TO = re.compile(r"\b(speak|talk) (with|to) (alex|the owner|someone|somebody|anyone|a person|a human|a real person)\b|\b(can|could) i (get|reach) (alex|the owner)\b")
 REAL_PERSON = ("I'm LexMakesIt's A I receptionist. Alex built me, and I can answer questions or book you a free call with Alex.")
+ROBOCALL = re.compile(r"\b(extended (auto |car |vehicle )?warranty|(car|auto|vehicle)'?s? (extended |factory )?warranty|"
+                      r"press (1|one)\b|final notice|free cruise|you'?ve been (selected|chosen)|this is the irs|"
+                      r"lawsuit (has been )?(filed|against)|lower your (credit card )?interest|"
+                      r"social security (number )?(has been )?suspended|medicare (benefits|card)|"
+                      r"student loan forgiveness|been trying to reach you about)", re.I)
+SPAM_SPEECH = "Thanks, but we're not interested. Please remove this number from your list. Goodbye."
+NOWHERE_SPEECH = ("I'm sorry, I'm having trouble understanding, so I'll let you go for now. "
+                  "Please call back anytime. Goodbye.")
+UNPRODUCTIVE = {"repeat", "unknown", "lost", "ask_again", "confirm_again"}
 LOST_SPEECH = "I'm sorry, I didn't quite follow all of that. What would you like help with today?"
 # Never "outside what I can help with": an honest "I don't want to guess" plus a real next step.
 UNKNOWN_SPEECH = ("That's a good question, and I don't want to guess. I can book you a free call with Alex "
@@ -121,7 +130,8 @@ DIGIT_WORDS = {"zero": "0", "oh": "0", "o": "0", "one": "1", "two": "2", "three"
                "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9"}
 TALK_TO_SPEECH = ("Alex isn't available right this second, but I can take a message and have him call you back, "
                   "or book you a free call with him. Which would you prefer?")
-NOT_A_NAME = {"yes", "yeah", "no", "nope", "sure", "okay", "ok", "hello", "hi", "um", "uh", "the", "a", "actually", "wait",
+NOT_A_NAME = {"blah", "you", "nobody", "whatever", "someone", "somebody", "anybody", "anyone", "me", "test",
+              "yes", "yeah", "no", "nope", "sure", "okay", "ok", "hello", "hi", "um", "uh", "the", "a", "actually", "wait",
               "si", "sí", "bueno", "mira", "hola", "for", "about", "our", "we", "he", "she", "they", "calling", "here", "speaking",
               "can", "could", "would", "will", "do", "does", "did", "how", "what", "when", "where", "why", "who", "is", "are",
               "cancel", "move", "book", "thanks", "thank", "never", "i", "it", "that", "this", "just", "hold", "hang",
@@ -262,6 +272,7 @@ class Brain:
         self._moving: dict[str, bool] = {}        # caller asked to move this call's booking
         self._utter: dict[str, str] = {}
         self._callbacks: dict[str, str] = {}
+        self._nowhere: dict[str, int] = {}         # turns in a row that went nowhere
         self._given: dict[str, dict[str, str]] = {}   # answer text -> the question it first answered
         self._last_msg: dict[str, int] = {}      # number given for a callback (read back on request)          # the caller's previous words (a repeat vs a new question)
         import random as _random
@@ -354,7 +365,17 @@ class Brain:
     # ---- the conversation ----------------------------------------------------------
     def handle(self, utterance: str, session_id: str, caller_id: str | None = None) -> Reply:
         s, low = session_id, " ".join(re.sub(r"[.!?,]+", " ", utterance.lower()).split())
+        if ROBOCALL.search(utterance):
+            # A recorded sales script: end it before it burns minutes or lands on the calendar.
+            self._msg.pop(s, None)
+            self.dialogue._pending.pop(s, None)
+            return Reply("Goodbye.", "hangup", speech=SPAM_SPEECH)
         r = self._handle(utterance, session_id, caller_id)
+        n = self._nowhere.get(s, 0) + 1 if r.action in UNPRODUCTIVE else (self._nowhere.get(s, 0) if r.action == "filler" else 0)
+        self._nowhere[s] = n
+        if n >= 3 and not self._booked.get(s) and not self._msg.get(s):
+            # Three turns in a row going nowhere (nonsense, silence, a broken line): let them go kindly.
+            return Reply("Goodbye.", "hangup", speech=NOWHERE_SPEECH)
         # Mid-booking, a SHORT reply we can't place is almost always a misheard answer ("Ten." -> "Pen"):
         # a person asks again. A real question ("do you do payment plans?") gets a real answer.
         last = self._last.get(session_id)
