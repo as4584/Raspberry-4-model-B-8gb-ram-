@@ -60,7 +60,8 @@ THREE_MISHEARD = re.compile(r"\b(free|pre|tree|pretty)(?=o[\s'-]*clock\b|\b[\s-]
 MISHEARD = [(re.compile(p, re.I), w) for p, w in (
     (r"\b(into|in to|to) ?more\b(?! than)", "tomorrow"), (r"\bto morrow\b", "tomorrow"),
     (r"\bpoint ?meant\b", "appointment"), (r"\bhour\b(?= *\?| on| today)", "hours"),
-    (r"\b(puff?ake|pasaic|passaick|passay it|pass a ick)\b", "Passaic"))]
+    (r"\b(puff?ake|pasaic|passaick|passay it|pass a ick)\b", "Passaic"),
+    (r"\bto (?=p\.? ?m\b|a\.? ?m\b)", "two "), (r"\bto (a )?o?'? ?clock\b", "two o'clock"))]
 DATE_Q = re.compile(r"\bwhat('?s| is)? (the )?(day|date|time)( is it| today)?\b|\btoday'?s date\b|\bwhat day is (it|today)\b")
 UNKNOWN_MATCH = 0.6           # an unplaced question takes a checked answer only when it's a fair match
 STRONG_MATCH = 0.75          # override a keyword FAQ hit only when clearly closer (Pi: good 0.85+, wrong 0.61)
@@ -80,6 +81,7 @@ NOWHERE_SPEECH = ("I'm sorry, I'm having trouble understanding, so I'll let you 
 UNPRODUCTIVE = {"repeat", "unknown", "lost", "ask_again", "confirm_again"}
 PRODUCT_Q = re.compile(r"\b(answer|pick up|take|handle) ((my|our|the) )?(phone|phones|calls?)\b(?! (with|from) alex)|"
                        r"\b(receptionist|something|someone|one) like you\b|"
+                       r"\bwhat('?s| does| do| can| would) (this thing|it|she|the receptionist|your receptionist|the robot)( even)? do\b|"
                        r"\b(do|set up|make|build) (this|that|one of these|something like this) for (my|our)\b|"
                        r"\b(can|could|would|will|does|do) (it|she|this|that|a receptionist) (\w+ ){0,4}?(book|fill|handle|schedule|cancel|take (calls|messages|orders|appointments|bookings|payments)|answer|text|screen)\w*\b|"
                        r"\b(calls?|phones?) for (my|our) (business|shop|salon|restaurant|office|store|company)\b", re.I)
@@ -107,6 +109,25 @@ CALL_TIME = re.compile(r"\b(mornings?|afternoons?|evenings?|nights?|weekdays?|we
                        r"after \w+|before \w+|between \w+|early|late|lunch ?time|best (time )?is|today)\b")
 ON_TOPIC = re.compile(r"\b(website|site|web|app|price|cost|how much|book\w*|appointment|business|shop|store|salon|"
                       r"barber\w*|restaurant|alex|receptionist|phone|calls?|message|help|need|want)\b")
+ROUND14 = [
+    (re.compile(r"\b(speak|talk|understand|do|handle)\b.*\b(vietnamese|chinese|mandarin|cantonese|korean|portuguese|french|polish|arabic|hindi|"
+                r"russian|italian|tagalog|creole|haitian|japanese|german|urdu|bengali|gujarati)\b"),
+     "Right now I speak English and Spanish. For other languages, Alex can tell you what's possible on a free call."),
+    (re.compile(r"\b(my |our |the |their )?(customers?|clients?|patients?|people)\b.*\b(cancel|reschedule|move|change)\b.*\b(appointment|booking|time)s?\b"),
+     "Yes, your customers can call me to cancel or move their appointment, and I update the calendar, so you see the change."),
+    (re.compile(r"\b(text|message|notify|alert|ping) me\b.*\b(when|if|every time)\b|\b(do|will|would|can) (i|you) get (a )?text\b|\bsend me (a )?texts?\b"),
+     "Alex can set it up so you get each caller's name, number and message right away, like a text, so you never miss a lead."),
+    (re.compile(r"\b(references?|someone i can call|past clients?|customers? i can talk to)\b"),
+     "I don't have references to give out, but the first call with Alex is free, with no commitment, "
+     "so you can ask him anything and decide for yourself."),
+    (re.compile(r"\b(is alex|alex is|is he)\b.*\b(real|actual|a real)\b.*\b(person|guy|man|human)?\b|\bis (there|this) (a )?real (person|business)\b"),
+     "Yes, Alex is a real person. He runs LexMakesIt himself, here in Paterson, New Jersey, and you'd work with him directly."),
+    (re.compile(r"\bwhat would (the receptionist|it|she|you|a receptionist) do for (a |my |me|us)\b|\bfor (a|my) (trade|business) like (mine|me)\b"),
+     "__PITCH__"),
+    (re.compile(r"\b(ask|get|take)\b.*\b(insurance|medical|patient|health)\b.*\b(details?|info\w*|questions?)\b"),
+     "Yes, a receptionist like me can ask the questions you choose. For medical or insurance details, Alex keeps it to just "
+     "what you need, and he'll go over privacy with you on a free call."),
+]
 ROUND13 = [
     (re.compile(r"\b(how (would|will|does) (it|she|you) (greet|answer|sound)|show me how|hear how|what would (it|she|you) say|demo of the greeting|example greeting)\b"),
      "Sure! For your business I'd answer something like: Thank you for calling, this is the virtual receptionist. "
@@ -136,8 +157,9 @@ ROUND12 = [
      "Yes, Alex can set your site up to take deposits and payments online, with something like Square or Stripe, "
      "so clients pay when they book and no-shows drop."),
     (re.compile(r"\b(can|could|would|will) (the )?(robot|she|it|you|receptionist)\b.*\b(ask|get|take)\b.*\b(car|problem|address|details|job|info\w*|location)\b"),
-     "Yes, a receptionist like me can ask each caller the questions you choose, like the car, the problem, and the address, "
-     "and send it all to you. Alex sets up the questions with you on a free call."),
+     "Yes, a receptionist like me can ask each caller the questions you choose, like their address and what they need, "
+     "and send the answers to you. "
+     "Alex sets up the questions with you on a free call."),
     (re.compile(r"\b(in stock|inventory|have (it|that) in stock|stock (check|lookup)|what'?s in stock)\b"),
      "Alex can connect a receptionist to your product list, so it can tell callers what's in stock. He sets that up with you on a free call."),
     (re.compile(r"\b(evenings?|tonight|after work)\b"),
@@ -1181,13 +1203,26 @@ class Brain:
                          speech="Sorry, I didn't catch that. Could you say that again?")
         if self._lang.get(session_id) == "es":
             return self._spanish(utterance, low, session_id, caller_id)
+        fix = re.search(r"\b(?:not|isn'?t|wasn'?t)\s+[A-Za-z]+\W+(?:it'?s\s+|i'?m\s+|my name is\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)", utterance)
+        if fix and self._names.get(session_id) and fix.group(1).split()[0].lower() not in NOT_A_NAME:
+            name = fix.group(1)
+            self._names[session_id] = name
+            if self._last_msg.get(session_id):
+                self.store.set_message_name(self._last_msg[session_id], name)
+            for f in (self._msg.get(session_id),):
+                if f:
+                    f["name"] = name
+            if self._booked.get(session_id):
+                self.store.set_name(self._booked[session_id], name, caller_id)
+            words = f"Sorry about that, {name.split()[0]}. I've got {name} now. {ANYTHING_ELSE}"
+            return Reply(words, "name_fixed", speech=words)
         flow = self._msg.get(session_id)
         if flow and not closing(low):
             r = self._message_step(flow, text, low, session_id, caller_id)
             if r is not None:
                 return r
         about_me = self._topic.get(session_id) == "receptionist" or "receptionist" in low
-        if about_me and re.search(r"\b(how much|price|cost|charge|pricing|per month|a month)\b", low) and not HAGGLE.search(low):
+        if about_me and re.search(r"\b(how much|price|cost|charge|pricing|per month|a month|give me a number|ballpark)\b", low) and not HAGGLE.search(low):
             return Reply(RECEPTIONIST_PRICE, "faq", speech=RECEPTIONIST_PRICE)
         if about_me and re.search(r"\b(how (fast|quick|long)|set ?up|get started|up and running)\b", low):
             return Reply(RECEPTIONIST_SETUP, "knowledge", speech=RECEPTIONIST_SETUP)
@@ -1197,6 +1232,8 @@ class Brain:
             return Reply(PORTFOLIO_SPEECH, "knowledge", speech=PORTFOLIO_SPEECH)
         if LEGIT.search(low) and not BOOK_WORDS.search(low):
             return Reply(LEGIT_SPEECH, "knowledge", speech=LEGIT_SPEECH)
+        if re.search(r"\b(receptionist|this thing|the robot|answer (my|the) (phone|calls))\b", low) and self._topic.get(session_id) is None:
+            self._topic[session_id] = "receptionist"
         if self._topic.get(session_id) == "wrong_number":
             words = ("This is LexMakesIt. We build websites for small businesses, so I can't help with medicine, I'm sorry. "
                      "The number for your pharmacy is on your pill bottle, or a family member can help you find it. "
@@ -1205,7 +1242,10 @@ class Brain:
                 words = "I'm sorry, I can't reach the pharmacy from here. The number is on your pill bottle. Take care of yourself."
             return Reply(words, "wrong_number", speech=words)
         burned = [x for x in ROUND7 if "sorry that happened" in x[1]]
-        for pat, words in burned + ROUND13 + ROUND12 + ROUND11 + ROUND10[:-1] + POLICY + ROUND10[-1:] + ROUND8 + ROUND7:
+        texts = [x for x in ROUND14 if "like a text" in x[1]]
+        for pat, words in burned + [x for x in ROUND14 if x not in texts] + ROUND13 + ROUND12 + texts + ROUND11 + ROUND10[:-1] + POLICY + ROUND10[-1:] + ROUND8 + ROUND7:
+            if words == "__PITCH__":
+                words = PITCH_SPEECH
             if pat.search(low):
                 if "isn't the pharmacy" in words:
                     self._topic[session_id] = "wrong_number"

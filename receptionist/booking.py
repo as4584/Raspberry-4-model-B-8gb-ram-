@@ -239,3 +239,7 @@ class BookingStore:
         """Add a detail the caller gave after the message was saved ('mornings are best')."""
         with self._session() as db:
             db.execute("UPDATE messages SET body=body || ? WHERE id=?", (" " + more, message_id))
+
+    def set_message_name(self, message_id: int, name: str) -> None:
+        with self._session() as db:
+            db.execute("UPDATE messages SET name=? WHERE id=?", (name, message_id))
