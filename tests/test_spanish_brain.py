@@ -42,3 +42,12 @@ def test_garbled_spanish_is_never_hung_up_on(brain):
 def test_heard_variants_of_deposit_and_goodbye(brain):
     r = talk(brain, "Hola, necesito una página web", "Hay que pagar un depositó", "No gracias, Dios.")
     assert "cincuenta" in said(r[1]) and r[2].action == "goodbye"
+
+
+def test_buenos_dias_alone_is_spanish(brain):
+    assert talk(brain, "por la Buenos días.")[0].action == "spanish"
+
+
+def test_switch_turn_answers_the_request_too(brain):
+    r = talk(brain, "Tengo un negocio de limpieza y quiero una página web")
+    assert r[0].action == "spanish" and "mil dólares" in said(r[0])
