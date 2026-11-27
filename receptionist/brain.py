@@ -483,7 +483,7 @@ SPANISH = re.compile(r"\b(spanish|espa[nñ]ol|habla)\b")
 SPANISH_SPEECH = ("I'm sorry, I can only speak English right now. I'll keep it simple, "
                   "and I can take a message for Alex if that's easier.")
 WEATHER = re.compile(r"\b(cold|hot|freezing|rain\w*|snow\w*|weather|humid|chilly)\b.*\b(today|out|outside|isn'?t it|huh)\b")
-REPEAT_ASK = re.compile(r"\b(slower|more slowly|slow down|what was that|say that again|repeat that|come again|pardon|one more time|again,? slowly|"
+REPEAT_ASK = re.compile(r"\b(what were you saying|where were we|you were saying|slower|more slowly|slow down|what was that|say that again|repeat that|come again|pardon|one more time|again,? slowly|"
                         r"didn'?t catch that|what did you say|could you repeat)\b")
 # "Did you cancel it?" / "is it still booked?" is a question, never a cancel.
 STATUS_Q = re.compile(r"\b(did you|was it|is it|has it been|have you) (cancel|cancelled|canceled)\b|\bstill (there|booked|on|good|scheduled|happening)\b")
@@ -684,7 +684,8 @@ class Brain:
         self._callbacks: dict[str, str] = {}
         self._nowhere: dict[str, int] = {}
         self._raw: dict[str, str] = {}
-        self._answers: dict[str, int] = {}          # answers given with no booking/message yet
+        self._answers: dict[str, int] = {}
+        self._last_real: dict[str, str] = {}        # last real answer (not "take your time")          # answers given with no booking/message yet
         self._offered_follow: dict[str, bool] = {}  # offered the next step already
         self._asked_before_bye: dict[str, bool] = {}             # this turn's words as heard, original case
         self._lang: dict[str, str] = {}            # "es" once the caller speaks Spanish
@@ -792,6 +793,7 @@ class Brain:
             # Spanish calls answer in Spanish; the English rephrasing below doesn't apply.
             return self._handle(utterance, session_id, caller_id)
         utterance = collapse_repeats(utterance)
+        utterance = self._steer_low_effort(utterance, s, caller_id) or utterance
         after_evening = "prefer an evening" in (self._last_speech.get(s) or "")
         if re.search(r"\b(set up|schedule|arrange|get) (a |me a )?(call|time|meeting) with (alex|him)\b|\bset (up )?a call\b", utterance, re.I) \
                 and not any(vars(parse_when(utterance, self.clock())).values()) \
@@ -900,7 +902,12 @@ class Brain:
         if r.action == "pitch":
             self._topic.setdefault(s, "receptionist")
         if "future appointment time" in (r.speech or r.text or ""):
-            r = Reply(r.text, "ask_day", speech="Sorry, that time has already passed. Which day works for you?")
+            w = parse_when(utterance, self.clock())
+            again = self._handle(f"Can I book tomorrow {utterance}", s, caller_id) if (w.time and not w.date) else None
+            if again is not None and again.action in ("offer_slots", "confirm_required"):
+                r = again                         # "like 2" when 2 has passed: the next day at 2
+            else:
+                r = Reply(r.text, "ask_day", speech="Sorry, that time has already passed. Which day works for you?")
         r = self._vary(r)
         if DISTRESS.search(low) and r.action != "goodbye":
             r = self._acknowledge(r, low, s)
@@ -946,6 +953,8 @@ class Brain:
                 else:
                     offer = " Would you like me to book you a free call with Alex, or take your name and number so he can follow up?"
                 r = Reply(r.text, r.action, r.committed_id, speech=r.speech + offer)
+        if r.action not in ("filler", "presence", "repeat", "repeat_back") and r.speech:
+            self._last_real[s] = r.speech
         self._last_speech[session_id] = r.speech
         self._utter[s] = low
         return r
@@ -991,6 +1000,36 @@ class Brain:
                 and "'" not in dedup[1] and dedup[1].lower() not in NOT_A_NAME | {"my", "i", "and", "i'm"}:
             name.append(dedup[1])
         return " ".join(w[0].upper() + w[1:] for w in name)
+
+    def _steer_low_effort(self, utterance: str, s: str, caller_id: str | None) -> str | None:
+        """'Close an appointment for the dumbest of users' (owner): rewrite vague turns into what they mean."""
+        low = " ".join(re.sub(r"[.!?,]+", " ", utterance.lower()).split())
+        if self._lang.get(s) == "es" or self._msg.get(s):
+            return None
+        st = self._calls.get(s)
+        offered = bool(st and st.offered)
+        pending = s in self.dialogue._pending
+        last = self._last_speech.get(s) or ""
+        vague = re.match(r"^(yeah|yea|ya|yes|ok(ay)?|sure|fine|whatever|i guess|idk|i don'?t know|i dunno|maybe|"
+                         r"i suppose|alright|all right|cool|sounds good|uh huh|mm hm+)( (i guess|sure|then|ok(ay)?))?$", low)
+        # "the call thing" / "i need a website": an easy way into booking
+        if re.match(r"^(um |uh |hey |so |ok |okay )*(the )?(free )?call( thing)?$|^(um |uh |hey |so )*(i )?(need|want) (a )?(website|site|web ?site)( i guess)?$", low):
+            return "What times do you have open?" if "call" in low else None
+        if offered or pending:
+            if re.search(r"\b(what else|other (times|days|options)|something else|anything else (open|available)|different (time|day))\b", low):
+                nxt = (st.offered[-1].astimezone(self.tz).date() + timedelta(days=1)) if offered else None
+                return f"Can I book something {nxt:%A}?" if nxt else "Can I book something next week?"
+            if re.match(r"^(whenever|any ?time|anything|whatever( works)?|the times|times)$", low) and offered:
+                return "the first one"
+            if re.match(r"^(no|nah|nope|not that|that doesn'?t work)( thanks| thank you)?$", low) and offered and not pending:
+                nxt = st.offered[-1].astimezone(self.tz).date() + timedelta(days=1)
+                return f"Can I book something {nxt:%A}?"
+            return None
+        # A vague yes / "idk" right after her own question or offer: the easiest next step is a time.
+        if vague and last and ("?" in last[-80:] or "free call" in last or "book" in last) \
+                and not re.search(r"did i get that right|was that a yes|book it\?|should i", last.lower()):
+            return "What times do you have open?"
+        return None
 
     def _both(self, utterance: str, r: Reply, s: str, caller_id: str | None) -> Reply:
         """'How much is it and how long does it take?': answer each question, not just one."""
@@ -1253,6 +1292,9 @@ class Brain:
         if step == "booking_name":
             self._msg.pop(s, None)
             first_bit = re.split(r"[.,;:!?]", self._raw.get(s, text).strip())[0]   # original case: names need capitals
+            lowname = re.match(r"^(?:i said|it'?s|my name is|i'?m|call me|this is)\s+([a-z]+(?: [a-z]+)?)$", first_bit.strip(), re.I)
+            if lowname and lowname.group(1).split()[0].lower() not in NOT_A_NAME:
+                first_bit = " ".join(w.capitalize() for w in lowname.group(1).split())
             name = self._name_from(first_bit) if len(first_bit.split()) <= 4 or SAID_NAME.search(first_bit) else None
             garbled = len(text.split()) > 8 and not QUESTION.search(low) and not WANTS_BOOKING.search(low) \
                 and not MOVE.search(low) and not CANCEL_IT.search(low) and not any(vars(parse_when(text, self.clock())).values())                 or bool(re.search(r"[^\x00-\u024f\s]", self._raw.get(s, text)))
@@ -1649,8 +1691,8 @@ class Brain:
             return Reply(MONTHLY_SPEECH, "knowledge", speech=MONTHLY_SPEECH)
         if AI_Q.search(low):
             return Reply(AI_SPEECH, "knowledge", speech=AI_SPEECH)
-        if REPEAT_ASK.search(low) and self._last_speech.get(session_id):
-            body = self._last_speech[session_id]
+        if REPEAT_ASK.search(low) and (self._last_real.get(session_id) or self._last_speech.get(session_id)):
+            body = self._last_real.get(session_id) or self._last_speech[session_id]
             first = split_first(body)
             if first in OPENERS and first != body:
                 body = body[len(first):].strip()
@@ -1761,6 +1803,9 @@ class Brain:
         if pending and (len(low.split()) <= 4 or SAID_NAME.search(utterance)) and not NEGATE.match(low) and not AFFIRM.match(low):
             said_nm = SAID_NAME.search(utterance)
             nm = (self._name_from(said_nm.group(0)) if said_nm else None) or (self._lead_name(utterance) if utterance[:1].isupper() else None)
+            if not nm and said_nm and len(said_nm.group(1).split()) <= 2 and said_nm.group(1).split() \
+                    and said_nm.group(1).split()[0].lower() not in NOT_A_NAME:
+                nm = " ".join(w.capitalize() for w in said_nm.group(1).split())      # "it's mike"
             if nm and nm.split()[0].lower() not in NOT_A_NAME and not any(vars(parse_when(text, self.clock())).values()):
                 self._names[session_id] = nm         # "Mike Kowalski" before the yes: keep it, ask again kindly
                 words = f"Thanks, {nm.split()[0]}. Should I go ahead and book that time for you?"
