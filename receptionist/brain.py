@@ -377,6 +377,49 @@ def es_digits(text: str) -> str:
     return "".join(t if t.isdigit() else ES_DIGIT_WORDS.get(t, "") for t in re.findall(r"[a-záéíóúñ]+|\d", text.lower()))
 
 
+ES_NUM = {"una": "1", "uno": "1", "dos": "2", "tres": "3", "cuatro": "4", "cinco": "5", "seis": "6", "siete": "7",
+          "ocho": "8", "nueve": "9", "diez": "10", "once": "11", "doce": "12"}
+ES_DAYS = {"lunes": "monday", "martes": "tuesday", "miércoles": "wednesday", "miercoles": "wednesday", "jueves": "thursday",
+           "viernes": "friday", "sábado": "saturday", "sabado": "saturday", "domingo": "sunday", "hoy": "today"}
+ES_DAY_NAMES = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+ES_MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre",
+             "noviembre", "diciembre"]
+ES_HOURS = ["doce", "una", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve", "diez", "once"]
+ES_YES = re.compile(r"^\W*(s[ií]|claro|perfecto|est[aá] bien|de acuerdo|ok(ay)?|dale|ándale|andale|por favor|s[ií],? por favor)\b")
+
+
+def es_to_en_booking(text: str) -> str:
+    """'una cita el jueves a las dos de la tarde' -> 'book thursday at 2 pm' (for the scheduler)."""
+    t = text.lower()
+    t = re.sub(r"\bpasado mañana\b", "the day after tomorrow", t)
+    t = re.sub(r"\b(por|en|de) la mañana\b", " in the morning ", t)
+    t = re.sub(r"\b(por|en) la tarde\b", " in the afternoon ", t)
+    t = re.sub(r"\bmañana\b", " tomorrow ", t)
+    for es, en in ES_DAYS.items():
+        t = re.sub(rf"\b{es}\b", f" {en} ", t)
+    m = re.search(r"\ba la?s? (\w+)( y media)?( de la (mañana|tarde|noche))?", t)
+    words = ["book"] + [w for w in ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "today",
+                                     "tomorrow", "the day after tomorrow") if re.search(rf"\b{w}\b", t)][:1]
+    if m:
+        h = ES_NUM.get(m.group(1), m.group(1) if m.group(1).isdigit() else None)
+        if h:
+            half = ":30" if m.group(2) else ""
+            ampm = " pm" if m.group(4) in ("tarde", "noche") else (" am" if m.group(4) == "mañana" else "")
+            words.append(f"at {h}{half}{ampm}")
+    elif "in the morning" in t:
+        words.append("in the morning")
+    elif "in the afternoon" in t:
+        words.append("in the afternoon")
+    return " ".join(words)
+
+
+def es_when(dt) -> str:
+    h = dt.hour % 12
+    part = "de la mañana" if dt.hour < 12 else "de la tarde"
+    mins = " y media" if dt.minute == 30 else ""
+    return f"el {ES_DAY_NAMES[dt.weekday()]} {dt.day} de {ES_MONTHS[dt.month - 1]} a las {ES_HOURS[h]}{mins} {part}"
+
+
 def spoken_number_es(digits: str) -> str:
     d = digits[1:] if len(digits) == 11 and digits[0] == "1" else digits
     groups = [d[:3], d[3:6], d[6:]] if len(d) == 10 else [d]
@@ -919,6 +962,10 @@ class Brain:
         def first(n):
             return n.split()[0]
 
+        booking_turn = (ES_BOOK.search(low) and re.search(r"\b(cita|agendar|reservar|hacer una)\b", low)) or (
+            m.get("booking") and (ES_YES.match(low) or re.search(r"\ba la?s? \w+|\b(lunes|martes|mi[eé]rcoles|jueves|viernes|mañana|hoy)\b", low)))
+        if booking_turn and not ES_BYE.search(low):
+            return self._spanish_booking(text, low, s, caller_id)
         if ES_BYE.search(low) and len(low.split()) <= 8:
             if (m.get("callback") or m.get("name") or m.get("body")) and not m.get("saved"):
                 save()
@@ -995,6 +1042,46 @@ class Brain:
             return say("lost2", "ask_message")
         m["want"] = "details"
         return say("lost", "unknown")
+
+    def _spanish_booking(self, text: str, low: str, s: str, caller_id: str | None) -> Reply:
+        """Book in Spanish: the English scheduler does the work, the caller hears Spanish."""
+        m = self._es[s]
+        m["booking"] = True
+        en = "yes" if ES_YES.match(low) and s in self.dialogue._pending else es_to_en_booking(text)
+        lang = self._lang.pop(s, None)
+        try:
+            r = self._handle(en, s, caller_id)
+        finally:
+            self._lang[s] = lang or "es"
+        st = self._calls.get(s)
+        if r.action == "offer_slots" and st and st.offered:
+            day = ES_DAY_NAMES[st.offered[0].astimezone(self.tz).weekday()]
+            times = [ES_HOURS[x.astimezone(self.tz).hour % 12] for x in st.offered]
+            part = "de la mañana" if st.offered[-1].astimezone(self.tz).hour < 12 else "de la tarde"
+            lista = ", ".join(times[:-1]) + f" o {times[-1]}" if len(times) > 1 else times[0]
+            words = f"Con gusto. El {day} tengo a las {lista} {part}. ¿Cuál le queda mejor?"
+        elif r.action == "confirm_required" and s in self.dialogue._pending:
+            words = f"{es_when(self.dialogue._pending[s][1].astimezone(self.tz)).capitalize()} está libre. ¿Se lo reservo?"
+        elif r.action == "booked" and r.committed_id:
+            self._booked[s] = r.committed_id
+            m["booking"] = False
+            row = next((b for b in self.store.active() if b["id"] == r.committed_id), None)
+            when = es_when(datetime.fromisoformat(row["starts"]).astimezone(self.tz)) if row else ""
+            code = " ".join(ES_DIGITS[int(c)] for c in (row.get("code") or "")) if row else ""
+            if m.get("name"):
+                self.store.set_name(r.committed_id, m["name"], caller_id)
+            words = f"¡Listo! Quedó reservado para {when}. Su código es {code}." + (
+                "" if m.get("name") else " ¿Me dice su nombre, para que Alex sepa con quién habla?")
+            if not m.get("name"):
+                m["want"] = "name"
+        elif r.action in ("ask_day", "ask_time", "ask_which", "ask_again"):
+            words = "Con gusto. ¿Qué día y a qué hora le queda bien?"
+        elif r.action in ("slot_taken", "closed_day"):
+            words = "Esa hora no está disponible. ¿Le sirve otro día u otra hora?"
+        else:
+            words = "Con gusto. ¿Qué día y a qué hora le gustaría la cita?"
+        m["last"] = words
+        return Reply(r.text, r.action, r.committed_id, speech=words)
 
     def _lead_name(self, rest: str) -> str | None:
         """A name said next to a number: 'Kim, Bella Rose Boutique, <number>' / '<number>, Walter Brennan'."""
@@ -1120,6 +1207,14 @@ class Brain:
             r = self._read_back(s, caller_id)     # still taking the message: ask for it after
             words = r.speech.replace("Is that right?", "And what would you like me to tell Alex?")
             return Reply(words, "read_back", speech=words)
+        if re.search(r"\b(book|appointment|schedule)\b", low) and any(vars(parse_when(text, self.clock())).values()):
+            # "Actually, can you just book me Thursday morning?": book it; the name and number are kept.
+            self._msg.pop(s, None)
+            if flow.get("name"):
+                self._names[s] = flow["name"]
+            if flow.get("callback"):
+                self._callbacks[s] = flow["callback"]
+            return None
         flow["body"] = text.strip()
         return self._save_message(flow, s, caller_id)
 

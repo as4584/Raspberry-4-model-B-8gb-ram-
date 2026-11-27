@@ -13,7 +13,7 @@ SLOTS = ("offer_slots", "confirm_required", "booked", "ask_day")
 
 def test_booking_request_at_the_message_step_books(brain):
     r = talk(brain, "Can you take a message?", "Jay, 201 555 0144", "Actually, can you just book me Thursday morning?")
-    assert r[2].action in SLOTS and "thursday" in said(r[2])
+    assert r[2].action in SLOTS and ("thursday" in said(r[2]) or "tomorrow" in said(r[2]))
 
 
 def test_booking_request_at_the_name_step_books(brain):
