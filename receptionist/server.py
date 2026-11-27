@@ -263,6 +263,8 @@ def create_app(settings:Settings|None=None, asr_factory:Callable[[],object]|None
         await ws.accept(subprotocol='media' if 'media' in ws.scope.get('subprotocols',[]) else None)
         engine=CallEngine(store,asr=asr_factory(),tts=tts,require_caller_id=settings.require_caller_id,greet=True,
                           dialogue_factory=dialogue_factory,greeting=greeting,vad_factory=vad_factory,tts_es=tts_es,
+                          max_call_s=float(os.getenv('MAX_CALL_S','900')) or None,
+                          idle_hangup_s=float(os.getenv('IDLE_HANGUP_S','30')) or None,
                           transfer_to=caller_number(os.getenv('TRANSFER_TO')),
                           review_dir=os.getenv('REVIEW_DIR','/var/lib/pi-receptionist/data/review'),
                           review_callers={k for k in (review_key(x) for x in os.getenv('REVIEW_CALLERS','').split(',')) if k})

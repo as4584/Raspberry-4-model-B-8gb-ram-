@@ -40,6 +40,9 @@ TURN_CAP_BYTES = 64000              # 8 s: background voices can't hold a turn o
 NOISE_MARGIN = 2.5             # speech must be this many times the call's noise floor
 CALIBRATION_FRAMES = 25        # first 0.5 s of a greeted call: measure line noise
 FILLER = "One moment."
+MAX_CALL_SPEECH = ("I want to be respectful of your time, so I'll let you go now. Alex will follow up, "
+                   "and you can call back anytime. Take care!")
+IDLE_SPEECH = "It sounds like the line went quiet, so I'll hang up for now. Please call back anytime. Goodbye."
 FILLER_AFTER_S = 0.4          # speak FILLER if the brain hasn't answered by then
 PREROLL_BYTES = 2400           # 300 ms kept from before the VAD trigger (soft onsets)
 
@@ -102,7 +105,8 @@ class CallEngine:
     def __init__(self, store: BookingStore, asr, tts, require_caller_id: bool = False, greet: bool = False,
                  transfer_to: str | None = None, review_dir: str | None = None,
                  review_callers: set[str] | None = None, dialogue_factory=None,
-                 greeting: str | None = None, vad_factory=None, tts_es=None):
+                 greeting: str | None = None, vad_factory=None, tts_es=None,
+                 max_call_s: float | None = None, idle_hangup_s: float | None = None):
         self.store, self.asr, self.tts, self.require_caller_id = store, asr, tts, require_caller_id
         self.review_dir, self.review_callers = review_dir, set(review_callers or ())
         # One conversation object per call (rule Dialogue, or the tiny-model Brain).
@@ -112,6 +116,8 @@ class CallEngine:
         self.greeting = greeting or GREETING
         self.vad_factory = vad_factory   # per-call voice detector stream (Silero), or None
         self.tts_es = tts_es             # Spanish voice; a Spanish caller gets it for the rest of the call
+        # Minutes guard: a call past max_call_s is wrapped up kindly; a line silent for idle_hangup_s is closed.
+        self.max_call_s, self.idle_hangup_s = max_call_s, idle_hangup_s
 
     async def run(self, transport: CallTransport) -> None:
         asr = self.asr
@@ -285,12 +291,25 @@ class CallEngine:
 
         def end_turn():
             nonlocal heard_speech, silence_ms, spoken_ms
+            activity[0] = time.monotonic()
             snapshot, ticket = bytes(audio), generation
             speech_end[ticket] = last_voiced
             audio.clear(); heard_speech = False; silence_ms = 0; spoken_ms = 0
             spawn(snapshot, ticket)
 
         last_audio = time.monotonic()
+        activity = [time.monotonic()]     # last time the caller finished saying something
+        started = [None]                  # when the call began
+        closing = [False]
+
+        async def wrap_up(words: str, why: str):
+            closing[0] = True
+            log.info('call=%s phase=hangup by=receptionist reason=%s', call_id, why)
+            try:
+                await speak(words, generation, 'wrap-up', time.monotonic())
+                await asyncio.sleep(min(8.0, 0.07 * len(words)))
+            finally:
+                await transport.hangup()
 
         async def silence_watchdog():
             # Networks with silence suppression (DTX) -- and SIPp -- send no packets while
@@ -300,12 +319,22 @@ class CallEngine:
                 await asyncio.sleep(0.05)
                 if heard_speech and spoken_ms >= 80 and time.monotonic() - last_audio >= 0.3:
                     end_turn()
+                now = time.monotonic()
+                if closing[0] or started[0] is None:
+                    continue
+                if self.max_call_s and now - started[0] >= self.max_call_s and not jobs:
+                    task = asyncio.create_task(wrap_up(MAX_CALL_SPEECH, 'max_call'))
+                    jobs.add(task); task.add_done_callback(jobs.discard)
+                elif self.idle_hangup_s and not heard_speech and not jobs and now - activity[0] >= self.idle_hangup_s:
+                    task = asyncio.create_task(wrap_up(IDLE_SPEECH, 'idle'))
+                    jobs.add(task); task.add_done_callback(jobs.discard)
 
         watchdog = asyncio.create_task(silence_watchdog())
         try:
             async for event in transport.events():
                 if isinstance(event, CallStart):
                     call_id, caller_id = event.call_id, event.caller_id
+                    started[0] = activity[0] = time.monotonic()
                     if self.review_dir and review_key(caller_id) in self.review_callers:
                         review = ReviewLog(self.review_dir, call_id)
                         review.write(type="start", call=call_id)
