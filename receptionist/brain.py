@@ -105,6 +105,27 @@ WANTS_BOOKING = re.compile(r"\b(book|appointment|schedul\w*|reserve|set up a (ca
                            r"sounds good|works for me|is fine|that works|lessons?|sessions?)\b")
 CALL_TIME = re.compile(r"\b(mornings?|afternoons?|evenings?|nights?|weekdays?|weekends?|anytime|any time|"
                        r"after \w+|before \w+|between \w+|early|late|lunch ?time|best (time )?is|today)\b")
+ON_TOPIC = re.compile(r"\b(website|site|web|app|price|cost|how much|book\w*|appointment|business|shop|store|salon|"
+                      r"barber\w*|restaurant|alex|receptionist|phone|calls?|message|help|need|want)\b")
+ROUND12 = [
+    (re.compile(r"\b(galler(y|ies)|client photos|photo albums?)\b"),
+     "Yes, Alex can build private client galleries, password protected, so each client only sees their own photos. "
+     "He can go over storage and features with you on a free call."),
+    (re.compile(r"\bstorage\b|\b(thousands|lots) of (high[- ]res |hi[- ]res )?(photos|pictures|images|videos)\b"),
+     "Alex sizes the storage for how many photos you have, so it fits your business. He can give you the details on a free call."),
+    (re.compile(r"\b(take|collect|charge|get) (a |the )?deposits?\b.*\b(cash ?app|square|stripe|venmo|zelle|paypal|online|card|clients?|customers?|they)\b|"
+                r"\b(cash ?app|square|stripe|venmo|zelle|paypal)\b.*\bdeposits?\b|\bno[- ]show"),
+     "Yes, Alex can set your site up to take deposits and payments online, with something like Square or Stripe, "
+     "so clients pay when they book and no-shows drop."),
+    (re.compile(r"\b(can|could|would|will) (the )?(robot|she|it|you|receptionist)\b.*\b(ask|get|take)\b.*\b(car|problem|address|details|job|info\w*|location)\b"),
+     "Yes, a receptionist like me can ask each caller the questions you choose, like the car, the problem, and the address, "
+     "and send it all to you. Alex sets up the questions with you on a free call."),
+    (re.compile(r"\b(in stock|inventory|have (it|that) in stock|stock (check|lookup)|what'?s in stock)\b"),
+     "Yes, Alex can connect me to your product list, so I can tell callers what's in stock. He sets that up with you on a free call."),
+    (re.compile(r"\b(evenings?|tonight|after work)\b"),
+     "My calendar has daytime slots, up to five p m. I can note that you'd prefer an evening, and Alex can let you know "
+     "if that works. Would you like me to take that message, or would a daytime time work?"),
+]
 ROUND11 = [
     (re.compile(r"\b(you|somebody|someone|this number) (just )?call(ed)? me\b|\bgot a call from (this|your) number\b|"
                 r"\bwhy (are|did) you (call|calling)\b|\bhow did you get my number\b|\b(take|remove) me off\b|\bstop calling\b|\bdo not call\b"),
@@ -183,7 +204,7 @@ ROUND8 = [
      "Yes, Alex can build a portal, where people log in to see their own information privately. "
      "He can go over how it would work for you on a free call."),
     (re.compile(r"\b(recordings?|records?|data|information|photos?)\b.*\b(stored|kept|saved|access|private|privacy|confidential|safe)\b|"
-                r"\b(confidential\w*|privacy|private)\b"),
+                r"\b(confidential\w*|privacy)\b|\bprivate\b.*\b(calls?|recordings?|data|information|records)\b"),
      "Good question. I run on a small computer in the office, not in the cloud, so calls stay local and private. "
      "I'm not certified for things like HIPAA, so Alex can go over exactly what's protected on a free call."),
 ]
@@ -267,6 +288,7 @@ ES_RECEP = re.compile(r"\b(re[cs]+epci[oó]nista|c[oó]mo funciona|contesta (mi|
 ES_TOOLS = re.compile(r"\b(square|clover|toast|quickbooks|conecta\w*|integra\w*)\b")
 ES_SITE = re.compile(r"\b(p[aá]gina|sitio) (web|de internet)\b|\bpagina web\b")
 ES_HOW = re.compile(r"\bc[oó]mo funciona\b|\bqu[eé] hace\b")
+ES_STOCK = re.compile(r"\b(tengo|hay|tiene|queda)\b.*\b(leche|pan|productos?|art[ií]culos?|mercanc[ií]a)\b|\binventario\b|\ben existencia\b")
 ES_ORDER = re.compile(r"\b(pedidos?|ordenar|[oó]rdenes|delivery|para llevar)\b")
 ES_PRICE = re.compile(r"\b(cu[aá]nto|precio|cuesta|cobran|costo)\b")
 ES_DEPOSIT = re.compile(r"\b(dep[oó]sit\w*|pagos|plazos|adelanto|anticipo)\b")
@@ -292,6 +314,8 @@ ES = {
              "Alex le puede ayudar con la suya en una llamada gratis. ¿Qué tipo de negocio tiene?"),
     "how": ("Funciona así: yo contesto las llamadas de su negocio con su información, contesto preguntas, tomo mensajes "
             "y agendo citas, y a usted le llega todo. Alex lo configura con usted."),
+    "stock": ("Alex puede conectarme con su lista de productos, para que yo le diga a sus clientes si hay o no hay. "
+              "Eso lo configura él con usted en una llamada gratis."),
     "tools": "Alex puede conectar la mayoría de los sistemas, como Square, y le confirma el suyo en la llamada gratis.",
     "order": "Sí, Alex puede hacer pedidos en línea, para que sus clientes ordenen y paguen desde su página.",
     "repeat_number": "Disculpe, creo que me faltó un número. ¿Me lo repite despacio, por favor?",
@@ -324,8 +348,8 @@ SPANISH_GARBLE = re.compile(r"\b(h?ola|mira|ne[sc]+[eio]s?[aeiou]?[ct]i?to|pa[gj
                             r"gra[cs]ias|bueno|se[nñ]or[ae]?|por favor|resta?u?rante|tarante|numero|minumo|"
                             r"llamo|milamo|pagar\w*|dep[oó]sito|bizzito|pedido|padido|linya|l[ií]nea|una|para)\b", re.I)
 SPANISH_GREET = re.compile(r"\b(buen[oa]s? (d[ií]as|tardes|noches)|buenas|al[oó]|diga(me)?|qu[eé] tal)\b")
-SPANISH_LEAD = ("Hola, gracias por llamar a LexMakesIt, el negocio de Alex. Con gusto le atiendo en español. "
-                "¿En qué le puedo ayudar?")
+SPANISH_LEAD = ("Hola, gracias por llamar. Habla la recepcionista virtual de LexMakesIt, el negocio de Alex. "
+                "Con gusto le atiendo en español. ¿En qué le puedo ayudar?")
 SPANISH = re.compile(r"\b(spanish|espa[nñ]ol|habla)\b")
 SPANISH_SPEECH = ("I'm sorry, I can only speak English right now. I'll keep it simple, "
                   "and I can take a message for Alex if that's easier.")
@@ -344,7 +368,7 @@ DIGIT_WORDS = {"zero": "0", "oh": "0", "o": "0", "one": "1", "two": "2", "three"
                "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9"}
 TALK_TO_SPEECH = ("Alex isn't available right this second, but I can take a message and have him call you back, "
                   "or book you a free call with him. Which would you prefer?")
-NOT_A_NAME = {"mornings", "morning", "afternoons", "afternoon", "evenings", "evening", "nights", "weekdays", "weekends",
+NOT_A_NAME = {"by", "bye", "girl", "bro", "man", "dude", "mornings", "morning", "afternoons", "afternoon", "evenings", "evening", "nights", "weekdays", "weekends",
               "after", "before", "anytime", "today", "tomorrow", "monday", "tuesday", "wednesday", "thursday", "friday",
               "saturday", "sunday", "best", "fine", "alright", "good", "great", "perdón", "perdon", "disculpe", "oiga", "mire", "bueno", "pues",
               "my", "tell", "him", "her", "let", "from", "ask", "have", "please", "number", "phone", "blah", "you", "nobody", "whatever", "someone", "somebody", "anybody", "anyone", "me", "test",
@@ -387,7 +411,9 @@ def phone_in(text: str) -> tuple[str | None, str]:
 
 
 def collapse_repeats(text: str) -> str:
-    """Phone ASR sometimes loops a sentence ('How much? How much? How much?'): keep one."""
+    """Phone ASR sometimes loops a sentence ('How much? How much? How much?'): keep one.
+    A stutter ('I-I-I w-w-want a w-website') keeps the whole word."""
+    text = re.sub(r"\b(?:(\w{1,3})-)+(\w+)", lambda m: m.group(2) if m.group(2).lower().startswith(m.group(1).lower()[:1]) else m.group(0), text)
     parts = re.split(r"(?<=[.!?])\s+", text.strip())
     out = []
     for x in parts:
@@ -615,6 +641,8 @@ class Brain:
             # Spanish calls answer in Spanish; the English rephrasing below doesn't apply.
             return self._handle(utterance, session_id, caller_id)
         utterance = collapse_repeats(utterance)
+        # "No, wait, a website for my barbershop": a restart, not a no.
+        utterance = re.sub(r"^\s*(no+|nah)\W+(wait|hold on|sorry|i mean)\W+(?=\S+(\s+\S+){2,})", "", utterance, flags=re.I)
         utterance = re.sub(r"\b(book|schedule|set up|get)( me)? (a|an) (demo|demonstration)\b", r"\1 a call", utterance, flags=re.I)
         low = " ".join(re.sub(r"[.!?,]+", " ", utterance.lower()).split())
         in_booking = self._last.get(s) in BOOKING_STEPS or s in self.dialogue._pending or bool(self._calls.get(s) and self._calls[s].offered)
@@ -641,6 +669,8 @@ class Brain:
         self._nowhere[s] = n
         if r.action not in UNPRODUCTIVE and r.action != "filler":
             self._real[s] = True
+        if ON_TOPIC.search(low):
+            self._real[s] = True                 # "w-website for my barbershop": a real caller, just hard to hear
         if n >= 3 and not self._booked.get(s) and not self._msg.get(s) and not self._real.get(s):
             # Three turns in a row going nowhere (nonsense, silence, a broken line): let them go kindly.
             return Reply("Goodbye.", "hangup", speech=NOWHERE_SPEECH)
@@ -867,6 +897,8 @@ class Brain:
             m["want"] = None
             n = f", {first(m['name'])}" if m.get("name") else ""
             return say("saved", "message_taken", name=n)
+        if ES_STOCK.search(low):
+            return say("stock", "knowledge")
         if ES_SPEAKS.search(low):
             return say("speaks", "knowledge")
         if ES_HOW.search(low) and m.get("topic") == "recep":
@@ -944,7 +976,8 @@ class Brain:
         step = flow["step"]
         if step == "booking_name":
             self._msg.pop(s, None)
-            name = self._name_from(text) if len(low.split()) <= 5 else None
+            first_bit = re.split(r"[.,;:!?]", text.strip())[0]
+            name = self._name_from(first_bit) if len(first_bit.split()) <= 4 else None
             if not name:
                 return None                       # they moved on; handle the turn normally
             self._names[s] = name
@@ -1140,7 +1173,7 @@ class Brain:
                 words = "I'm sorry, I can't reach the pharmacy from here. The number is on your pill bottle. Take care of yourself."
             return Reply(words, "wrong_number", speech=words)
         burned = [x for x in ROUND7 if "sorry that happened" in x[1]]
-        for pat, words in burned + ROUND11 + ROUND10[:-1] + POLICY + ROUND10[-1:] + ROUND8 + ROUND7:
+        for pat, words in burned + ROUND12 + ROUND11 + ROUND10[:-1] + POLICY + ROUND10[-1:] + ROUND8 + ROUND7:
             if pat.search(low):
                 if "isn't the pharmacy" in words:
                     self._topic[session_id] = "wrong_number"

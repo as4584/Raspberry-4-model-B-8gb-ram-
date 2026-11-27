@@ -18,7 +18,7 @@ TOPICS = {
     "services": ("service", "do you do", "what do you", "what does", "offer", "what kind", "specialize", "help with",
                  "make it do", "makes it do", "business about", "company about", "about your", "tell me about",
                  "you guys do", "what you do", "help me", "help my", "do for me", "do for my", "help us", "help our", "what is lex", "what's lex"),
-    "location": ("where", "address", "located", "location", "directions", "area", "serve", "work with businesses in", "town", "city", "based",
+    "location": ("where are you", "where is your", "where's your", "where y'all", "where you guys", "where are y", "where is the office", "address", "located", "location", "directions", "area", "serve", "work with businesses in", "town", "city", "based",
                  "part of",
                  "passaic", "pasei", "paterson", "north jersey"),
     "parking": ("parking", "park"),
