@@ -81,7 +81,7 @@ UNPRODUCTIVE = {"repeat", "unknown", "lost", "ask_again", "confirm_again"}
 PRODUCT_Q = re.compile(r"\b(answer|pick up|take|handle) ((my|our|the) )?(phone|phones|calls?)\b(?! (with|from) alex)|"
                        r"\b(receptionist|something|someone|one) like you\b|"
                        r"\b(do|set up|make|build) (this|that|one of these|something like this) for (my|our)\b|"
-                       r"\bcan (it|she) (book|fill|handle|schedule|cancel|take|answer|text)\b|"
+                       r"\b(can|could|would|will|does|do) (it|she|this|that|a receptionist) (\w+ ){0,4}?(book|fill|handle|schedule|cancel|take (calls|messages|orders|appointments|bookings|payments)|answer|text|screen)\w*\b|"
                        r"\b(calls?|phones?) for (my|our) (business|shop|salon|restaurant|office|store|company)\b", re.I)
 HAGGLE = re.compile(r"\b(knock|bring|take) (the price|it|that) down\b|\b(cheaper|discount|lower (the |your )?price|"
                     r"too expensive|for less|best price|deal on)\b|\b(do it|do that|go) for \$?\d{2,}|\bfor (\w+ )?hundred( dollars| bucks)?\b|\bcan you do (\w+ )?(hundred|\d{3})\b", re.I)
@@ -103,6 +103,23 @@ WANTS_BOOKING = re.compile(r"\b(book|appointment|schedul\w*|reserve|set up a (ca
                            r"available|availability|free call|slot|opening|open|free|come in|see alex|talk (to|with) (alex|someone|somebody)|"
                            r"consultation|what (do you have|times|days)|when (are|is|can|could)|let'?s (do|go|set)|go over|"
                            r"sounds good|works for me|is fine|that works|lessons?|sessions?)\b")
+POLICY = [
+    (re.compile(r"\b(money back|refund\w*|get (my|a) refund)\b"),
+     "There's no contract, so you can cancel anytime, and your website stays up until the end of that month. "
+     "We don't offer refunds, which is why the first call is free, so you can be sure before you start."),
+    (re.compile(r"\bwhy\b.*\bdeposit\b|\bdeposit\b.*\bwhy\b|\bwhat'?s the deposit for\b"),
+     "The deposit gets your project started, and the rest is due when it's done. "
+     "On the free call, Alex walks you through exactly what you'll get first."),
+    (re.compile(r"\b(recorded|recording|record (this|the|my) calls?|train(ed|ing)? (the |an |any )?(ai|a i|model)|used to train)\b"),
+     "Calls aren't shared or sent to the cloud, and they're not used to train any outside AI. "
+     "I run on a small computer in the office, so everything stays local."),
+    (re.compile(r"\b(contract|nda|confidentiality agreement|locked in|cancel any ?time|can i cancel|if i cancel|do i own|own (it|the site|the website))\b"),
+     "There's no contract, so you can cancel anytime, and your site stays up until the end of that month. "
+     "You own your domain, and you can buy the code if you want it. Alex can also talk through a confidentiality agreement on the free call."),
+    (re.compile(r"\b(how much|price|pricing|cost|charge|charges|rate)\b.*\b(firm|office|practice|company|business|gym|salon|shop|restaurant)\b"),
+     "Websites start at one thousand dollars, plus ten dollars a month. A receptionist like me is priced for each business, "
+     "based on your size, so it's flexible. Alex can give you an exact number on a free call."),
+]
 ROUND8 = [
     (re.compile(r"\b(pharmacy|prescription|refill|pills?|doctor'?s office|wrong number|is this (the )?(bank|hospital|pizza|cvs|walgreens|rite aid))\b"),
      "Oh, I'm sorry, this isn't the pharmacy. This is LexMakesIt, a small business that builds websites. "
@@ -184,13 +201,13 @@ BURNED = re.compile(r"\b(burned|burnt|ripped off|scammed|vanished|ghosted|took m
 MONEY_WORRY = re.compile(r"\b(can'?t afford|money('?s| is) tight|on a budget|lost (my |all my )?money|fixed income|"
                          r"tight budget|not (a lot of|much) money|social security check|small budget)\b")
 LEGIT = re.compile(r"\b(legit|legitimate|a scam|scam|examples?|portfolio|references|trust you|past work|sites you'?ve (made|built))\b")
-LEGIT_SPEECH = ("Fair question. We keep client work private, so we don't share a portfolio. The best way to see what Alex can do "
-                "is a free call, with no commitment, where he talks through your idea and how he'd build it.")
+LEGIT_SPEECH = ("Fair question. The best way to see what Alex can do is a free call, with no commitment, "
+                "where he talks through your idea and exactly how he'd build it, before you pay anything.")
 SPANISH_WORDS = {"hola", "bueno", "mira", "necesito", "quiero", "página", "pagina", "por", "favor", "gracias", "señora",
                  "habla", "hablar", "español", "espanol", "usted", "tengo", "negocio", "restaurante", "llamar", "número"}
 ES_DIGITS = ["cero", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve"]
 ES_NAME = re.compile(r"\b(?:me llamo|mi nombre es|soy|habla|le habla)\s+([A-ZÁÉÍÓÚÑa-záéíóúñ]+(?:\s+(?!mi\b|y\b|de\b)[A-ZÁÉÍÓÚÑa-záéíóúñ]+)?)", re.I)
-ES_BYE = re.compile(r"^(no,? )?(muchas )?gracias\W*$|\bdios\W*$|\b(adi[oó]s|chao|bye|eso es todo|es todo|nada m[aá]s|"
+ES_BYE = re.compile(r"^(no,? )?(muchas )?gracias\W*$|\bdios\b|\b(adi[oó]s|chao|bye|eso es todo|es todo|nada m[aá]s|"
                     r"hasta luego|cu[ií]d(ate|ese|ense)|dios (le|te|los) bendiga|que le vaya bien|buenas noches)\b")
 ES_SPEAKS = re.compile(r"\b(habla|hablan|hablas|contesta\w*|atiende\w*|funciona)\b.*\bespa[nñ]ol\b|\bespa[nñ]ol\b.*\?")
 ES_RECEP = re.compile(r"\b(recepcionista|c[oó]mo funciona|contesta (mi|el|los) (n[uú]mero|tel[eé]fono)|contestar (el|mi|los) tel[eé]fono|contesta(r)? (las )?llamadas|asistente)\b")
@@ -208,8 +225,10 @@ ES = {
               "¿Le puedo ayudar con algo más?"),
     "price": ("Una página web empieza en mil dólares, y luego son diez dólares al mes para mantenerla. "
               "Alex le puede dar un precio exacto en una llamada gratis."),
-    "deposit": "Para empezar se paga un depósito del cincuenta por ciento, y el resto al terminar. No tenemos planes de pago.",
-    "speaks": "Sí, yo le atiendo en español con mucho gusto, y le paso todo a Alex con los detalles. ¿En qué le puedo ayudar?",
+    "deposit": "Para empezar se paga un depósito del cincuenta por ciento, y el resto al terminar.",
+    "plans": "No tenemos planes de pago. Para empezar se paga un depósito del cincuenta por ciento, y el resto al terminar.",
+    "speaks": ("Sí, yo le atiendo en español con mucho gusto, y le paso todo a Alex con los detalles. "
+               "Si Alex habla español, eso mejor se lo confirma él. ¿En qué le puedo ayudar?"),
     "recep": ("Una recepcionista como yo contesta sus llamadas, en inglés o en español, toma mensajes y agenda citas. "
               "El precio es flexible, según el tamaño de su negocio. Alex se lo explica en una llamada gratis."),
     "recep_price": ("El precio es flexible, según el tamaño de su negocio y cuántas llamadas recibe. "
@@ -265,7 +284,9 @@ DIGIT_WORDS = {"zero": "0", "oh": "0", "o": "0", "one": "1", "two": "2", "three"
                "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9"}
 TALK_TO_SPEECH = ("Alex isn't available right this second, but I can take a message and have him call you back, "
                   "or book you a free call with him. Which would you prefer?")
-NOT_A_NAME = {"fine", "alright", "good", "great", "perdón", "perdon", "disculpe", "oiga", "mire", "bueno", "pues",
+NOT_A_NAME = {"mornings", "morning", "afternoons", "afternoon", "evenings", "evening", "nights", "weekdays", "weekends",
+              "after", "before", "anytime", "today", "tomorrow", "monday", "tuesday", "wednesday", "thursday", "friday",
+              "saturday", "sunday", "best", "fine", "alright", "good", "great", "perdón", "perdon", "disculpe", "oiga", "mire", "bueno", "pues",
               "my", "tell", "him", "her", "let", "from", "ask", "have", "please", "number", "phone", "blah", "you", "nobody", "whatever", "someone", "somebody", "anybody", "anyone", "me", "test",
               "yes", "yeah", "no", "nope", "sure", "okay", "ok", "hello", "hi", "um", "uh", "the", "a", "actually", "wait",
               "si", "sí", "bueno", "mira", "hola", "for", "about", "our", "we", "he", "she", "they", "calling", "here", "speaking",
@@ -783,7 +804,7 @@ class Brain:
         if ES_TOOLS.search(low):
             return say("tools", "knowledge")
         if ES_DEPOSIT.search(low):
-            return say("deposit", "knowledge")
+            return say("plans" if re.search(r"\b(plazos|planes|pagos)\b", low) else "deposit", "knowledge")
         if ES_TIME.search(low):
             return say("time", "knowledge")
         if ES_ORDER.search(low):
@@ -816,6 +837,9 @@ class Brain:
 
     def _lead_name(self, rest: str) -> str | None:
         """A name said next to a number: 'Kim, Bella Rose Boutique, <number>' / '<number>, Walter Brennan'."""
+        m = re.search(r"\b([A-Z][a-z]+(?: [A-Z][a-z]+)?) from\b", rest)
+        if m and m.group(1).split()[0].lower() not in NOT_A_NAME:
+            return m.group(1)
         if SAID_NAME.search(rest):
             got = self._name_from(SAID_NAME.search(rest).group(0))
             if got:
@@ -1031,8 +1055,18 @@ class Brain:
             return Reply(CARD_PAY_SPEECH, "knowledge", speech=CARD_PAY_SPEECH)
         if LEGIT.search(low) and not BOOK_WORDS.search(low):
             return Reply(LEGIT_SPEECH, "knowledge", speech=LEGIT_SPEECH)
-        for pat, words in ROUND8 + ROUND7:
+        if self._topic.get(session_id) == "wrong_number":
+            words = ("This is LexMakesIt. We build websites for small businesses, so I can't help with medicine, I'm sorry. "
+                     "The number for your pharmacy is on your pill bottle, or a family member can help you find it. "
+                     "If it's an emergency, please call nine one one.")
+            if words == self._last_speech.get(session_id):
+                words = "I'm sorry, I can't reach the pharmacy from here. The number is on your pill bottle. Take care of yourself."
+            return Reply(words, "wrong_number", speech=words)
+        burned = [x for x in ROUND7 if "sorry that happened" in x[1]]
+        for pat, words in burned + POLICY + ROUND8 + ROUND7:
             if pat.search(low):
+                if "isn't the pharmacy" in words:
+                    self._topic[session_id] = "wrong_number"
                 return Reply(words, "knowledge", speech=words)
         if re.search(r"\b(what'?s|what is|give me|can i (get|have)) (the|your|his|alex'?s) (phone )?number\b", low):
             contact = (self.profile.get("faq") or {}).get("contact") if self.profile else None

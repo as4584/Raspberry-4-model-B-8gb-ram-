@@ -22,7 +22,7 @@ def test_capability_and_price_questions_never_book(brain, q):
 
 def test_can_i_cancel_is_policy_not_a_booking_code(brain):
     r = talk(brain, "If I sign up, can I cancel anytime, and do I own it?")
-    assert "code" not in said(r[0]) and "cancel" in said(r[0])
+    assert "booking code" not in said(r[0]) and "cancel" in said(r[0])
 
 
 @pytest.mark.parametrize("q,want", [
