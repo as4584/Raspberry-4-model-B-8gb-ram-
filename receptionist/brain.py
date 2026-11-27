@@ -109,6 +109,23 @@ CALL_TIME = re.compile(r"\b(mornings?|afternoons?|evenings?|nights?|weekdays?|we
                        r"after \w+|before \w+|between \w+|early|late|lunch ?time|best (time )?is|today)\b")
 ON_TOPIC = re.compile(r"\b(website|site|web|app|price|cost|how much|book\w*|appointment|business|shop|store|salon|"
                       r"barber\w*|restaurant|alex|receptionist|phone|calls?|message|help|need|want)\b")
+ROUND15 = [
+    (re.compile(r"\bemergenc\w*\b.*\btext\w*\b|\btext\w*\b.*\bemergenc\w*\b"),
+     "Yes. When a caller says it's an emergency, I mark it urgent, and Alex can set it up so it reaches you right away, "
+     "like a text, so you can call them back first."),
+    (re.compile(r"\b(customers?|clients?|patients?)\b (want|wants|need|needs|wanna)?( to)? ?(cancel|reschedule|change)\b"),
+     "Yes, your customers can call me to cancel or move their appointment, and I update the calendar, so you see the change."),
+    (re.compile(r"\bhip+a\w*\b"),
+     "I'm not HIPAA certified. I run on a small computer in the office, not in the cloud, so calls stay local, "
+     "and Alex can go over exactly what's protected on a free call."),
+    (re.compile(r"\b(dentrix|eaglesoft|open ?dental|existing (software|system)|our (software|system)|scheduling software|practice management)\b"),
+     "Alex can connect most tools, and he'll check yours on the free call so you know for sure before you pay anything."),
+    (re.compile(r"\b(gets?|got|says?) (it|something|anything) wrong\b|\bmakes? a mistake\b|\bmess(es)? up\b"),
+     "That's a good question. I only share the facts Alex gives me, and anything I'm not sure about goes to Alex. "
+     "I never give legal or medical advice, and Alex can go over the details with you on a free call."),
+    (re.compile(r"\bwhere (the|my|our) (truck|van|cart|stand) (is|will be|at)\b|\b(truck|van) location\b"),
+     "Yes, Alex can set it up so I tell callers where you are today, from a schedule you keep updated."),
+]
 ROUND14 = [
     (re.compile(r"\b(speak|talk|understand|do|handle)\b.*\b(vietnamese|chinese|mandarin|cantonese|korean|portuguese|french|polish|arabic|hindi|"
                 r"russian|italian|tagalog|creole|haitian|japanese|german|urdu|bengali|gujarati)\b"),
@@ -329,6 +346,7 @@ ES_TOOLS = re.compile(r"\b(square|clover|toast|quickbooks|conecta\w*|integra\w*)
 ES_SITE = re.compile(r"\b(p[aá]gina|sitio) (web|de internet)\b|\bpagina web\b")
 ES_HOW = re.compile(r"\bc[oó]mo funciona\b|\bqu[eé] hace\b")
 ES_STOCK = re.compile(r"\b(tengo|hay|tiene|queda)\b.*\b(leche|pan|productos?|art[ií]culos?|mercanc[ií]a)\b|\binventario\b|\ben existencia\b")
+ES_PHONE_ORDER = re.compile(r"\b(tomar|recibir|apuntar) (los |mis )?pedidos\b.*\b(tel[eé]fono|llamada)\b|\bpedidos por tel[eé]fono\b|\bpuede tomar pedidos\b")
 ES_ORDER = re.compile(r"\b(pedidos?|ordenar|[oó]rdenes|delivery|para llevar)\b")
 ES_PRICE = re.compile(r"\b(cu[aá]nto|precio|cuesta|cobran|costo)\b")
 ES_DEPOSIT = re.compile(r"\b(dep[oó]sit\w*|pagos|plazos|adelanto|anticipo)\b")
@@ -356,6 +374,8 @@ ES = {
             "y agendo citas, y a usted le llega todo. Alex lo configura con usted."),
     "stock": ("Alex puede conectarme con su lista de productos, para que yo le diga a sus clientes si hay o no hay. "
               "Eso lo configura él con usted en una llamada gratis."),
+    "phone_order": ("Sí, Alex puede configurar una recepcionista para tomar pedidos por teléfono, repetir cada pedido "
+                    "y mandárselo a usted. Él lo arma con su menú en una llamada gratis."),
     "tools": "Alex puede conectar la mayoría de los sistemas, como Square, y le confirma el suyo en la llamada gratis.",
     "order": "Sí, Alex puede hacer pedidos en línea, para que sus clientes ordenen y paguen desde su página.",
     "repeat_number": "Disculpe, creo que me faltó un número. ¿Me lo repite despacio, por favor?",
@@ -502,6 +522,7 @@ def collapse_repeats(text: str) -> str:
         return "" if len(tok) >= 2 and tok[-1].lower() == m.group(2)[0].lower() else m.group(0)
     text = re.sub(r"\b([A-Z](?:-?[A-Z]){0,3})\s+(?=(\w+))", _drop, text)
     text = re.sub(r"\b(?:(\w{1,3})-)+(\w+)", lambda m: m.group(2) if m.group(2).lower().startswith(m.group(1).lower()[:1]) else m.group(0), text)
+    text = re.sub(r"\b(\d+)(?:[\s,.]+\1\b)+", r"\1", text)      # "10 10 10 10" -> "10"
     parts = re.split(r"(?<=[.!?])\s+", text.strip())
     out = []
     for x in parts:
@@ -1005,6 +1026,9 @@ class Brain:
             m["want"] = None
             n = f", {first(m['name'])}" if m.get("name") else ""
             return say("saved", "message_taken", name=n)
+        if ES_PHONE_ORDER.search(low):
+            m["topic"] = "recep"
+            return say("phone_order", "knowledge")
         if ES_STOCK.search(low):
             return say("stock", "knowledge")
         if ES_SPEAKS.search(low):
@@ -1303,6 +1327,10 @@ class Brain:
         if not re.search(r"[a-z]{2,}|[0-9]", low) or re.search(r"(\w{2,4})\1{3,}", low):
             return Reply("Sorry, I didn't catch that.", "repeat",
                          speech="Sorry, I didn't catch that. Could you say that again?")
+        if self._lang.get(session_id) == "es" and re.search(r"\b(english|ingl[eé]s)\b", low) and not re.search(r"\bno\b.*\bingl", low):
+            self._lang.pop(session_id, None)          # "English please": switch back
+            words = "Of course, we can continue in English. How can I help you?"
+            return Reply(words, "english", speech=words)
         if self._lang.get(session_id) == "es":
             return self._spanish(utterance, low, session_id, caller_id)
         fix = re.search(r"\b(?:not|isn'?t|wasn'?t)\s+[A-Za-z]+\W+(?:it'?s\s+|i'?m\s+|my name is\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)", utterance)
@@ -1345,7 +1373,7 @@ class Brain:
             return Reply(words, "wrong_number", speech=words)
         burned = [x for x in ROUND7 if "sorry that happened" in x[1]]
         texts = [x for x in ROUND14 if "like a text" in x[1]]
-        for pat, words in burned + [x for x in ROUND14 if x not in texts] + ROUND13 + ROUND12 + texts + ROUND11 + ROUND10[:-1] + POLICY + ROUND10[-1:] + ROUND8 + ROUND7:
+        for pat, words in burned + ROUND15 + [x for x in ROUND14 if x not in texts] + ROUND13 + ROUND12 + texts + ROUND11 + ROUND10[:-1] + POLICY + ROUND10[-1:] + ROUND8 + ROUND7:
             if words == "__PITCH__":
                 words = PITCH_SPEECH
             if pat.search(low):
@@ -1389,7 +1417,7 @@ class Brain:
                 words = f"Okay, it's cancelled. {ANYTHING_ELSE}"
                 return Reply("Your appointment is cancelled.", "cancelled", speech=words)
         m = SAID_NAME.search(text)
-        if m and re.match(r"^(?:my name is|my name'?s|this is)", m.group(0), re.I) and session_id not in self._names:
+        if m and re.match(r"^(?:my name is|my name'?s|name'?s|this is)", m.group(0), re.I) and session_id not in self._names:
             got = self._name_from(m.group(0))
             if got:
                 self._names[session_id] = got     # "this is Jordan" said up front: don't ask again later
@@ -1471,6 +1499,12 @@ class Brain:
                 body = " ".join(parts[:2]) if len(parts) > 2 else (parts[0] if len(parts) > 1 else body)
                 return Reply(body, "repeat_back", speech=f"Sure. {body}")
             return Reply(body, "repeat_back", speech=f"Of course. {body}")
+        about_spanish = SPANISH.search(low) and re.search(r"\b(can|does|do|will|would|is) (it|she|you|the receptionist|your receptionist)\b.*\bspanish\b|\bspanish too\b", low) \
+            and len(SPANISH_WORDS & set(low.split())) < 2
+        if about_spanish:
+            words = ("Yes, I speak English and Spanish, so your Spanish-speaking customers can talk to me in Spanish. "
+                     "What else would you like to know?")
+            return Reply(words, "knowledge", speech=words)
         if SPANISH.search(low) or len(SPANISH_WORDS & set(low.split())) >= 2 or SPANISH_GREET.search(low) \
                 or len(set(m.group(0).lower() for m in SPANISH_GARBLE.finditer(low))) >= 3:
             # Spanish speakers are a big part of the customers: greet in Spanish and get a callback.
@@ -1595,6 +1629,7 @@ class Brain:
         if AVAIL_Q.search(low):                   # "when are you free?" is a scheduling question
             intent, conf = "availability", max(conf, 0.9)
         elif TALK_TO.search(low) and not IDENTITY_Q.search(low) and not re.search(r"\b(book|schedule|set up)\b", low) \
+                and not re.search(r"\b(monday|tuesday|wednesday|thursday|friday|tomorrow|today)\b.*\b(at|around)\b|\b\d{1,2} ?(a\.? ?m|p\.? ?m)\b", low) \
                 and not re.search(r"\b(am i|are you|is this)\b.*\b(human|person|real|bot|robot|ai)\b", low):
             intent, conf = "human", max(conf, 0.9)
         if intent in CUES and not CUES[intent].search(low):
