@@ -40,7 +40,7 @@ CUES = {"injection": re.compile(r"\b(ignore|pretend|override|admin|system prompt
         "cancel": re.compile(r"\bcancel")}
 BOOK_WORDS = re.compile(r"\b(book|appointment|schedule|reserve|come in|slot|opening|availability|available)\b")
 SMALL_TALK = re.compile(r"^(hi|hello|hey|good (morning|afternoon|evening))?\W*(there\W*)?(how are you|how's it going|how are things)|^(hi|hello|hey)( there)?$")
-GOODBYE = re.compile(r"\b(that'?s everything|that'?s it for now|nothing else|i'?m all set|talk (to you )?soon|take care|see ya|see you (later|soon)|bye|goodbye|thanks,? by|thank you,? by|that's all|that is all|that'll be all|have a (good|nice|great) day|bye bye|god bless|(i )?(gotta|got to|have to|need to) (go|run|hop off|jump)|gotta run|i'?ll call (you )?back|i'?ll try (you )?(again )?later)\b")
+GOODBYE = re.compile(r"^(yeah |yep |no |nope |ok(ay)? |um |uh )*that'?s it( for me)?( thanks?( you)?| thank you)?$|\b(that'?s everything|that'?s it for now|nothing else|i'?m all set|talk (to you )?soon|take care|see ya|see you (later|soon)|bye|goodbye|thanks,? by|thank you,? by|that's all|that is all|that'll be all|have a (good|nice|great) day|bye bye|god bless|(i )?(gotta|got to|have to|need to) (go|run|hop off|jump)|gotta run|i'?ll call (you )?back|i'?ll try (you )?(again )?later)\b")
 
 
 def closing(low: str) -> bool:
@@ -83,13 +83,21 @@ PRODUCT_Q = re.compile(r"\b(answer|pick up|take|handle) ((my|our|the) )?(phone|p
                        r"\bcan (it|she) (book|fill|handle|schedule|cancel|take|answer|text)\b|"
                        r"\b(calls?|phones?) for (my|our) (business|shop|salon|restaurant|office|store|company)\b", re.I)
 HAGGLE = re.compile(r"\b(knock|bring|take) (the price|it|that) down\b|\b(cheaper|discount|lower (the |your )?price|"
-                    r"too expensive|for less|best price|deal on)\b|\bcan you do (\w+ )?(hundred|\d{3})\b", re.I)
+                    r"too expensive|for less|best price|deal on)\b|\b(do it|do that|go) for \$?\d{2,}|\bcan you do (\w+ )?(hundred|\d{3})\b", re.I)
 HAGGLE_SPEECH = ("I understand, and the price matters. Websites start at one thousand dollars, and that includes building it right "
                  "and keeping it running. On a free call, Alex can look at what you really need and keep it within your budget.")
 SOLO_Q = re.compile(r"\b(just (alex|him|one (guy|person|man))|one (guy|man) (show|operation)|hit by a bus|"
                     r"how (big|many people))\b", re.I)
 SOLO_SPEECH = ("LexMakesIt is Alex's business, so you work with him directly, the person who actually builds it. "
                "Your domain is always yours, and you can buy the code if you ever want it.")
+CARD_PAY = re.compile(r"\b(customers?|clients?|people|they)\b.*\b(pay|paying)\b.*\b(card|cards|visa|mastercard|online|apple pay)\b|"
+                      r"\b(accept|take) (credit )?cards?\b|\bvisa\b|\bmastercard\b", re.I)
+CARD_PAY_SPEECH = ("Yes, Alex can set up your website so customers pay by card online, with Visa, Mastercard and the rest. "
+                   "He can go over the options on a free call.")
+RECEPTIONIST_PRICE = ("Any business can get a receptionist like me, and the price is flexible, based on your size and how many "
+                      "calls you get. Great service, at a great deal. I can book you a free call with Alex to set it up.")
+RECEPTIONIST_SETUP = ("Alex sets it up for you, with your business details, hours and questions, and he'll give you a "
+                      "timeline on the free call. You don't need to do anything technical.")
 PITCH_SPEECH = ("You're actually talking to one right now! A receptionist like me can answer your calls any time, "
                 "answer questions about your business, book appointments, take messages, and hang up on spam calls. "
                 "Any business can get one, and the price is flexible based on your size. "
@@ -147,7 +155,7 @@ DIGIT_WORDS = {"zero": "0", "oh": "0", "o": "0", "one": "1", "two": "2", "three"
                "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9"}
 TALK_TO_SPEECH = ("Alex isn't available right this second, but I can take a message and have him call you back, "
                   "or book you a free call with him. Which would you prefer?")
-NOT_A_NAME = {"blah", "you", "nobody", "whatever", "someone", "somebody", "anybody", "anyone", "me", "test",
+NOT_A_NAME = {"my", "number", "phone", "blah", "you", "nobody", "whatever", "someone", "somebody", "anybody", "anyone", "me", "test",
               "yes", "yeah", "no", "nope", "sure", "okay", "ok", "hello", "hi", "um", "uh", "the", "a", "actually", "wait",
               "si", "sí", "bueno", "mira", "hola", "for", "about", "our", "we", "he", "she", "they", "calling", "here", "speaking",
               "can", "could", "would", "will", "do", "does", "did", "how", "what", "when", "where", "why", "who", "is", "are",
@@ -174,7 +182,7 @@ _SELF_FIX = re.compile(rf"\b{DAYTIME}\W+(?:(?:no|nope|wait|sorry|actually|i mean
 _NOT_THAT = re.compile(rf"\bnot (?:at |on )?{DAYTIME}\W*", re.I)
 
 
-NUM_RUN = re.compile(r"(?:\b(?:\d+|zero|oh|one|two|three|four|five|six|seven|eight|nine)\b[\s,.-]*){3,}", re.I)
+NUM_RUN = re.compile(r"(?:\b(?:\d+|zero|oh|one|two|three|four|five|six|seven|eight|nine)\b[\s,.-]*){2,}", re.I)
 
 
 def phone_in(text: str) -> tuple[str | None, str]:
@@ -289,7 +297,9 @@ class Brain:
         self._moving: dict[str, bool] = {}        # caller asked to move this call's booking
         self._utter: dict[str, str] = {}
         self._callbacks: dict[str, str] = {}
-        self._nowhere: dict[str, int] = {}         # turns in a row that went nowhere
+        self._nowhere: dict[str, int] = {}
+        self._topic: dict[str, str] = {}           # what the call is about ("receptionist" after the pitch)
+        self._real: dict[str, bool] = {}           # the caller has said something real this call         # turns in a row that went nowhere
         self._given: dict[str, dict[str, str]] = {}   # answer text -> the question it first answered
         self._last_msg: dict[str, int] = {}      # number given for a callback (read back on request)          # the caller's previous words (a repeat vs a new question)
         import random as _random
@@ -388,9 +398,16 @@ class Brain:
             self.dialogue._pending.pop(s, None)
             return Reply("Goodbye.", "hangup", speech=SPAM_SPEECH)
         r = self._handle(utterance, session_id, caller_id)
+        if r.action in ("offer_slots", "confirm_required") and re.match(r"^(is|does|do|can|could|will|would) (it|this|that|you|your|she)\b", low) \
+                and not BOOK_WORDS.search(low) and not any(vars(parse_when(utterance, self.clock())).values()):
+            # "Is it HIPAA compliant?" isn't a booking request.
+            hit = self.knowledge.best(utterance) if self.knowledge is not None else None
+            r = Reply(hit[1], "knowledge", speech=hit[1]) if hit else Reply(UNKNOWN_SPEECH, "unknown", speech=UNKNOWN_SPEECH)
         n = self._nowhere.get(s, 0) + 1 if r.action in UNPRODUCTIVE else (self._nowhere.get(s, 0) if r.action == "filler" else 0)
         self._nowhere[s] = n
-        if n >= 3 and not self._booked.get(s) and not self._msg.get(s):
+        if r.action not in UNPRODUCTIVE and r.action != "filler":
+            self._real[s] = True
+        if n >= 3 and not self._booked.get(s) and not self._msg.get(s) and not self._real.get(s):
             # Three turns in a row going nowhere (nonsense, silence, a broken line): let them go kindly.
             return Reply("Goodbye.", "hangup", speech=NOWHERE_SPEECH)
         # Mid-booking, a SHORT reply we can't place is almost always a misheard answer ("Ten." -> "Pen"):
@@ -549,6 +566,9 @@ class Brain:
                     words = f"Thanks, I've got {spoken_number(num)}. And what's your name?"
                     return Reply(words, "ask_name", speech=words)
                 flow["name"] = self._names[s] = name
+                said_more = [c.strip() for c in re.split(r"[,.;]+", rest) if len(c.split()) >= 4]
+                if said_more and not flow.get("body"):
+                    flow["body"] = re.sub(r"^(and |please |can you )*(tell|let) (him|alex) (know )?(that )?", "", said_more[-1], flags=re.I)
                 if flow.get("body"):
                     return self._save_message(flow, s, caller_id, spoken_number(num))
                 flow["step"] = "body"
@@ -700,11 +720,19 @@ class Brain:
             r = self._message_step(flow, text, low, session_id, caller_id)
             if r is not None:
                 return r
+        about_me = self._topic.get(session_id) == "receptionist" or "receptionist" in low
+        if about_me and re.search(r"\b(how much|price|cost|charge|pricing|per month|a month)\b", low) and not HAGGLE.search(low):
+            return Reply(RECEPTIONIST_PRICE, "faq", speech=RECEPTIONIST_PRICE)
+        if about_me and re.search(r"\b(how (fast|quick|long)|set ?up|get started|up and running)\b", low):
+            return Reply(RECEPTIONIST_SETUP, "knowledge", speech=RECEPTIONIST_SETUP)
+        if CARD_PAY.search(low):
+            return Reply(CARD_PAY_SPEECH, "knowledge", speech=CARD_PAY_SPEECH)
         if HAGGLE.search(low):
             return Reply(HAGGLE_SPEECH, "knowledge", speech=HAGGLE_SPEECH)
         if SOLO_Q.search(low):
             return Reply(SOLO_SPEECH, "knowledge", speech=SOLO_SPEECH)
         if PRODUCT_Q.search(low) and not self._booked.get(session_id):
+            self._topic[session_id] = "receptionist"
             self._calls[session_id] = _Call()
             self.dialogue._pending.pop(session_id, None)
             return Reply(PITCH_SPEECH, "pitch", speech=PITCH_SPEECH)
