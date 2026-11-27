@@ -37,3 +37,8 @@ def test_spanish_booking_confirms_and_books(brain):
 def test_spanish_pick_from_offered(brain):
     r = talk(brain, "Hola, buenos días", "Quiero una cita el jueves por la mañana", "A las diez")
     assert r[2].action in ("confirm_required", "booked")
+
+
+def test_spanish_garble_while_booking_isnt_a_name(brain):
+    r = talk(brain, "Hola, buenos días", "Quiero una cita el jueves por la mañana", "Alofties")
+    assert "alofties" not in said(r[2]) and "hora" in said(r[2])

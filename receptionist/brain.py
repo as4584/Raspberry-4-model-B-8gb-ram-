@@ -930,7 +930,14 @@ class Brain:
             name = None                               # "soy jardinero": a trade, not a name
         if name and name.split()[0].lower() in NOT_A_NAME:
             name = None
-        if not name and not num and m.get("want") in ("name", "details"):
+        if m.get("booking") and not num and not got:
+            name = None                               # mid-booking, an unclear word is a misheard time, not a name
+            if len(low.split()) <= 3 and not ES_BYE.search(low) and not ES_YES.match(low) \
+                    and not re.search(r"\ba la?s? \w+|\d|\b(lunes|martes|mi[eé]rcoles|jueves|viernes|mañana|hoy|nueve|diez|once|doce|una|dos|tres|cuatro)\b", low):
+                words = "Perdón, no le escuché bien. ¿A qué hora le queda mejor?"
+                m["last"] = words
+                return Reply(words, "ask_again", speech=words)
+        elif not name and not num and m.get("want") in ("name", "details"):
             name = self._lead_name(text)                # "Carmen Rosario, Panadería La Dominicana"
             if name and name.split()[0].lower() in NOT_A_NAME:
                 name = None
