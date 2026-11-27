@@ -137,12 +137,20 @@ DISTRESS = re.compile(r"\b(drowning|overwhelmed|stressed|stressful|struggling|bu
                       r"took my money|lost (my |all my )?money|sales are (way |really )?down|can'?t afford|frustrat\w*|upset|worried|"
                       r"scared|nervous|don'?t know where to start|hard time|tough time|rough time|losing customers)\b")
 BURNED = re.compile(r"\b(burned|burnt|ripped off|scammed|vanished|ghosted|took my money|took \w+ (thousand|hundred) dollars)\b")
-MONEY_WORRY = re.compile(r"\b(can'?t afford|money('?s| is) tight|on a budget|lost (my |all my )?money)\b")
+MONEY_WORRY = re.compile(r"\b(can'?t afford|money('?s| is) tight|on a budget|lost (my |all my )?money|fixed income|"
+                         r"tight budget|not (a lot of|much) money|social security check|small budget)\b")
+LEGIT = re.compile(r"\b(legit|legitimate|a scam|scam|examples?|portfolio|references|trust you|past work|sites you'?ve (made|built))\b")
+LEGIT_SPEECH = ("Fair question. We keep client work private, so we don't share a portfolio. The best way to see what Alex can do "
+                "is a free call, with no commitment, where he talks through your idea and how he'd build it.")
+SPANISH_WORDS = {"hola", "bueno", "mira", "necesito", "quiero", "página", "pagina", "por", "favor", "gracias", "señora",
+                 "habla", "hablar", "español", "espanol", "usted", "tengo", "negocio", "restaurante", "llamar", "número"}
+SPANISH_LEAD = ("Hola, gracias por llamar. Con gusto le ayudo. Alex le puede llamar. "
+                "¿Me dice su nombre y su número de teléfono, por favor?")
 SPANISH = re.compile(r"\b(spanish|espa[nñ]ol|habla)\b")
 SPANISH_SPEECH = ("I'm sorry, I can only speak English right now. I'll keep it simple, "
                   "and I can take a message for Alex if that's easier.")
 WEATHER = re.compile(r"\b(cold|hot|freezing|rain\w*|snow\w*|weather|humid|chilly)\b.*\b(today|out|outside|isn'?t it|huh)\b")
-REPEAT_ASK = re.compile(r"\b(what was that|say that again|repeat that|come again|pardon|one more time|again,? slowly|"
+REPEAT_ASK = re.compile(r"\b(slower|more slowly|slow down|what was that|say that again|repeat that|come again|pardon|one more time|again,? slowly|"
                         r"didn'?t catch that|what did you say|could you repeat)\b")
 # "Did you cancel it?" / "is it still booked?" is a question, never a cancel.
 STATUS_Q = re.compile(r"\b(did you|was it|is it|has it been|have you) (cancel|cancelled|canceled)\b|\bstill (there|booked|on|good|scheduled|happening)\b")
@@ -727,7 +735,9 @@ class Brain:
             return Reply(RECEPTIONIST_SETUP, "knowledge", speech=RECEPTIONIST_SETUP)
         if CARD_PAY.search(low):
             return Reply(CARD_PAY_SPEECH, "knowledge", speech=CARD_PAY_SPEECH)
-        if HAGGLE.search(low):
+        if LEGIT.search(low) and not BOOK_WORDS.search(low):
+            return Reply(LEGIT_SPEECH, "knowledge", speech=LEGIT_SPEECH)
+        if HAGGLE.search(low) or (MONEY_WORRY.search(low) and re.search(r"\b(how much|cost|price|afford|be)\b", low)):
             return Reply(HAGGLE_SPEECH, "knowledge", speech=HAGGLE_SPEECH)
         if SOLO_Q.search(low):
             return Reply(SOLO_SPEECH, "knowledge", speech=SOLO_SPEECH)
@@ -823,9 +833,19 @@ class Brain:
             first = split_first(body)
             if first in OPENERS and first != body:
                 body = body[len(first):].strip()
+            if re.search(r"\bslow", low):
+                # "Slower, please": the same thing, shorter and simpler.
+                parts = re.split(r"(?<=[.!?])\s+", body)
+                body = " ".join(parts[:2]) if len(parts) > 2 else (parts[0] if len(parts) > 1 else body)
+                return Reply(body, "repeat_back", speech=f"Sure. {body}")
             return Reply(body, "repeat_back", speech=f"Of course. {body}")
-        if SPANISH.search(low):
-            return Reply(SPANISH_SPEECH, "spanish", speech=SPANISH_SPEECH)
+        if SPANISH.search(low) or len(SPANISH_WORDS & set(low.split())) >= 2:
+            # Spanish speakers are a big part of the customers: greet in Spanish and get a callback.
+            self._msg[session_id] = {"step": "name", "body": "Spanish-speaking caller: " + text, "name_tries": 1}
+            words = SPANISH_LEAD if len(SPANISH_WORDS & set(low.split())) >= 2 else (
+                "I speak English best right now, but I'm happy to help. Hablo un poco de español: "
+                "Alex le puede llamar. ¿Me dice su nombre y su número, por favor?")
+            return Reply(words, "spanish", speech=words)
         if WEATHER.search(low) and not BOOK_WORDS.search(low):
             return Reply("I hear you! What can I help you with today?", "small_talk",
                          speech="Oh, I hear you! What can I help you with today?")
