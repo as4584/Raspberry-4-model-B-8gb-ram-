@@ -323,6 +323,7 @@ def spoken_number_es(digits: str) -> str:
 SPANISH_GARBLE = re.compile(r"\b(h?ola|mira|ne[sc]+[eio]s?[aeiou]?[ct]i?to|pa[gjh]in[ao]|[ck]u?[ae]?nto|[ck]ust?a|quier?o|quiro|"
                             r"gra[cs]ias|bueno|se[nñ]or[ae]?|por favor|resta?u?rante|tarante|numero|minumo|"
                             r"llamo|milamo|pagar\w*|dep[oó]sito|bizzito|pedido|padido|linya|l[ií]nea|una|para)\b", re.I)
+SPANISH_GREET = re.compile(r"\b(buen[oa]s? (d[ií]as|tardes|noches)|buenas|al[oó]|diga(me)?|qu[eé] tal)\b")
 SPANISH_LEAD = ("Hola, gracias por llamar a LexMakesIt, el negocio de Alex. Con gusto le atiendo en español. "
                 "¿En qué le puedo ayudar?")
 SPANISH = re.compile(r"\b(spanish|espa[nñ]ol|habla)\b")
@@ -1281,19 +1282,26 @@ class Brain:
                 body = " ".join(parts[:2]) if len(parts) > 2 else (parts[0] if len(parts) > 1 else body)
                 return Reply(body, "repeat_back", speech=f"Sure. {body}")
             return Reply(body, "repeat_back", speech=f"Of course. {body}")
-        if SPANISH.search(low) or len(SPANISH_WORDS & set(low.split())) >= 2 \
+        if SPANISH.search(low) or len(SPANISH_WORDS & set(low.split())) >= 2 or SPANISH_GREET.search(low) \
                 or len(set(m.group(0).lower() for m in SPANISH_GARBLE.finditer(low))) >= 3:
             # Spanish speakers are a big part of the customers: greet in Spanish and get a callback.
             self._msg.pop(session_id, None)
             self._lang[session_id] = "es"
             self._es[session_id] = {"first": text, "want": "details",
                                     "name": self._names.get(session_id), "callback": self._callbacks.get(session_id)}
+            asked = len(low.split()) >= 5 and (ES_SITE.search(low) or ES_PRICE.search(low) or ES_RECEP.search(low)
+                                               or ES_DEPOSIT.search(low) or ES_TIME.search(low) or ES_ORDER.search(low))
+            if not self._last.get(session_id) and asked:
+                # "Tengo un negocio de limpieza y quiero una página web": greet and answer in one go.
+                r = self._spanish(utterance, low, session_id, caller_id)
+                words = "Hola, con gusto le atiendo en español. " + r.speech
+                return Reply(words, "spanish", speech=words)
             if self._last.get(session_id) and re.search(r"[?¿]|\b(puede|habla|cuánto|cuanto)\b", low):
                 # Switched mid-call ("mira, mejor en español, ...?"): keep going and answer.
                 r = self._spanish(utterance, low, session_id, caller_id)
                 words = "Claro, seguimos en español. " + r.speech
                 return Reply(words, "spanish", speech=words)
-            words = SPANISH_LEAD if len(SPANISH_WORDS & set(low.split())) >= 2 else (
+            words = SPANISH_LEAD if len(SPANISH_WORDS & set(low.split())) >= 2 or SPANISH_GREET.search(low) else (
                 "I speak English best right now, but I'm happy to help. Hablo un poco de español: "
                 "Alex le puede llamar. ¿Me dice su nombre y su número, por favor?")
             return Reply(words, "spanish", speech=words)
