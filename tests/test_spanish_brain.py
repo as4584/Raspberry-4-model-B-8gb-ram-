@@ -51,3 +51,8 @@ def test_buenos_dias_alone_is_spanish(brain):
 def test_switch_turn_answers_the_request_too(brain):
     r = talk(brain, "Tengo un negocio de limpieza y quiero una página web")
     assert r[0].action == "spanish" and "mil dólares" in said(r[0])
+
+
+def test_misspelled_receptionist(brain):
+    r = talk(brain, "Hola, buenos días", "¿Cuánto cuesta la resepciónista?")
+    assert "flexible" in said(r[1]) or "tamaño" in said(r[1])

@@ -263,7 +263,7 @@ ES_NAME = re.compile(r"\b(?:me llamo|mi nombre es|soy|habla|le habla)\s+([A-ZÁ�
 ES_BYE = re.compile(r"^(no,? )?(muchas )?gracias\W*$|\bdios\b|\b(adi[oó]s|chao|bye|eso es todo|es todo|nada m[aá]s|"
                     r"hasta luego|cu[ií]d(ate|ese|ense)|dios (le|te|los) bendiga|que le vaya bien|buenas noches)\b")
 ES_SPEAKS = re.compile(r"\b(habla|hablan|hablas|contesta\w*|atiende\w*|funciona)\b.*\bespa[nñ]ol\b|\bespa[nñ]ol\b.*\?")
-ES_RECEP = re.compile(r"\b(recepcionista|c[oó]mo funciona|contesta (mi|el|los) (n[uú]mero|tel[eé]fono)|contestar (el|mi|los) tel[eé]fono|contesta(r)? (las )?llamadas|asistente)\b")
+ES_RECEP = re.compile(r"\b(re[cs]+epci[oó]nista|c[oó]mo funciona|contesta (mi|el|los) (n[uú]mero|tel[eé]fono)|contestar (el|mi|los) tel[eé]fono|contesta(r)? (las )?llamadas|asistente)\b")
 ES_TOOLS = re.compile(r"\b(square|clover|toast|quickbooks|conecta\w*|integra\w*)\b")
 ES_SITE = re.compile(r"\b(p[aá]gina|sitio) (web|de internet)\b|\bpagina web\b")
 ES_HOW = re.compile(r"\bc[oó]mo funciona\b|\bqu[eé] hace\b")
