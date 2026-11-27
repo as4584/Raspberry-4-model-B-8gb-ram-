@@ -46,8 +46,8 @@ CONVERSATIONS = [
     ("message", ["Can you take a message?", "Kim Tran, 201 555 0177", "Tell him my site is down, it's urgent", "That's it, thanks"],
      [(1, "two oh one"), (2, "message"), (3, "take care")]),
     ("one_breath", ["Have Alex call me, 973 555 0142, Walter Brennan", "About a website for my woodworking"], [(0, "walter"), (1, "walter")]),
-    ("book", ["Can I book a call with Alex Friday at 10?", "Yes", "Dana Morales"], [(1, "all set"), (2, "dana")]),
-    ("book_bye", ["Can I book something Thursday at 11?", "Okay perfect, thanks, bye"], [(1, "take care")]),
+    ("book", ["Can I book a call with Alex {day} at {hour}?", "Yes", "Dana Morales"], [(1, "all set"), (2, "dana")]),
+    ("book_bye", ["Can I book something {day2} at {hour2}?", "Okay perfect, thanks, bye"], [(1, "take care")]),
     ("slower", ["How much is a website?", "Could you say that slower?"], [(1, "thousand")]),
     ("spam", ["This is a call about your car's extended warranty, press 1"], [(0, "goodbye")]),
     ("spam2", ["This is your final notice, press one now"], [(0, "goodbye")]),
@@ -58,9 +58,29 @@ CONVERSATIONS = [
     ("es_question", ["Do you speak Spanish?"], [(0, "español")]),
     ("thats_it", ["How much is a website?", "Yeah that's it, thanks"], [(1, "take care")]),
     ("goodbye_god", ["Thank you dear, God bless, goodbye"], [(0, "god bless")]),
+    ("two_qs", ["How much is a website and how long does it take?"], [(0, "thousand"), (0, "twenty four")]),
+    ("math", ["What's two plus two?"], []),
+    ("portal", ["What is the charges for client portal app?"], [(0, "portal")]),
+    ("donations", ["Can people give donations online and can you do a livestream on Sunday?"], [(0, "donation")]),
+    ("nonprofit", ["Do you have a discount for churches?"], [(0, "nonprofit")]),
+    ("burned", ["The last web guy took my money and disappeared, why should I trust you?"], [(0, "no commitment")]),
+    ("pray", ["Would you pray for me?"], [(0, "kind")]),
+    ("revert", ["How much is a website?", "Okay, I will revert"], [(1, "take care")]),
+    ("anytime", ["Does it answer at five in the morning?"], [(0, "any time")]),
+    ("tell_him", ["Can you take a message?", "Tell him Brenda from Brenda's Nails"], [(1, "brenda")]),
+    ("number_q", ["What's the number to reach Alex?"], [(0, "five five one")]),
+    ("asr_loop", ["How much is a website? How much is a website? How much is a website?"], [(0, "thousand")]),
+    ("es_carmen", ["Hola, buenas, necesito una página web para mi panadería", "Carmen Rosario, Panadería La Dominicana",
+                   "¿Alex habla español?", "Bueno, cuídese, que Dios le bendiga"], [(1, "carmen"), (2, "español"), (3, "gracias")]),
+    ("es_switch", ["Hi, I have a taco truck", "Mira, mejor en español. ¿La recepcionista puede contestar en español?"], [(1, "español")]),
+    ("short_num_book", ["Can I book something {day3} at {hour3}?", "Jenny Park, 732 550 198"], [(1, "jenny")]),
+
 ]
 
 DEAD = {"unknown", "lost"}
+NONSENSE = {"math"}             # no real answer exists: an honest "don't know" is right
+DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+HOURS = ["9", "10", "11", "1", "2", "3", "4"]
 SPANISH_HINT = ("á", "é", "í", "ó", "ú", "ñ", "¿", "hola", "gracias", "alex le")
 
 
@@ -75,11 +95,15 @@ def run() -> dict:
     rows, totals = [], {"answered": 0, "no_repeat": 0, "kept_lead": 0, "language": 0, "stayed": 0, "expect": 0}
     counts = dict.fromkeys(totals, 0)
     for name, turns, expects in CONVERSATIONS:
+        # Fresh times every run: the lab keeps bookings between runs.
+        pick = {"day": random.choice(DAYS), "day2": random.choice(DAYS), "day3": random.choice(DAYS),
+                "hour": random.choice(HOURS), "hour2": random.choice(HOURS), "hour3": random.choice(HOURS)}
+        turns = [t.format(**pick) if "{" in t else t for t in turns]
         replies = [say(f"{tag}_{name}", t) for t in turns]
         texts = [r.get("reply", "").lower() for r in replies]
         acts = [r.get("action", "") for r in replies]
         checks = {}
-        checks["answered"] = not any(a in DEAD for a in acts)
+        checks["answered"] = name in NONSENSE or not any(a in DEAD for a in acts)
         checks["no_repeat"] = all(texts[i] != texts[i - 1] for i in range(1, len(texts)))
         spanish = any(h in turns[0].lower() for h in ("hola", "necesito", "página"))
         if spanish:
