@@ -147,6 +147,18 @@ _SELF_FIX = re.compile(rf"\b{DAYTIME}\W+(?:(?:no|nope|wait|sorry|actually|i mean
 _NOT_THAT = re.compile(rf"\bnot (?:at |on )?{DAYTIME}\W*", re.I)
 
 
+NUM_RUN = re.compile(r"(?:\b(?:\d+|zero|oh|one|two|three|four|five|six|seven|eight|nine)\b[\s,.-]*){3,}", re.I)
+
+
+def phone_in(text: str) -> tuple[str | None, str]:
+    """('8625550119', rest of the words) when a whole phone number was said, else (None, text)."""
+    for m in NUM_RUN.finditer(text):
+        d = spoken_digits(m.group(0))
+        if len(d) == 10 or (len(d) == 11 and d[0] == "1"):
+            return d, (text[:m.start()] + " , " + text[m.end():])
+    return None, text
+
+
 def corrected(text: str) -> str:
     """'Tuesday, no, no, Wednesday' -> 'Wednesday'; 'not ten, two o'clock' -> 'two o'clock'."""
     return _NOT_THAT.sub("", _SELF_FIX.sub("", text)).strip()
@@ -250,6 +262,7 @@ class Brain:
         self._moving: dict[str, bool] = {}        # caller asked to move this call's booking
         self._utter: dict[str, str] = {}
         self._callbacks: dict[str, str] = {}
+        self._given: dict[str, dict[str, str]] = {}   # answer text -> the question it first answered
         self._last_msg: dict[str, int] = {}      # number given for a callback (read back on request)          # the caller's previous words (a repeat vs a new question)
         import random as _random
         self._rng = _random.Random(seed)
@@ -378,6 +391,13 @@ class Brain:
         r = self._vary(r)
         if DISTRESS.search(low) and r.action != "goodbye":
             r = self._acknowledge(r, low, s)
+        given = self._given.setdefault(s, {})
+        if r.action in ("faq", "knowledge", "pitch") and r.text in given and given[r.text] != low \
+                and r.speech != self._last_speech.get(session_id):
+            # The same blurb earlier in the call, for a different question: it didn't fit then either.
+            r = Reply(UNKNOWN_SPEECH, "unknown", speech=UNKNOWN_SPEECH)
+        elif r.action in ("faq", "knowledge", "pitch"):
+            given.setdefault(r.text, low)
         if r.speech and r.speech == self._last_speech.get(session_id):
             # People rephrase when they repeat themselves; identical twice sounds like a recording.
             again = REPHRASE.get(last) or REPHRASE.get(r.action)
@@ -440,6 +460,18 @@ class Brain:
             name.append(dedup[1])
         return " ".join(w[0].upper() + w[1:] for w in name)
 
+    def _lead_name(self, rest: str) -> str | None:
+        """A name said next to a number: 'Kim, Bella Rose Boutique, <number>' / '<number>, Walter Brennan'."""
+        if SAID_NAME.search(rest):
+            got = self._name_from(SAID_NAME.search(rest).group(0))
+            if got:
+                return got
+        for chunk in re.split(r"[,.;?!]+", rest):
+            w = chunk.split()
+            if 1 <= len(w) <= 3 and all(x[:1].isupper() for x in w) and w[0].lower() not in NOT_A_NAME:
+                return self._name_from(chunk)
+        return None
+
     def _start_message(self, s: str, caller_id: str | None, lead: str, body: str | None = None) -> Reply:
         flow = self._msg[s] = {"step": "name", "body": body}
         self._calls[s] = _Call()
@@ -467,6 +499,19 @@ class Brain:
             words = f"Thanks, {name}! {ANYTHING_ELSE}"
             return Reply(words, "name_taken", speech=words)
         if step == "name":
+            num, rest = phone_in(text)
+            if num:
+                flow["callback"] = self._callbacks[s] = num
+                name = self._lead_name(rest) or self._names.get(s)
+                if not name:
+                    words = f"Thanks, I've got {spoken_number(num)}. And what's your name?"
+                    return Reply(words, "ask_name", speech=words)
+                flow["name"] = self._names[s] = name
+                if flow.get("body"):
+                    return self._save_message(flow, s, caller_id, spoken_number(num))
+                flow["step"] = "body"
+                words = f"Got it, {name}. I have {spoken_number(num)}. What would you like me to tell Alex?"
+                return Reply(words, "ask_message", speech=words)
             name = self._name_from(text)
             if not name and (QUESTION.search(low) or BOOK_WORDS.search(low)):
                 self._msg.pop(s, None)            # they asked something else: answer that instead
@@ -474,6 +519,12 @@ class Brain:
             if not name:
                 return Reply("Sorry, what was your name?", "ask_name", speech="Sorry, what was your name?")
             flow["name"] = self._names[s] = name
+            if flow.get("callback"):
+                if flow.get("body"):
+                    return self._save_message(flow, s, caller_id, spoken_number(flow["callback"]))
+                flow["step"] = "body"
+                words = f"Thanks, {name}. What would you like me to tell Alex?"
+                return Reply(words, "ask_message", speech=words)
             return self._ask_number(flow, caller_id)
         if step == "number":
             digits = spoken_digits(text)
@@ -620,9 +671,15 @@ class Brain:
         if closing(low) and not (pending and AFFIRM.match(low)):
             # "I gotta go" / "No thanks. Bye." / "God bless, goodbye": let them go, warmly.
             self._calls[session_id] = _Call()
-            self._msg.pop(session_id, None)
+            open_flow = self._msg.pop(session_id, None)
             name = self._names.get(session_id)
             words = f"No problem{', ' + name if name else ''}. Thanks for calling, and take care!"
+            if open_flow and open_flow.get("callback"):
+                open_flow["body"] = open_flow.get("body") or "Asked for a call back."
+                open_flow["name"] = open_flow.get("name") or name
+                self._save_message(open_flow, session_id, caller_id)
+                words = (f"No problem{', ' + name if name else ''}. I'll have Alex call you back at "
+                         f"{spoken_number(open_flow['callback'])}. Thanks for calling, and take care!")
             if "god bless" in low:
                 words = f"God bless you too{', ' + name if name else ''}. Thanks for calling, and take care!"
             return Reply("Thanks for calling. Have a great day!", "goodbye", speech=words)
@@ -638,6 +695,19 @@ class Brain:
                 self.store.set_message_callback(self._last_msg[session_id], fixed)
             words = f"Thanks for catching that. I've got {spoken_number(fixed)}. {ANYTHING_ELSE}"
             return Reply(words, "number_fixed", speech=words)
+        num, rest = phone_in(text)
+        if num and session_id not in self._msg and not pending:
+            name = self._lead_name(rest) or self._names.get(session_id)
+            if name:
+                self._names[session_id] = name
+            self._callbacks[session_id] = num
+            self._calls[session_id] = _Call()
+            self._msg[session_id] = {"step": "body" if name else "name", "body": None, "name": name, "callback": num}
+            if not name:
+                words = f"Thanks, I've got {spoken_number(num)}. And what's your name?"
+                return Reply(words, "ask_name", speech=words)
+            words = f"Got it, {name}. I have {spoken_number(num)}. What would you like me to tell Alex?"
+            return Reply(words, "ask_message", speech=words)
         if PRICE_SHAPE.search(low) and not re.search(r"\b(deposit|payment plans?|installments?|split)\b", low):
             return Reply(PRICE_SHAPE_SPEECH, "knowledge", speech=PRICE_SHAPE_SPEECH)
         if MONTHLY_Q.search(low):
