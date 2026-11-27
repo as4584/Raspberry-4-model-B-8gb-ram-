@@ -1428,6 +1428,13 @@ class Brain:
         if not re.search(r"[a-záéíóúñü]{2,}|[0-9]", low) or re.search(r"(\w{2,4})\1{3,}", low):
             return Reply("Sorry, I didn't catch that.", "repeat",
                          speech="Sorry, I didn't catch that. Could you say that again?")
+        if re.match(r"^((hi|hey|yeah|oh)\W*)?(hello\W*){1,3}$|^(are you|is anybody|is anyone|is someone) (still )?there\W*$|^can you hear me\W*$", low):
+            # On a phone call "Hello?" means "are you there?", not "how are you?" (owner's live call).
+            words = "Yes, I'm here! Sorry about the wait. How can I help you today?"
+            return Reply(words, "presence", speech=words)
+        if re.search(r"\bi (never|didn'?t|did not) (say|said|ask|asked) (that|anything|nothing)\b|\bwhat are you talking about\b|\bthat'?s not what i said\b", low):
+            words = "Oh, I'm sorry about that, I must have misheard you. What can I help you with?"
+            return Reply(words, "apology", speech=words)
         if self._lang.get(session_id) == "es" and re.search(r"\b(english|ingl[eé]s)\b", low) and not re.search(r"\bno\b.*\bingl", low):
             self._lang.pop(session_id, None)          # "English please": switch back
             words = "Of course, we can continue in English. How can I help you?"
