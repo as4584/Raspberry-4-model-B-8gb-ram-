@@ -110,6 +110,11 @@ CALL_TIME = re.compile(r"\b(mornings?|afternoons?|evenings?|nights?|weekdays?|we
                        r"after \w+|before \w+|between \w+|early|late|lunch ?time|best (time )?is|today)\b")
 ON_TOPIC = re.compile(r"\b(website|site|web|app|price|cost|how much|book\w*|appointment|business|shop|store|salon|"
                       r"barber\w*|restaurant|alex|receptionist|phone|calls?|message|help|need|want)\b")
+HELP_MY_BUSINESS = re.compile(r"\bhow (can|could|would|will|do) (you|y'?all|you guys|lexmakesit|alex) help (my|our|me|us)\b|"
+                              r"\btell me (a little )?(bit )?more about how (you|y'?all|you guys) (can )?help\b")
+HELP_MY_BUSINESS_SPEECH = ("For a business like yours, Alex can build you a website or an online store, set up automations like "
+                           "missed call text back, and a receptionist like me can answer your calls, take messages, and book "
+                           "appointments, day or night. Would you like a free call with Alex to talk about your business?")
 ROUND17 = [
     (re.compile(r"\b(you|she|it) can book (an )?appointments?\b.*\b(for (my|our)|customers?|clients?|salon|manicure|patients?)\b|"
                 r"\bbook (appointments?|customers?|clients?) for (my|our) (salon|shop|business|office|customers|clients)\b"),
@@ -317,7 +322,7 @@ NOT_FOLLOW_SPEECH = ("Sorry, I'm not sure I follow. I can tell you about LexMake
 QUESTION = re.compile(r"^(so |and |but |wait |also |hey |um |uh )*(can|could|do|does|did|what|what's|how|is|are|will|would|"
                       r"where|who|why|when|which|any|have)\b|\?\s*$")
 # Six simulated callers, 2026-11-26 (tests/test_kindness.py).
-MESSAGE = re.compile(r"\b(take|leave|pass( on| along)?) (a |him a |alex a )?message\b|\b(have|ask|get) (him|alex|someone|somebody) (to )?call\b"
+MESSAGE = re.compile(r"\b(take|leave|pass( on| along)?) (a |him a |alex a |my |him my )?message\b|\b(have|ask|get) (him|alex|someone|somebody) (to )?call\b"
                      r"|\b(call|get back to) me( back)?\b|\bcall ?back\b|\bcallback\b")
 WAIT = re.compile(r"^(hold on|hang on|one (sec|second|moment|minute)|give me (a|one) (sec|second|minute|moment)|"
                   r"just a (sec|second|moment|minute)|wait a (sec|second|minute))\b")
@@ -676,7 +681,10 @@ class Brain:
         self._utter: dict[str, str] = {}
         self._callbacks: dict[str, str] = {}
         self._nowhere: dict[str, int] = {}
-        self._raw: dict[str, str] = {}             # this turn's words as heard, original case
+        self._raw: dict[str, str] = {}
+        self._answers: dict[str, int] = {}          # answers given with no booking/message yet
+        self._offered_follow: dict[str, bool] = {}  # offered the next step already
+        self._asked_before_bye: dict[str, bool] = {}             # this turn's words as heard, original case
         self._lang: dict[str, str] = {}            # "es" once the caller speaks Spanish
         self._es: dict[str, dict] = {}             # the Spanish call's message in progress
         self._topic: dict[str, str] = {}           # what the call is about ("receptionist" after the pitch)
@@ -810,6 +818,18 @@ class Brain:
                 r = Reply(hit[1], "knowledge", speech=hit[1])
             elif not timed:
                 r = Reply(UNKNOWN_SPEECH, "unknown", speech=UNKNOWN_SPEECH)
+        if r.action in ("unknown", "lost") and len(low.split()) >= 12 and self._lang.get(s) != "es":
+            # Living-room noise in front of a clear question: answer the last sentence.
+            parts = [x.strip() for x in re.split(r"(?<=[.!?])\s+|\.\.\.", utterance) if len(x.split()) >= 4]
+            if parts and parts[-1] != utterance.strip():
+                again = self._handle(parts[-1], session_id, caller_id)
+                if again.action not in ("unknown", "lost", "repeat"):
+                    r = again
+        fragment = False
+        if r.action in ("unknown", "lost") and len(low.split()) <= 3 and not QUESTION.search(low) \
+                and not self._msg.get(s) and self._lang.get(s) != "es" and not in_booking:
+            # "on" / "That is that." is a fragment of noise: ask again briefly, no long speech.
+            fragment = True
         if r.action in ("offer_slots", "confirm_required") and re.match(r"^(is|does|do|can|could|will|would) (it|this|that|you|your|she)\b", low) \
                 and not BOOK_WORDS.search(low) and not any(vars(parse_when(utterance, self.clock())).values()):
             # "Is it HIPAA compliant?" isn't a booking request.
@@ -905,6 +925,17 @@ class Brain:
                     body = body[len(first):].strip()
                 again = f"Sure, once more. {body}"
             r = Reply(r.text, r.action, r.committed_id, speech=again)
+        if fragment:
+            r = Reply(r.text, r.action, speech="Sorry, I didn't quite catch that. Could you say it again?")
+        has_lead = bool(self._booked.get(s) or self._last_msg.get(s) or self._msg.get(s) or self._callbacks.get(s))
+        if r.action in ("faq", "knowledge", "pitch") and not has_lead and self._lang.get(s) != "es":
+            self._answers[s] = self._answers.get(s, 0) + 1
+            if self._answers[s] >= 2 and not self._offered_follow.get(s) and r.speech \
+                    and not re.search(r"free call|take a message|\?\s*$", r.speech[-60:]):
+                # They've heard a couple of answers: offer the next step instead of just stopping.
+                self._offered_follow[s] = True
+                r = Reply(r.text, r.action, r.committed_id,
+                          speech=r.speech + " Would you like me to book you a free call with Alex, or take your name and number so he can follow up?")
         self._last_speech[session_id] = r.speech
         self._utter[s] = low
         return r
@@ -1481,6 +1512,8 @@ class Brain:
             return Reply(words, "wrong_number", speech=words)
         burned = [x for x in ROUND7 if "sorry that happened" in x[1]]
         texts = [x for x in ROUND14 if "like a text" in x[1]]
+        if HELP_MY_BUSINESS.search(low):
+            return Reply(HELP_MY_BUSINESS_SPEECH, "pitch", speech=HELP_MY_BUSINESS_SPEECH)
         for pat, words in burned + ROUND17 + ROUND16 + ROUND15 + [x for x in ROUND14 if x not in texts] + ROUND13 + ROUND12 + texts + ROUND11 + ROUND10[:-1] + POLICY + ROUND10[-1:] + ROUND8 + ROUND7:
             if words == "__PITCH__":
                 words = PITCH_SPEECH
@@ -1529,6 +1562,16 @@ class Brain:
             got = self._name_from(m.group(0))
             if got:
                 self._names[session_id] = got     # "this is Jordan" said up front: don't ask again later
+        if closing(low) and not (pending and AFFIRM.match(low)) and not self._asked_before_bye.get(session_id) \
+                and self._answers.get(session_id, 0) >= 1 and not self._booked.get(session_id) \
+                and not self._last_msg.get(session_id) and not self._msg.get(session_id) and not self._callbacks.get(session_id) \
+                and not re.search(r"\b(no thanks|no thank you|i'?m good|that'?s all|nothing else)\b", low) and len(low.split()) <= 6:
+            # Leaving with nothing: one friendly chance to get a follow-up (owner's live call).
+            self._asked_before_bye[session_id] = True
+            words = ("Before you go, can I get your name and number, so Alex can follow up with you? "
+                     "Or if you'd rather not, that's totally fine.")
+            self._msg[session_id] = {"step": "name", "body": "Wanted a follow-up after asking about LexMakesIt.", "name_tries": 1}
+            return Reply(words, "ask_name", speech=words)
         if closing(low) and not (pending and AFFIRM.match(low)):
             # "I gotta go" / "No thanks. Bye." / "God bless, goodbye": let them go, warmly.
             self._calls[session_id] = _Call()

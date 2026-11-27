@@ -54,8 +54,8 @@ def test_call_volume_price(brain):
 
 
 def test_plain_thanks_ends(brain):
-    r = talk(brain, "How much is a website?", "Okay, thanks")
-    assert r[1].action == "goodbye"
+    talk(brain, "How much is a website?")
+    assert ends_or_asks_then_ends(brain, talk, "Okay, thanks")
 
 
 def test_spanish_website_request(brain):
@@ -72,3 +72,12 @@ def test_spanish_how_it_works_is_not_the_same_pitch(brain):
 def test_spanish_greeting_isnt_pushy(brain):
     r = talk(brain, "Hola, buenos días, ¿habla español?")
     assert "número" not in said(r[0]) or "ayudar" in said(r[0])
+
+
+def ends_or_asks_then_ends(brain, talk, bye):
+    """A goodbye ends the call; if no details were left yet, she first asks once for a follow-up
+    (owner's live call), and the next goodbye ends it."""
+    r = talk(brain, bye)[0]
+    if r.action == "goodbye":
+        return True
+    return "name and number" in (r.speech or "").lower() and talk(brain, "No thanks, bye")[0].action == "goodbye"

@@ -38,7 +38,8 @@ def test_tell_him_name(brain):
 
 @pytest.mark.parametrize("bye", ["I will revert", "Aight thanks, peace", "Okay, later"])
 def test_more_goodbyes(brain, bye):
-    assert talk(brain, "How much is a website?", bye)[1].action == "goodbye"
+    talk(brain, "How much is a website?")
+    assert ends_or_asks_then_ends(brain, talk, bye)
 
 
 def test_whats_the_number(brain):
@@ -61,3 +62,12 @@ def test_prayer_request_is_met_warmly(brain):
     r = talk(brain, "And would you pray for me, dear?")
     assert "kind" in said(r[0]) or "pass" in said(r[0])
     assert r[0].action not in SLOTS
+
+
+def ends_or_asks_then_ends(brain, talk, bye):
+    """A goodbye ends the call; if no details were left yet, she first asks once for a follow-up
+    (owner's live call), and the next goodbye ends it."""
+    r = talk(brain, bye)[0]
+    if r.action == "goodbye":
+        return True
+    return "name and number" in (r.speech or "").lower() and talk(brain, "No thanks, bye")[0].action == "goodbye"

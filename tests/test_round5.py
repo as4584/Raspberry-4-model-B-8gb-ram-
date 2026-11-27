@@ -22,8 +22,8 @@ def test_noise_only_call_still_ends(brain):
 
 @pytest.mark.parametrize("bye", ["Yeah that's it, thanks.", "No that's it, thanks.", "Nope, that's it.", "I'm all set."])
 def test_thats_it_is_goodbye(brain, bye):
-    r = talk(brain, "How much is a website?", bye)
-    assert r[1].action == "goodbye"
+    talk(brain, "How much is a website?")
+    assert ends_or_asks_then_ends(brain, talk, bye)
 
 
 def test_number_with_a_dash_is_heard(brain):
@@ -70,3 +70,12 @@ def test_message_in_the_same_breath_is_kept(brain):
 def test_haggle_spoken_hundreds(brain):
     r = talk(brain, "Can you do it for six hundred?")
     assert "budget" in said(r[0])
+
+
+def ends_or_asks_then_ends(brain, talk, bye):
+    """A goodbye ends the call; if no details were left yet, she first asks once for a follow-up
+    (owner's live call), and the next goodbye ends it."""
+    r = talk(brain, bye)[0]
+    if r.action == "goodbye":
+        return True
+    return "name and number" in (r.speech or "").lower() and talk(brain, "No thanks, bye")[0].action == "goodbye"
