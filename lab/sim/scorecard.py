@@ -131,7 +131,7 @@ def run() -> dict:
         real = not name.startswith("spam")
         checks["stayed"] = (not real) or not any(a == "hangup" for a in acts)
         if sum(ch.isdigit() for t in turns for ch in t) >= 7 and real:   # a phone number was given
-            checks["kept_lead"] = any(w in " ".join(texts) for w in ("oh", "nine", "two", "nueve", "dos", "all set"))
+            checks["kept_lead"] = any(w in " ".join(texts) for w in ("oh", "nine", "two", "nueve", "dos", "all set", "your number"))
         if "slot_taken" in acts:
             rows.append({"name": name, "checks": {}, "misses": ["(time already booked in the lab; skipped)"], "actions": acts})
             continue
