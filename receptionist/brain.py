@@ -40,7 +40,7 @@ CUES = {"injection": re.compile(r"\b(ignore|pretend|override|admin|system prompt
         "cancel": re.compile(r"\bcancel")}
 BOOK_WORDS = re.compile(r"\b(book|appointment|schedule|reserve|come in|slot|opening|availability|available)\b")
 SMALL_TALK = re.compile(r"^(hi|hello|hey|good (morning|afternoon|evening))?\W*(there\W*)?(how are you|how's it going|how are things)|^(hi|hello|hey)( there)?$")
-GOODBYE = re.compile(r"^(yeah |yep |no |nope |ok(ay)? |um |uh )*that'?s it( for me)?( thanks?( you)?| thank you)?$|\b(that'?s everything|that'?s it for now|nothing else|i'?m all set|talk (to you )?soon|take care|see ya|see you (later|soon)|bye|goodbye|thanks,? by|thank you,? by|that's all|that is all|that'll be all|have a (good|nice|great) day|bye bye|god bless|(i )?(gotta|got to|have to|need to) (go|run|hop off|jump)|gotta run|i'?ll call (you )?back|i'?ll try (you )?(again )?later|i('?ll| will) revert|peace( out)?$|^(ok(ay)?,? )?later$|catch you later|"
+GOODBYE = re.compile(r"^(ok(ay)? |alright |cool |great |perfect )?(thanks|thank you)( so much| very much)?$|^(yeah |yep |no |nope |ok(ay)? |um |uh )*that'?s it( for me)?( thanks?( you)?| thank you)?$|\b(that'?s everything|that'?s it for now|nothing else|i'?m all set|talk (to you )?soon|take care|see ya|see you (later|soon)|bye|goodbye|thanks,? by|thank you,? by|that's all|that is all|that'll be all|have a (good|nice|great) day|bye bye|god bless|(i )?(gotta|got to|have to|need to) (go|run|hop off|jump)|gotta run|i'?ll call (you )?back|i'?ll try (you )?(again )?later|i('?ll| will) revert|peace( out)?$|^(ok(ay)?,? )?later$|catch you later|"
                      r"have a blessed day|be blessed)\b")
 
 
@@ -105,6 +105,27 @@ WANTS_BOOKING = re.compile(r"\b(book|appointment|schedul\w*|reserve|set up a (ca
                            r"sounds good|works for me|is fine|that works|lessons?|sessions?)\b")
 CALL_TIME = re.compile(r"\b(mornings?|afternoons?|evenings?|nights?|weekdays?|weekends?|anytime|any time|"
                        r"after \w+|before \w+|between \w+|early|late|lunch ?time|best (time )?is|today)\b")
+ROUND11 = [
+    (re.compile(r"\b(you|somebody|someone|this number) (just )?call(ed)? me\b|\bgot a call from (this|your) number\b|"
+                r"\bwhy (are|did) you (call|calling)\b|\bhow did you get my number\b|\b(take|remove) me off\b|\bstop calling\b|\bdo not call\b"),
+     "I'm sorry about that. This line answers calls for LexMakesIt, and I don't make outgoing calls. "
+     "I'll note that you don't want to be contacted, and pass it to Alex."),
+    (re.compile(r"\b(customers?|clients?|patients?|students?|people|parents|members)\b.*\bbook\w*\b.*\b(online|calendar|site|website|app)\b|"
+                r"\b(online|calendar) (booking|scheduling)\b|\bbook(ing)? (calendar|system)\b"),
+     "Yes, Alex can add online booking to your site, so people pick a time on a calendar, and pay right there if you'd like."),
+    (re.compile(r"\b(can|could|would|will|does) (she|it|you|the receptionist|a receptionist)\b.*\b(tell|answer|give|update|quote|let|explain)\b"
+                r".*\b(customers?|clients?|patients?|students?|people|parents|callers?|them)\b|"
+                r"\b(customers?|clients?|patients?)\b.*\b(when (their|the) (car|order|job|item)|status|quotes?|insurance)\b"),
+     "Yes. A receptionist like me answers the questions your customers ask most, using the answers you give me, "
+     "and takes a message or books them when they need you. Alex sets it up with your details on a free call."),
+    (re.compile(r"\bhow (would|will|does|could) (she|it) (even )?know\b|\bi (ain'?t|am not|won'?t be) typing\b"),
+     "Alex sets it up with you, with your prices, hours, and the answers you want, so you don't have to type anything."),
+    (re.compile(r"\b(installments?|pay (it )?(over time|monthly|in parts)|financing|finance it)\b"),
+     "We don't do payment plans, so it's a fifty percent deposit to start, and the rest when it's done."),
+    (re.compile(r"\b(\w+ )?calls? (a|per|each) (day|week)\b|\bhow many calls\b|\bcall volume\b"),
+     "Any business can get a receptionist like me, and the price is flexible, based on your size and how many calls you get. "
+     "Alex can give you a number on a free call."),
+]
 ROUND10 = [
     (re.compile(r"\b(reviews?|testimonials?|ratings?|yelp|google reviews?)\b"),
      "I don't have reviews to read you, but Alex is happy to answer anything directly on a free call, "
@@ -244,6 +265,8 @@ ES_BYE = re.compile(r"^(no,? )?(muchas )?gracias\W*$|\bdios\b|\b(adi[oó]s|chao|
 ES_SPEAKS = re.compile(r"\b(habla|hablan|hablas|contesta\w*|atiende\w*|funciona)\b.*\bespa[nñ]ol\b|\bespa[nñ]ol\b.*\?")
 ES_RECEP = re.compile(r"\b(recepcionista|c[oó]mo funciona|contesta (mi|el|los) (n[uú]mero|tel[eé]fono)|contestar (el|mi|los) tel[eé]fono|contesta(r)? (las )?llamadas|asistente)\b")
 ES_TOOLS = re.compile(r"\b(square|clover|toast|quickbooks|conecta\w*|integra\w*)\b")
+ES_SITE = re.compile(r"\b(p[aá]gina|sitio) (web|de internet)\b|\bpagina web\b")
+ES_HOW = re.compile(r"\bc[oó]mo funciona\b|\bqu[eé] hace\b")
 ES_ORDER = re.compile(r"\b(pedidos?|ordenar|[oó]rdenes|delivery|para llevar)\b")
 ES_PRICE = re.compile(r"\b(cu[aá]nto|precio|cuesta|cobran|costo)\b")
 ES_DEPOSIT = re.compile(r"\b(dep[oó]sit\w*|pagos|plazos|adelanto|anticipo)\b")
@@ -265,6 +288,10 @@ ES = {
               "El precio es flexible, según el tamaño de su negocio. Alex se lo explica en una llamada gratis."),
     "recep_price": ("El precio es flexible, según el tamaño de su negocio y cuántas llamadas recibe. "
                     "Buen servicio, a buen precio. Alex le da un número exacto en una llamada gratis."),
+    "site": ("Con gusto. Una página web empieza en mil dólares, y luego son diez dólares al mes para mantenerla. "
+             "Alex le puede ayudar con la suya en una llamada gratis. ¿Qué tipo de negocio tiene?"),
+    "how": ("Funciona así: yo contesto las llamadas de su negocio con su información, contesto preguntas, tomo mensajes "
+            "y agendo citas, y a usted le llega todo. Alex lo configura con usted."),
     "tools": "Alex puede conectar la mayoría de los sistemas, como Square, y le confirma el suyo en la llamada gratis.",
     "order": "Sí, Alex puede hacer pedidos en línea, para que sus clientes ordenen y paguen desde su página.",
     "repeat_number": "Disculpe, creo que me faltó un número. ¿Me lo repite despacio, por favor?",
@@ -296,8 +323,8 @@ def spoken_number_es(digits: str) -> str:
 SPANISH_GARBLE = re.compile(r"\b(h?ola|mira|ne[sc]+[eio]s?[aeiou]?[ct]i?to|pa[gjh]in[ao]|[ck]u?[ae]?nto|[ck]ust?a|quier?o|quiro|"
                             r"gra[cs]ias|bueno|se[nñ]or[ae]?|por favor|resta?u?rante|tarante|numero|minumo|"
                             r"llamo|milamo|pagar\w*|dep[oó]sito|bizzito|pedido|padido|linya|l[ií]nea|una|para)\b", re.I)
-SPANISH_LEAD = ("Hola, gracias por llamar. Con gusto le ayudo. Alex le puede llamar. "
-                "¿Me dice su nombre y su número de teléfono, por favor?")
+SPANISH_LEAD = ("Hola, gracias por llamar a LexMakesIt, el negocio de Alex. Con gusto le atiendo en español. "
+                "¿En qué le puedo ayudar?")
 SPANISH = re.compile(r"\b(spanish|espa[nñ]ol|habla)\b")
 SPANISH_SPEECH = ("I'm sorry, I can only speak English right now. I'll keep it simple, "
                   "and I can take a message for Alex if that's easier.")
@@ -587,6 +614,7 @@ class Brain:
             # Spanish calls answer in Spanish; the English rephrasing below doesn't apply.
             return self._handle(utterance, session_id, caller_id)
         utterance = collapse_repeats(utterance)
+        utterance = re.sub(r"\b(book|schedule|set up|get)( me)? (a|an) (demo|demonstration)\b", r"\1 a call", utterance, flags=re.I)
         low = " ".join(re.sub(r"[.!?,]+", " ", utterance.lower()).split())
         in_booking = self._last.get(s) in BOOKING_STEPS or s in self.dialogue._pending or bool(self._calls.get(s) and self._calls[s].offered)
         r = self._handle(utterance, session_id, caller_id)
@@ -840,6 +868,8 @@ class Brain:
             return say("saved", "message_taken", name=n)
         if ES_SPEAKS.search(low):
             return say("speaks", "knowledge")
+        if ES_HOW.search(low) and m.get("topic") == "recep":
+            return say("how", "pitch")
         if ES_RECEP.search(low):
             m["topic"] = "recep"
             return say("recep", "pitch")
@@ -851,6 +881,8 @@ class Brain:
             return say("time", "knowledge")
         if ES_ORDER.search(low):
             return say("order", "knowledge")
+        if ES_SITE.search(low) and not ES_PRICE.search(low):
+            return say("site", "knowledge")
         if ES_PRICE.search(low):
             return say("recep_price" if m.get("topic") == "recep" else "price", "knowledge")
         if m.get("want") == "body" and len(low.split()) >= 3:
@@ -1107,10 +1139,17 @@ class Brain:
                 words = "I'm sorry, I can't reach the pharmacy from here. The number is on your pill bottle. Take care of yourself."
             return Reply(words, "wrong_number", speech=words)
         burned = [x for x in ROUND7 if "sorry that happened" in x[1]]
-        for pat, words in burned + ROUND10[:-1] + POLICY + ROUND10[-1:] + ROUND8 + ROUND7:
+        for pat, words in burned + ROUND11 + ROUND10[:-1] + POLICY + ROUND10[-1:] + ROUND8 + ROUND7:
             if pat.search(low):
                 if "isn't the pharmacy" in words:
                     self._topic[session_id] = "wrong_number"
+                if "don't want to be contacted" in words:
+                    if self._topic.get(session_id) != "do_not_contact":
+                        self.store.add_message(None, caller_id, "Do not contact: caller asked not to be called.", caller_id=caller_id)
+                    self._topic[session_id] = "do_not_contact"
+                    if words == self._last_speech.get(session_id):
+                        words = "Of course. I've noted it, and nobody will contact you. Sorry again for the trouble."
+                    return Reply(words, "do_not_contact", speech=words)
                 return Reply(words, "knowledge", speech=words)
         if re.search(r"\b(what'?s|what is|give me|can i (get|have)) (the|your|his|alex'?s) (phone )?number\b", low):
             contact = (self.profile.get("faq") or {}).get("contact") if self.profile else None
