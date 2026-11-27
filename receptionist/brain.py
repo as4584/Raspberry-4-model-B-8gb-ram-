@@ -794,6 +794,9 @@ class Brain:
             return self._handle(utterance, session_id, caller_id)
         utterance = collapse_repeats(utterance)
         utterance = self._steer_low_effort(utterance, s, caller_id) or utterance
+        st_ = self._calls.get(s)
+        if (st_ and (st_.offered or st_.date)) or s in self.dialogue._pending:
+            utterance = re.sub(r"\b([1-6]|one|two|three|four|five|six)(:\d\d)? ?a\.? ?m\b\.?", r"\1\2 pm", utterance, flags=re.I)
         after_evening = "prefer an evening" in (self._last_speech.get(s) or "")
         if re.search(r"\b(set up|schedule|arrange|get) (a |me a )?(call|time|meeting) with (alex|him)\b|\bset (up )?a call\b", utterance, re.I) \
                 and not any(vars(parse_when(utterance, self.clock())).values()) \
@@ -1005,6 +1008,9 @@ class Brain:
     def _steer_low_effort(self, utterance: str, s: str, caller_id: str | None) -> str | None:
         """'Close an appointment for the dumbest of users' (owner): rewrite vague turns into what they mean."""
         low = " ".join(re.sub(r"[.!?,]+", " ", utterance.lower()).split())
+        if re.match(r"^(do you want to |can you |could you |um |uh |so )*(tell me|say) (a little |a )?(bit )?more\W*(i then|please|about it|then)?\W*$", low) \
+                and not self._msg.get(s):
+            return "What do you guys do?"
         if self._lang.get(s) == "es" or self._msg.get(s) or self._booked.get(s):
             return None
         st = self._calls.get(s)

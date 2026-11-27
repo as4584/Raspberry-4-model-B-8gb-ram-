@@ -64,3 +64,21 @@ def test_asks_for_details_before_a_bare_goodbye(brain):
 def test_no_extra_ask_if_they_already_booked(brain):
     r = talk(brain, "Can I book Friday at 10 am?", "Yes", "Mike Delgado", "Yes", "Thanks, bye")
     assert r[-1].action == "goodbye"
+
+
+# Third live call (17:01).
+@pytest.mark.parametrize("q", ["Hey, I just wanted to... No more about the business.", "Tell me a little more about the Apseadoes.",
+                               "Do you want to tell me a little bit more? I then...", "I wanted to know more about the business"])
+def test_know_more_about_the_business(brain, q):
+    r = talk(brain, q)[0]
+    assert "lexmakesit builds" in said(r) or "website" in said(r), said(r)
+
+
+def test_early_am_while_offering_means_pm(brain):
+    r = talk(brain, "Do you have anything open Monday?", "2 AM.")
+    assert "closed at two a m" not in said(r[1]) and "two p m" in said(r[1])
+
+
+def test_where_are_you_based_in(brain):
+    r = talk(brain, "Okay, where are you based in?")
+    assert "paterson" in said(r[0])
