@@ -40,6 +40,7 @@ TURN_CAP_BYTES = 64000              # 8 s: background voices can't hold a turn o
 NOISE_MARGIN = 2.5             # speech must be this many times the call's noise floor
 CALIBRATION_FRAMES = 25        # first 0.5 s of a greeted call: measure line noise
 FILLER = "One moment."
+UNSURE_ACTIONS = {'spanish', 'unknown', 'lost', 'repeat', 'filler', 'ask_again', 'confirm_again'}
 MAX_CALL_SPEECH = ("I want to be respectful of your time, so I'll let you go now. Alex will follow up, "
                    "and you can call back anytime. Take care!")
 IDLE_SPEECH = "It sounds like the line went quiet, so I'll hang up for now. Please call back anytime. Goodbye."
@@ -251,7 +252,9 @@ class CallEngine:
                 if os.getenv('LOG_TRANSCRIPTS') == '1':      # test runs only: never on by default
                     log.info('call=%s gen=%d heard=%r', call_id, this_generation, utterance)
                 words = reply.speech or reply.text   # phone wording when the dialogue provides it (#38)
-                if getattr(asr, 'language', None) == 'auto' and reply.action != 'spanish':
+                # Keep detecting until the call has a real English turn: a short 'Hola, buenos días' can
+                # be misheard, and English-only ears then translate Spanish instead of hearing it.
+                if getattr(asr, 'language', None) == 'auto' and reply.action not in UNSURE_ACTIONS:
                     asr.language = 'en'
                 if reply.action == 'spanish' and self.tts_es is not None:
                     voice['tts'] = self.tts_es

@@ -66,12 +66,13 @@ class Lab:
     def turn(self, session: str, text: str, ears: bool) -> dict:
         with self.lock:
             brain = self.sessions.setdefault(session, self.factory())
-        first = session not in self.heard_once
-        self.heard_once.add(session)
-        lang = "auto" if first else getattr(brain, "_lang", {}).get(session, "en")
+        # Mirrors the engine: detect until a real English turn, then fix the language.
+        lang = getattr(brain, "_lang", {}).get(session) or ("en" if session in self.heard_once else "auto")
         heard = self.hear(text, lang) if ears else text
         t0 = time.monotonic()
         r = brain.handle(heard, session, caller_id="+15550001000")
+        if r.action not in ("spanish", "unknown", "lost", "repeat", "filler", "ask_again", "confirm_again"):
+            self.heard_once.add(session)
         return {"heard": heard, "reply": r.speech or r.text, "action": r.action,
                 "ended": r.action in ENDS, "brain_s": round(time.monotonic() - t0, 3)}
 
