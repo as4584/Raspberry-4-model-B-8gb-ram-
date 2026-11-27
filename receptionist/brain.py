@@ -1503,7 +1503,7 @@ class Brain:
             and len(SPANISH_WORDS & set(low.split())) < 2
         if about_spanish:
             words = ("Yes, I speak English and Spanish, so your Spanish-speaking customers can talk to me in Spanish. "
-                     "What else would you like to know?")
+                     "Y si usted prefiere, seguimos en español. What else would you like to know?")
             return Reply(words, "knowledge", speech=words)
         if SPANISH.search(low) or len(SPANISH_WORDS & set(low.split())) >= 2 or SPANISH_GREET.search(low) \
                 or len(set(m.group(0).lower() for m in SPANISH_GARBLE.finditer(low))) >= 3:
