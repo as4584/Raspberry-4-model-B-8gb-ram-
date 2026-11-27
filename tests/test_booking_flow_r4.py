@@ -29,6 +29,8 @@ def test_book_a_call_with_alex_books(brain):
 
 
 def test_name_and_number_answer_an_open_offer(brain):
+    # Round 13: details are kept, but the time is only booked on a clear yes.
     r = talk(brain, "Can I book something Friday at 10?", "Dana Morales, 973 555 0142")
+    assert not brain.store.active() and "dana" in said(r[1]) and "book" in said(r[1])
+    r = talk(brain, "Yes please")
     assert brain.store.active()
-    assert "dana" in said(r[1])

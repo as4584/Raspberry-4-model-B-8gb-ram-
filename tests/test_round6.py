@@ -55,8 +55,7 @@ def test_square_is_not_a_booking(brain):
 
 def test_short_number_at_confirm_still_books(brain):
     r = talk(brain, "Can I book something Friday at 10?", "Jenny Park, 732 550 198")
-    assert brain.store.active()
-    assert "number" in said(r[1])
+    assert not brain.store.active() and "number" in said(r[1]) and "jenny" in said(r[1])
 
 
 def test_deposit_leads_with_the_deposit(brain):
