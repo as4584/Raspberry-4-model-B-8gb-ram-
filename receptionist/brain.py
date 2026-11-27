@@ -420,7 +420,11 @@ class Brain:
         if r.action in ("booked", "rescheduled") and r.committed_id:
             self._booked[s] = r.committed_id
             self._moving.pop(s, None)
-            if r.action == "booked" and s not in self._names:
+            if r.action == "booked" and closing(low):
+                # "Okay perfect, thanks, bye": confirm it and let them go.
+                body = (r.speech or r.text).replace(ANYTHING_ELSE, "").strip()
+                r = Reply(r.text, r.action, r.committed_id, speech=f"{body} Thanks for calling, and take care!")
+            elif r.action == "booked" and s not in self._names:
                 # Alex needs to know who he's calling (every simulated caller noticed it never asked).
                 body = (r.speech or r.text).replace(ANYTHING_ELSE, "").strip()
                 self._msg[s] = {"step": "booking_name", "ref": r.committed_id}
@@ -554,7 +558,18 @@ class Brain:
             if not name and (QUESTION.search(low) or BOOK_WORDS.search(low)):
                 self._msg.pop(s, None)            # they asked something else: answer that instead
                 return None
+            if not name and flow.get("name_tries", 0) >= 1:
+                # Asked twice already: a name isn't worth a loop. Carry on without it.
+                flow["name"] = None
+                if caller_id and not flow.get("callback"):
+                    flow["callback"] = self._callbacks[s] = caller_id
+                if flow.get("body"):
+                    return self._save_message(flow, s, caller_id)
+                flow["step"] = "body"
+                words = "No worries. What would you like me to tell Alex?"
+                return Reply(words, "ask_message", speech=words)
             if not name:
+                flow["name_tries"] = flow.get("name_tries", 0) + 1
                 return Reply("Sorry, what was your name?", "ask_name", speech="Sorry, what was your name?")
             flow["name"] = self._names[s] = name
             if flow.get("callback"):
@@ -742,8 +757,23 @@ class Brain:
             words = f"Thanks for catching that. I've got {spoken_number(fixed)}. {ANYTHING_ELSE}"
             return Reply(words, "number_fixed", speech=words)
         num, rest = phone_in(text)
+        if num and pending and session_id not in self._msg:
+            # "Dana Morales, 973..." in answer to "want me to book it?": that's a yes, with details.
+            name = self._lead_name(phone_in(utterance)[1]) or self._names.get(session_id)
+            r = self.dialogue.handle("yes", session_id, caller_id=caller_id)
+            self._callbacks[session_id] = num
+            if r.action == "booked" and r.committed_id:
+                self._booked[session_id] = r.committed_id
+                if name:
+                    self._names[session_id] = name
+                    self.store.set_name(r.committed_id, name, caller_id)
+                body = (r.speech or r.text).replace(ANYTHING_ELSE, "").strip()
+                words = (f"Thanks{', ' + name if name else ''}. {body} Alex will call you at {spoken_number(num)}. "
+                         f"{ANYTHING_ELSE}")
+                return Reply(r.text, r.action, r.committed_id, speech=words)
+            return r
         if num and session_id not in self._msg and not pending:
-            name = self._lead_name(rest) or self._names.get(session_id)
+            name = self._lead_name(phone_in(utterance)[1]) or self._names.get(session_id)
             if name:
                 self._names[session_id] = name
             self._callbacks[session_id] = num
