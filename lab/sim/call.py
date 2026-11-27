@@ -17,7 +17,8 @@ PI = "prototype@100.92.161.12"
 def post(path: str, body: dict) -> dict:
     r = subprocess.run(["ssh", "-o", "ConnectTimeout=15", PI,
                         f"curl -s -m 120 -XPOST localhost:8099{path} --data-binary @-"],
-                       input=json.dumps(body), capture_output=True, text=True, timeout=180)
+                       input=json.dumps(body), capture_output=True, text=True, timeout=180,
+                       encoding="utf-8", errors="replace")
     if r.returncode != 0 or not r.stdout.strip():
         raise SystemExit(f"lab unreachable: {r.stderr.strip()[:200]}")
     return json.loads(r.stdout)
@@ -32,6 +33,7 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     out = post("/start", {"session": a.session}) if a.cmd == "start" else \
         post("/turn", {"session": a.session, "text": a.text, "ears": not a.exact})
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     print(json.dumps(out, ensure_ascii=False))
     return 0
 

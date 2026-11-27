@@ -40,7 +40,8 @@ CUES = {"injection": re.compile(r"\b(ignore|pretend|override|admin|system prompt
         "cancel": re.compile(r"\bcancel")}
 BOOK_WORDS = re.compile(r"\b(book|appointment|schedule|reserve|come in|slot|opening|availability|available)\b")
 SMALL_TALK = re.compile(r"^(hi|hello|hey|good (morning|afternoon|evening))?\W*(there\W*)?(how are you|how's it going|how are things)|^(hi|hello|hey)( there)?$")
-GOODBYE = re.compile(r"^(yeah |yep |no |nope |ok(ay)? |um |uh )*that'?s it( for me)?( thanks?( you)?| thank you)?$|\b(that'?s everything|that'?s it for now|nothing else|i'?m all set|talk (to you )?soon|take care|see ya|see you (later|soon)|bye|goodbye|thanks,? by|thank you,? by|that's all|that is all|that'll be all|have a (good|nice|great) day|bye bye|god bless|(i )?(gotta|got to|have to|need to) (go|run|hop off|jump)|gotta run|i'?ll call (you )?back|i'?ll try (you )?(again )?later)\b")
+GOODBYE = re.compile(r"^(yeah |yep |no |nope |ok(ay)? |um |uh )*that'?s it( for me)?( thanks?( you)?| thank you)?$|\b(that'?s everything|that'?s it for now|nothing else|i'?m all set|talk (to you )?soon|take care|see ya|see you (later|soon)|bye|goodbye|thanks,? by|thank you,? by|that's all|that is all|that'll be all|have a (good|nice|great) day|bye bye|god bless|(i )?(gotta|got to|have to|need to) (go|run|hop off|jump)|gotta run|i'?ll call (you )?back|i'?ll try (you )?(again )?later|i('?ll| will) revert|peace( out)?$|^(ok(ay)?,? )?later$|catch you later|"
+                     r"have a blessed day|be blessed)\b")
 
 
 def closing(low: str) -> bool:
@@ -98,6 +99,31 @@ RECEPTIONIST_PRICE = ("Any business can get a receptionist like me, and the pric
                       "calls you get. Great service, at a great deal. I can book you a free call with Alex to set it up.")
 RECEPTIONIST_SETUP = ("Alex sets it up for you, with your business details, hours and questions, and he'll give you a "
                       "timeline on the free call. You don't need to do anything technical.")
+WANTS_BOOKING = re.compile(r"\b(book|appointment|schedul\w*|reserve|set up a (call|time|meeting)|call with alex|meet(ing)?|"
+                           r"available|availability|free call|slot|opening|open|free|come in|see alex|talk (to|with) (alex|someone|somebody)|"
+                           r"consultation|what (do you have|times|days)|when (are|is|can|could)|let'?s (do|go|set)|go over|"
+                           r"sounds good|works for me|is fine|that works|lessons?|sessions?)\b")
+ROUND7 = [
+    (re.compile(r"\b(five|5|six|6|four|4) (in the morning|a\.? ?m)|\b(24 ?/ ?7|twenty four seven|middle of the night|after hours|"
+                r"weekends?|nights?|at night|overnight|all hours)\b"),
+     "Yes, a receptionist like me answers any time, day or night, weekends too, so you never miss a call."),
+    (re.compile(r"\b(portal|upload\w*|documents?|tax docs|secure\w*|ssn|social security|encrypt\w*|client login)\b"),
+     "Yes, Alex builds client portals, where clients log in, upload documents, and check their status. "
+     "He builds them with security in mind, and he can go over exactly how your clients' data is protected on a free call."),
+    (re.compile(r"\b(donat\w*|tith\w*|offering|give online|livestream\w*|live ?stream\w*|stream (our|the) service)\b"),
+     "Yes, Alex can set up online donations and giving on your website, and a live stream of your services. "
+     "He can go over how it would work for your church on a free call."),
+    (re.compile(r"\b(nonprofit|non-profit|church(es)?|ministr\w*|charit\w*)\b.*\b(discount|price|rate|deal|cheaper)\b|"
+                r"\b(discount|price|rate|deal)\b.*\b(nonprofit|non-profit|church(es)?|ministr\w*|charit\w*)\b"),
+     "I'm not sure about a nonprofit discount myself, but Alex works with churches and nonprofits, and he'll talk pricing "
+     "with you honestly on a free call, with no commitment."),
+    (re.compile(r"\b(scam\w*|ripped (me )?off|took my money|disappeared|burned before|got burned|trust (you|a deposit|the deposit)|"
+                r"why should i trust)\b"),
+     "I'm really sorry that happened to you, and it makes sense to be careful. The first call with Alex is free, with no commitment, "
+     "so you can talk to him, ask anything, and decide for yourself before paying anything."),
+    (re.compile(r"\b(pray|prayer|prayers|bless me)\b"),
+     "That's very kind of you to ask. I'll pass your message along to Alex, and I hope you have a blessed day."),
+]
 PITCH_SPEECH = ("You're actually talking to one right now! A receptionist like me can answer your calls any time, "
                 "answer questions about your business, book appointments, take messages, and hang up on spam calls. "
                 "Any business can get one, and the price is flexible based on your size. "
@@ -213,12 +239,13 @@ URGENT = re.compile(r"\burgent\b|\basap\b|\bas soon as possible\b|\bright away\b
 WHEN_CALL = re.compile(r"\b(will|when will|is|when is|can|could) (he|alex) (call|get back|be calling|reach)\b|\bpromise\b")
 MOVE = re.compile(r"\b(move|reschedule|change|switch|push)\b.*\b(it|that|appointment|booking|call)\b|\binstead\b")
 CANCEL_IT = re.compile(r"\bcancel (it|that|this|my (appointment|booking|call)|the (appointment|booking|call))\b|^cancel$")
-NAME_LEAD = re.compile(r"^((hi|hey|yeah|yes|oh|sure|okay|ok|well|um|uh|so)\W+)*(it'?s|this is|my name is|name'?s|i'?m|i am|call me)?\s*", re.I)
+NAME_LEAD = re.compile(r"^((hi|hey|yeah|yes|oh|sure|okay|ok|well|um|uh|so)\W+)*((tell|let) (him|alex)( know)?( that)?( it'?s| this is)?\s+)?"
+                       r"(it'?s|this is|my name is|name'?s|i'?m|i am|call me)?\s*", re.I)
 DIGIT_WORDS = {"zero": "0", "oh": "0", "o": "0", "one": "1", "two": "2", "three": "3", "four": "4",
                "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9"}
 TALK_TO_SPEECH = ("Alex isn't available right this second, but I can take a message and have him call you back, "
                   "or book you a free call with him. Which would you prefer?")
-NOT_A_NAME = {"my", "number", "phone", "blah", "you", "nobody", "whatever", "someone", "somebody", "anybody", "anyone", "me", "test",
+NOT_A_NAME = {"my", "tell", "him", "her", "let", "from", "ask", "have", "please", "number", "phone", "blah", "you", "nobody", "whatever", "someone", "somebody", "anybody", "anyone", "me", "test",
               "yes", "yeah", "no", "nope", "sure", "okay", "ok", "hello", "hi", "um", "uh", "the", "a", "actually", "wait",
               "si", "sí", "bueno", "mira", "hola", "for", "about", "our", "we", "he", "she", "they", "calling", "here", "speaking",
               "can", "could", "would", "will", "do", "does", "did", "how", "what", "when", "where", "why", "who", "is", "are",
@@ -255,6 +282,26 @@ def phone_in(text: str) -> tuple[str | None, str]:
         if len(d) == 10 or (len(d) == 11 and d[0] == "1"):
             return d, (text[:m.start()] + " , " + text[m.end():])
     return None, text
+
+
+def collapse_repeats(text: str) -> str:
+    """Phone ASR sometimes loops a sentence ('How much? How much? How much?'): keep one."""
+    parts = re.split(r"(?<=[.!?])\s+", text.strip())
+    out = []
+    for x in parts:
+        if not out or x.strip().lower() != out[-1].strip().lower():
+            out.append(x)
+    if len(out) == 1 and len(parts) > 1:
+        return out[0]
+    words = text.split()
+    for n in range(3, len(words) // 2 + 1):           # a run of words repeated back to back
+        if words[:n] * (len(words) // n) == words[:n * (len(words) // n)] and len(words) // n >= 2:
+            return " ".join(words[:n])
+    return " ".join(out)
+
+
+BOOKING_STEPS = {"offer_slots", "ask_which", "ask_day", "confirm_required", "ask_again_time", "ask_again_day",
+                 "slot_taken", "closed_day", "ask_time"}
 
 
 def corrected(text: str) -> str:
@@ -465,7 +512,20 @@ class Brain:
         if self._lang.get(s) == "es":
             # Spanish calls answer in Spanish; the English rephrasing below doesn't apply.
             return self._handle(utterance, session_id, caller_id)
+        utterance = collapse_repeats(utterance)
+        low = " ".join(re.sub(r"[.!?,]+", " ", utterance.lower()).split())
+        in_booking = self._last.get(s) in BOOKING_STEPS or s in self.dialogue._pending or bool(self._calls.get(s) and self._calls[s].offered)
         r = self._handle(utterance, session_id, caller_id)
+        offered_call = any(w in (self._last_speech.get(s) or "") for w in ("free call", "book"))
+        if r.action in ("offer_slots", "confirm_required", "closed_day") and not in_booking and not offered_call \
+                and not WANTS_BOOKING.search(low):
+            # They didn't ask to book ("what's 2+2?", "client portal charges?"): answer, don't schedule.
+            hit = self.knowledge.best(utterance) if self.knowledge is not None else None
+            timed = any(vars(parse_when(utterance, self.clock())).values()) and not re.search(r"\b(plus|minus|times|divided)\b", low)
+            if hit:
+                r = Reply(hit[1], "knowledge", speech=hit[1])
+            elif not timed:
+                r = Reply(UNKNOWN_SPEECH, "unknown", speech=UNKNOWN_SPEECH)
         if r.action in ("offer_slots", "confirm_required") and re.match(r"^(is|does|do|can|could|will|would) (it|this|that|you|your|she)\b", low) \
                 and not BOOK_WORDS.search(low) and not any(vars(parse_when(utterance, self.clock())).values()):
             # "Is it HIPAA compliant?" isn't a booking request.
@@ -515,6 +575,8 @@ class Brain:
                 self._msg[s] = {"step": "booking_name", "ref": r.committed_id}
                 r = Reply(r.text, r.action, r.committed_id,
                           speech=f"{body} Can I get your name, so Alex knows who he's talking to?")
+        if r.action in ("faq", "knowledge") and not in_booking:
+            r = self._both(utterance, r, s, caller_id)
         r = self._vary(r)
         if DISTRESS.search(low) and r.action != "goodbye":
             r = self._acknowledge(r, low, s)
@@ -586,6 +648,32 @@ class Brain:
                 and "'" not in dedup[1] and dedup[1].lower() not in NOT_A_NAME | {"my", "i", "and", "i'm"}:
             name.append(dedup[1])
         return " ".join(w[0].upper() + w[1:] for w in name)
+
+    def _both(self, utterance: str, r: Reply, s: str, caller_id: str | None) -> Reply:
+        """'How much is it and how long does it take?': answer each question, not just one."""
+        parts = [x.strip() for x in re.split(r"\band (how|what|do|does|can|is|who|when|where)\b", utterance, flags=re.I) if x and x.strip()]
+        qs, i = [], 0
+        while i < len(parts):
+            word = parts[i]
+            if word.lower() in ("how", "what", "do", "does", "can", "is", "who", "when", "where") and i + 1 < len(parts):
+                word = word + " " + parts[i + 1]
+                i += 1
+            if len(word.split()) >= 3:
+                qs.append(word)
+            i += 1
+        if len(qs) < 2:
+            return r
+        said = [r.speech or r.text]
+        for q in qs:
+            other = self._handle(q, s + "#both", caller_id)
+            self._calls.pop(s + "#both", None)
+            text = other.speech or other.text
+            if other.action in ("faq", "knowledge") and text and all(text[:40] not in x for x in said):
+                said.append(text)
+        if len(said) == 1:
+            return r
+        words = " ".join(said)
+        return Reply(words, r.action, speech=words)
 
     def _spanish(self, text: str, low: str, s: str, caller_id: str | None) -> Reply:
         """A Spanish call: answers, name and number in any order, the message, goodbye. Never English,
@@ -910,6 +998,13 @@ class Brain:
             return Reply(CARD_PAY_SPEECH, "knowledge", speech=CARD_PAY_SPEECH)
         if LEGIT.search(low) and not BOOK_WORDS.search(low):
             return Reply(LEGIT_SPEECH, "knowledge", speech=LEGIT_SPEECH)
+        for pat, words in ROUND7:
+            if pat.search(low):
+                return Reply(words, "knowledge", speech=words)
+        if re.search(r"\b(what'?s|what is|give me|can i (get|have)) (the|your|his|alex'?s) (phone )?number\b", low):
+            contact = (self.profile.get("faq") or {}).get("contact") if self.profile else None
+            if contact:
+                return Reply(contact, "faq", speech=contact)
         if HAGGLE.search(low) or (MONEY_WORRY.search(low) and re.search(r"\b(how much|cost|price|afford|be)\b", low)):
             return Reply(HAGGLE_SPEECH, "knowledge", speech=HAGGLE_SPEECH)
         if SOLO_Q.search(low):
