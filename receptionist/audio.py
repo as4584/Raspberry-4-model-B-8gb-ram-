@@ -169,6 +169,7 @@ class WhisperDaemonASR:
         self.argv,self.timeout=list(argv),timeout
         self.tokens_per_s,self.extra_tokens=tokens_per_s,extra_tokens
         self._proc=None;self._lock=None
+        self.language='en'   # 'es' for a Spanish caller (multilingual model only)
     @property
     def pid(self):return self._proc.pid if self._proc else None
     async def _ensure(self):
@@ -197,7 +198,8 @@ class WhisperDaemonASR:
                 cap=math.ceil(seconds*self.tokens_per_s)+self.extra_tokens
                 try:
                     proc=await self._ensure()
-                    proc.stdin.write(f'{raw}\t{audio_ctx_for(seconds)}\t{cap}\n'.encode())
+                    lang='' if self.language=='en' else f'\t{self.language}'
+                    proc.stdin.write(f'{raw}\t{audio_ctx_for(seconds)}\t{cap}{lang}\n'.encode())
                     await proc.stdin.drain()
                     line=await asyncio.wait_for(proc.stdout.readline(),self.timeout)
                 except BaseException:
@@ -206,7 +208,8 @@ class WhisperDaemonASR:
             text=line.decode('utf-8','replace').strip()
             if not line or text.startswith('ERR'):
                 await self._kill();raise RuntimeError(f'whisper daemon failed: {text or "exited"}')
-            return clean_whisper_output(text)
+            # Multilingual whisper adds tags like '[Música]' or '(Pero)' on noise.
+            return clean_whisper_output(re.sub(r'\s*[\[(][^\])]{1,20}[\])]\s*',' ',text).strip())
 
 class MockTTS:
     async def synthesize(self,text: str) -> bytes:

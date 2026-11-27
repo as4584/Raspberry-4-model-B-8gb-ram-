@@ -111,3 +111,24 @@ def test_server_falls_back_to_cli_then_mock():
     assert kind == "cli" and isinstance(factory(), WhisperCppASR) and factory() is not factory()
     factory, kind = select_asr_factory({})
     assert kind == "mock" and isinstance(factory(), MockASR)
+
+
+FAKE_LANG = r'''
+import sys, pathlib
+log = pathlib.Path(sys.argv[1])
+sys.stdout.write("READY\n"); sys.stdout.flush()
+for line in sys.stdin:
+    fields = line.rstrip("\n").split("\t")
+    with log.open("a") as f: f.write("|".join(fields[1:]) + "\n")
+    sys.stdout.write(" Hola. [Música]\n"); sys.stdout.flush()
+'''
+
+
+def test_spanish_call_sends_the_language_and_drops_noise_tags(tmp_path):
+    script = tmp_path / "fake_lang.py"
+    script.write_text(FAKE_LANG, encoding="utf-8")
+    log = tmp_path / "lang.log"
+    asr = WhisperDaemonASR([sys.executable, str(script), str(log)])
+    asr.language = "es"
+    text = run(asr, asr.transcribe(bytes([0xFF]) * 8000))
+    assert log.read_text().strip().endswith("|es") and "Música" not in text and "Hola" in text
