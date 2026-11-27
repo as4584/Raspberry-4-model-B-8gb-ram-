@@ -941,7 +941,8 @@ class Brain:
                 if slots.action == "offer_slots" and st2 and st2.offered:
                     times = re.sub(r"^(?:\w+[.!]\s+)?(?:the soonest i have is |[a-z]+ i have )", "", (slots.speech or ""), flags=re.I)
                     times = re.split(r"\. ", times)[0].rstrip(".")
-                    offer = f" I can book you a free call with Alex to go over it. The soonest I have is {times}. Would one of those work?"
+                    ask = "Would one of those work?" if re.search(r",| or ", times) else "Would that work?"
+                    offer = f" I can book you a free call with Alex to go over it. The soonest I have is {times}. {ask}"
                 else:
                     offer = " Would you like me to book you a free call with Alex, or take your name and number so he can follow up?"
                 r = Reply(r.text, r.action, r.committed_id, speech=r.speech + offer)
