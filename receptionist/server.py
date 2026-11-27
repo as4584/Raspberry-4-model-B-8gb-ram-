@@ -172,8 +172,10 @@ def select_dialogue_factory(env, store, require_caller_id: bool, load_intents=No
             intents=load_intents(env['BRAIN_DIR'])
             from receptionist.brain import Brain
             knowledge=load_knowledge(env,intents)
+            from receptionist.notify import webhook_notifier
+            notify=webhook_notifier(env)
             return (lambda: Brain(store,intents=intents,require_caller_id=require_caller_id,profile=profile,
-                                  knowledge=knowledge)),'brain'
+                                  knowledge=knowledge,on_message=notify)),'brain'
         except Exception:
             log.warning('brain unavailable, using rule dialogue',exc_info=True)
     return (lambda: Dialogue(store,require_caller_id=require_caller_id)),'rules'

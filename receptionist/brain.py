@@ -617,7 +617,9 @@ class Brain:
                                                        "[ES] " + body, caller_id=caller_id)
             if self.on_message:
                 try:
-                    self.on_message({"name": m.get("name"), "callback": m.get("callback") or caller_id})
+                    self.on_message({"name": m.get("name"), "callback": m.get("callback") or caller_id,
+                                     "urgent": bool(re.search(r"urgent|emergencia|urgente|ya mismo", body.lower())),
+                                     "language": "es"})
                 except Exception:
                     pass
             m["saved"] = True
@@ -847,7 +849,8 @@ class Brain:
             self.store.mark_message(self._last_msg[s], "urgent")
         if self.on_message:
             try:
-                self.on_message({"name": flow.get("name"), "callback": flow.get("callback")})
+                self.on_message({"name": flow.get("name"), "callback": flow.get("callback"),
+                                 "urgent": bool(URGENT.search(flow["body"].lower())), "language": "en"})
             except Exception:
                 pass                              # a notifier problem never breaks the call
         at = f" at {heard_back}" if heard_back else ""
