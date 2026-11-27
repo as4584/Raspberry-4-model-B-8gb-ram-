@@ -618,7 +618,7 @@ class Brain:
             if self.on_message:
                 try:
                     self.on_message({"name": m.get("name"), "callback": m.get("callback") or caller_id,
-                                     "urgent": bool(re.search(r"urgent|emergencia|urgente|ya mismo", body.lower())),
+                                     "urgent": bool(re.search(r"\burgent|emergencia|urgente|ya mismo\b", body.lower())),
                                      "language": "es"})
                 except Exception:
                     pass
