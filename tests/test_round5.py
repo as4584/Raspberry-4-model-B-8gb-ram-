@@ -65,3 +65,8 @@ def test_message_in_the_same_breath_is_kept(brain):
     talk(brain, "Can you take a message?", "Lisa Moretti, 973 555 0199, tell him I want online booking for my salon")
     ms = brain.store.messages()
     assert ms and "online booking" in ms[0]["body"]
+
+
+def test_haggle_spoken_hundreds(brain):
+    r = talk(brain, "Can you do it for six hundred?")
+    assert "budget" in said(r[0])

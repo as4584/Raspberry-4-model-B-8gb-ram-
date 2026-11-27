@@ -83,7 +83,7 @@ PRODUCT_Q = re.compile(r"\b(answer|pick up|take|handle) ((my|our|the) )?(phone|p
                        r"\bcan (it|she) (book|fill|handle|schedule|cancel|take|answer|text)\b|"
                        r"\b(calls?|phones?) for (my|our) (business|shop|salon|restaurant|office|store|company)\b", re.I)
 HAGGLE = re.compile(r"\b(knock|bring|take) (the price|it|that) down\b|\b(cheaper|discount|lower (the |your )?price|"
-                    r"too expensive|for less|best price|deal on)\b|\b(do it|do that|go) for \$?\d{2,}|\bcan you do (\w+ )?(hundred|\d{3})\b", re.I)
+                    r"too expensive|for less|best price|deal on)\b|\b(do it|do that|go) for \$?\d{2,}|\bfor (\w+ )?hundred( dollars| bucks)?\b|\bcan you do (\w+ )?(hundred|\d{3})\b", re.I)
 HAGGLE_SPEECH = ("I understand, and the price matters. Websites start at one thousand dollars, and that includes building it right "
                  "and keeping it running. On a free call, Alex can look at what you really need and keep it within your budget.")
 SOLO_Q = re.compile(r"\b(just (alex|him|one (guy|person|man))|one (guy|man) (show|operation)|hit by a bus|"
