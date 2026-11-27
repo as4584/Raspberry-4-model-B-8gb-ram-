@@ -39,3 +39,17 @@ def test_booking_for_themselves_is_still_booking(brain):
 def test_round4_faq(q, entry):
     hit = kb().best(q)
     assert hit and hit[0] == entry, (q, hit)
+
+
+def test_answer_phones_without_my_is_the_pitch(brain):
+    assert brain.handle("Can you answer phones for my barbershop?", "c", caller_id=CALLER).action == "pitch"
+
+
+def test_haggling_gets_the_kind_firm_answer(brain):
+    r = brain.handle("Can you knock the price down a bit?", "c", caller_id=CALLER)
+    assert "budget" in said(r)
+
+
+def test_just_one_guy_is_not_a_transfer(brain):
+    r = brain.handle("So it's just Alex? One guy?", "c", caller_id=CALLER)
+    assert r.action != "handoff" and "directly" in said(r)

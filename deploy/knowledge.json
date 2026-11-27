@@ -369,7 +369,11 @@
     "does it work with my booking app",
     "can it sync with my calendar",
     "does it integrate with Dentrix",
-    "can it use Google Calendar"
+    "can it use Google Calendar",
+    "does it hook up to Square",
+    "does it work with Square",
+    "can it hook into my point of sale",
+    "does it work with Toast or Clover"
    ],
    "a": "Alex can connect most tools, and he'll check yours on the free call so you know for sure before you pay anything."
   },

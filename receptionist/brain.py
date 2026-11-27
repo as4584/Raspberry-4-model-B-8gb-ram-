@@ -77,11 +77,19 @@ SPAM_SPEECH = "Thanks, but we're not interested. Please remove this number from 
 NOWHERE_SPEECH = ("I'm sorry, I'm having trouble understanding, so I'll let you go for now. "
                   "Please call back anytime. Goodbye.")
 UNPRODUCTIVE = {"repeat", "unknown", "lost", "ask_again", "confirm_again"}
-PRODUCT_Q = re.compile(r"\b(answer|pick up|take|handle) (my|our|the) (phone|phones|calls?)\b|"
+PRODUCT_Q = re.compile(r"\b(answer|pick up|take|handle) ((my|our|the) )?(phone|phones|calls?)\b(?! (with|from) alex)|"
                        r"\b(receptionist|something|someone|one) like you\b|"
                        r"\b(do|set up|make|build) (this|that|one of these|something like this) for (my|our)\b|"
                        r"\bcan (it|she) (book|fill|handle|schedule|cancel|take|answer|text)\b|"
                        r"\b(calls?|phones?) for (my|our) (business|shop|salon|restaurant|office|store|company)\b", re.I)
+HAGGLE = re.compile(r"\b(knock|bring|take) (the price|it|that) down\b|\b(cheaper|discount|lower (the |your )?price|"
+                    r"too expensive|for less|best price|deal on)\b|\bcan you do (\w+ )?(hundred|\d{3})\b", re.I)
+HAGGLE_SPEECH = ("I understand, and the price matters. Websites start at one thousand dollars, and that includes building it right "
+                 "and keeping it running. On a free call, Alex can look at what you really need and keep it within your budget.")
+SOLO_Q = re.compile(r"\b(just (alex|him|one (guy|person|man))|one (guy|man) (show|operation)|hit by a bus|"
+                    r"how (big|many people))\b", re.I)
+SOLO_SPEECH = ("LexMakesIt is Alex's business, so you work with him directly, the person who actually builds it. "
+               "Your domain is always yours, and you can buy the code if you ever want it.")
 PITCH_SPEECH = ("You're actually talking to one right now! A receptionist like me can answer your calls any time, "
                 "answer questions about your business, book appointments, take messages, and hang up on spam calls. "
                 "Any business can get one, and the price is flexible based on your size. "
@@ -677,6 +685,10 @@ class Brain:
             r = self._message_step(flow, text, low, session_id, caller_id)
             if r is not None:
                 return r
+        if HAGGLE.search(low):
+            return Reply(HAGGLE_SPEECH, "knowledge", speech=HAGGLE_SPEECH)
+        if SOLO_Q.search(low):
+            return Reply(SOLO_SPEECH, "knowledge", speech=SOLO_SPEECH)
         if PRODUCT_Q.search(low) and not self._booked.get(session_id):
             self._calls[session_id] = _Call()
             self.dialogue._pending.pop(session_id, None)
