@@ -35,3 +35,11 @@ def test_bare_no_asks_to_spell(brain):
     r = talk(brain, "Mike Talvato", "No", "D-E-L-G-A-D-O")
     assert "spell" in said(r[1])
     assert brain.store.active()[0]["name"].endswith("Delgado")
+
+
+def test_garbled_name_is_asked_once_more(brain):
+    booked(brain)
+    r = talk(brain, "Mike Mattel-Garo Mikezzo Garo Mikezzo Garo Mikezzo Garo Mikezzo Garo candles Hello Woody personaje norma")
+    assert "name" in said(r[0]) and "again" in said(r[0])
+    r = talk(brain, "Mike Delgado")
+    assert "mike delgado" in said(r[0])

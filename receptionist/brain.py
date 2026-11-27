@@ -1204,6 +1204,12 @@ class Brain:
             self._msg.pop(s, None)
             first_bit = re.split(r"[.,;:!?]", self._raw.get(s, text).strip())[0]   # original case: names need capitals
             name = self._name_from(first_bit) if len(first_bit.split()) <= 4 or SAID_NAME.search(first_bit) else None
+            garbled = len(text.split()) > 8 and not QUESTION.search(low) and not WANTS_BOOKING.search(low) \
+                and not MOVE.search(low) and not CANCEL_IT.search(low) and not any(vars(parse_when(text, self.clock())).values())                 or bool(re.search(r"[^\x00-\u024f\s]", self._raw.get(s, text)))
+            if not name and garbled and not flow.get("tries"):
+                self._msg[s] = {**flow, "tries": 1}    # the line garbled it: ask once more, don't give up
+                words = "Sorry, the line cut out a little. Could you say your name again?"
+                return Reply(words, "ask_name", speech=words)
             if not name:
                 return None                       # they moved on; handle the turn normally
             self._names[s] = name
