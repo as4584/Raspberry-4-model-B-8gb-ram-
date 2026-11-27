@@ -70,3 +70,21 @@ def test_spanish_voice_only_when_configured():
     from receptionist.server import select_tts_es
     assert select_tts_es({"VOICE_BACKEND": "local"}) is None
     assert select_tts_es({"VOICE_BACKEND": "local", "PIPER_MODEL_ES": "/m/es.onnx", "PIPER_RESIDENT": "1"}) is not None
+
+
+def test_detection_stays_on_until_a_real_english_turn(tmp_path):
+    class Unsure:
+        def handle(self, text, session, caller_id=None):
+            if "hola" in text:
+                return Reply("Hola", "spanish", speech="Hola.")
+            if text == "garble":
+                return Reply("?", "unknown", speech="Sorry?")
+            return Reply("ok", "faq", speech="Okay.")
+    asr, en, es = ASR(["garble", "hola", "gracias"]), Voice(), Voice()
+    eng = CallEngine(BookingStore(str(tmp_path / "u.sqlite")), asr=asr, tts=en, tts_es=es,
+                     dialogue_factory=lambda: Unsure())
+    script = [CallStart("C1", "+15550000001")]
+    for _ in range(3):
+        script += [*[AudioIn(LOUD)] * 10, *[AudioIn(QUIET)] * 20, 0.6]
+    asyncio.run(eng.run(FakeTransport(script)))
+    assert asr.seen == ["auto", "auto", "es"]
