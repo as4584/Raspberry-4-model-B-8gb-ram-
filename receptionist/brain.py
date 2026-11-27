@@ -61,7 +61,8 @@ MISHEARD = [(re.compile(p, re.I), w) for p, w in (
     (r"\b(into|in to|to) ?more\b(?! than)", "tomorrow"), (r"\bto morrow\b", "tomorrow"),
     (r"\bpoint ?meant\b", "appointment"), (r"\bhour\b(?= *\?| on| today)", "hours"),
     (r"\b(puff?ake|pasaic|passaick|passay it|pass a ick)\b", "Passaic"),
-    (r"\bto (?=p\.? ?m\b|a\.? ?m\b)", "two "), (r"\b(shutter|satur|sader|sadder)day\b", "Saturday"), (r"\bto (a )?o?'? ?clock\b", "two o'clock"))]
+    (r"\bto (?=p\.? ?m\b|a\.? ?m\b)", "two "), (r"\b(shutter|satur|sader|sadder)day\b", "Saturday"),
+    (r"\b(?:for|four) (thirty|30)\b", "4:30"), (r"\b(?:two|to) thirty\b", "2:30"), (r"\bthree thirty\b", "3:30"), (r"\bto (a )?o?'? ?clock\b", "two o'clock"))]
 DATE_Q = re.compile(r"\bwhat('?s| is)? (the )?(day|date|time)( is it| today)?\b|\btoday'?s date\b|\bwhat day is (it|today)\b")
 UNKNOWN_MATCH = 0.6           # an unplaced question takes a checked answer only when it's a fair match
 STRONG_MATCH = 0.75          # override a keyword FAQ hit only when clearly closer (Pi: good 0.85+, wrong 0.61)
@@ -534,6 +535,9 @@ def phone_in(text: str) -> tuple[str | None, str]:
 def collapse_repeats(text: str) -> str:
     """Phone ASR sometimes loops a sentence ('How much? How much? How much?'): keep one.
     A stutter ('I-I-I w-w-want a w-website') keeps the whole word."""
+    text = re.sub(r"\b[A-Z](?:[-.][A-Z]){3,}\b",
+                  lambda m: m.group(0) if len(set(re.sub(r"[-.]", "", m.group(0)))) == 1
+                  else re.sub(r"[-.]", "", m.group(0)).capitalize(), text)       # a spelled-out name, not a stutter
     # Phone ASR writes a stutter as capital letters before the word ("BB Barbershop", "AW website").
     def _drop(m):
         tok = m.group(1).replace("-", "")
@@ -1023,6 +1027,7 @@ class Brain:
             return n.split()[0]
 
         booking_turn = (ES_BOOK.search(low) and re.search(r"\b(cita|agendar|reservar|hacer una)\b", low)) or (
+            re.search(r"\b(lunes|martes|mi[eé]rcoles|jueves|viernes|mañana|hoy)\b", low) and re.search(r"\ba la?s? \w+|por la (mañana|tarde)", low)) or (
             m.get("booking") and (ES_YES.match(low) or re.search(r"\ba la?s? \w+|\b(lunes|martes|mi[eé]rcoles|jueves|viernes|mañana|hoy)\b", low)))
         if booking_turn and not ES_BYE.search(low):
             return self._spanish_booking(text, low, s, caller_id)
@@ -1646,8 +1651,9 @@ class Brain:
             return Reply(words or REAL_PERSON, "knowledge", speech=words or REAL_PERSON)
         # Waiting for yes/no and heard a short word that is neither (Ryan voice: "Yes." -> "Just"):
         # a person asks again rather than guessing either way.
-        if pending and len(low.split()) <= 4 and not NEGATE.match(low) and not AFFIRM.match(low):
-            nm = self._lead_name(utterance) if utterance[:1].isupper() else None
+        if pending and (len(low.split()) <= 4 or SAID_NAME.search(utterance)) and not NEGATE.match(low) and not AFFIRM.match(low):
+            said_nm = SAID_NAME.search(utterance)
+            nm = (self._name_from(said_nm.group(0)) if said_nm else None) or (self._lead_name(utterance) if utterance[:1].isupper() else None)
             if nm and nm.split()[0].lower() not in NOT_A_NAME and not any(vars(parse_when(text, self.clock())).values()):
                 self._names[session_id] = nm         # "Mike Kowalski" before the yes: keep it, ask again kindly
                 words = f"Thanks, {nm.split()[0]}. Should I go ahead and book that time for you?"
