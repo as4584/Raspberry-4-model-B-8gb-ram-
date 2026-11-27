@@ -66,7 +66,8 @@ def synth(phrase, cache: Path, model: str | None = None):
     return f.read_bytes()
 
 
-def transcribe(model, mulaw, ctx, greedy, threads=4, timeout=120, lang="en"):
+def transcribe(model, mulaw, ctx, greedy, threads=None, timeout=120, lang="en"):
+    threads = threads or int(os.environ.get("ASR_THREADS", "4"))
     with tempfile.TemporaryDirectory() as d:
         wav = Path(d) / "u.wav"
         with wave.open(str(wav), "wb") as w:
