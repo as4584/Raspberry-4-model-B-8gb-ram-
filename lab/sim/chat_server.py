@@ -31,6 +31,8 @@ from receptionist.server import load_business_profile, select_dialogue_factory  
 
 ENDS = {"goodbye", "end", "hangup"}
 WHISPER = "/opt/pi-receptionist/speech/models/ggml-base.en-q5_1.bin"
+WHISPER_ES = os.environ.get("WHISPER_MODEL_ES", "/home/prototype/models/es/ggml-base-q5_1.bin")
+VOICE_ES = os.environ.get("PIPER_MODEL_ES", "/home/prototype/models/es/es_MX-claude-high.onnx")
 
 
 class Lab:
@@ -45,16 +47,21 @@ class Lab:
         self.lock = threading.Lock()
         self.ears_lock = threading.Lock()      # one whisper run at a time on the Pi
 
-    def hear(self, text: str) -> str:
+    def hear(self, text: str, lang: str = "en") -> str:
+        """Phone path. A call the brain has switched to Spanish is heard like production would:
+        a Spanish caller voice, the multilingual model, language fixed to es."""
         import asr_sweep
+        es = lang == "es" and os.path.exists(WHISPER_ES) and os.path.exists(VOICE_ES)
         with self.ears_lock, tempfile.TemporaryDirectory() as d:
-            heard, *_ = asr_sweep.transcribe(WHISPER, asr_sweep.synth(text, Path(d)), "adaptive", True)
+            mulaw = asr_sweep.synth(text, Path(d), VOICE_ES if es else None)
+            heard, *_ = asr_sweep.transcribe(WHISPER_ES if es else WHISPER, mulaw, "adaptive", True, lang="es" if es else "en")
         return heard
 
     def turn(self, session: str, text: str, ears: bool) -> dict:
-        heard = self.hear(text) if ears else text
         with self.lock:
             brain = self.sessions.setdefault(session, self.factory())
+        lang = getattr(brain, "_lang", {}).get(session, "en")
+        heard = self.hear(text, lang) if ears else text
         t0 = time.monotonic()
         r = brain.handle(heard, session, caller_id="+15550001000")
         return {"heard": heard, "reply": r.speech or r.text, "action": r.action,
