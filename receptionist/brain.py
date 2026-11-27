@@ -113,17 +113,17 @@ ROUND13 = [
      "How can I help you today? Then I'd answer questions, take a message, or book an appointment. "
      "Alex sets the exact words and tone with you, so it sounds just right."),
     (re.compile(r"\b(both|two|multiple|several|all|each of) (of )?(my |our )?(locations|shops|stores|offices|branches)\b|\bmore than one (location|shop|store|office)\b"),
-     "Yes, one receptionist can answer for more than one location. I can ask which location the caller wants, "
-     "and send each message to the right place. Alex sets it up with you on a free call."),
+     "Yes, Alex can set up one receptionist for more than one location, so it asks which location the caller wants "
+     "and sends each message to the right place. He'll go over it with you on a free call."),
     (re.compile(r"\btake (pizza |food |phone |their |customer )?orders\b|\borders? by phone\b|\bphone orders?\b"),
-     "Yes, a receptionist like me can take orders by phone, reading back each order and sending it to you. "
-     "Alex sets up your menu and how orders reach you on a free call."),
+     "Alex can set up a receptionist to take orders by phone, reading each order back and sending it to you. "
+     "He'd build it around your menu, so he'll go over the details with you on a free call."),
     (re.compile(r"\bclaims?\b"),
-     "Yes, I can take claim information after hours, like the caller's name, policy number, and what happened, "
-     "in a calm, professional way, and send it to you right away. Alex sets up the exact questions with you."),
+     "Yes, Alex can set a receptionist up to take claim information after hours, like the caller's name, policy number, "
+     "and what happened, in a calm, professional way, and send it to you. He sets up the exact questions with you."),
     (re.compile(r"\b(a bunch of|several|multiple|many|lots of|two|three) calls (at once|at the same time)\b|\bcalls at (once|the same time)\b|\brush\b"),
-     "Yes, a receptionist like me can answer more than one call at the same time, so nobody waits on hold during a rush. "
-     "Alex sizes it for your busiest times on a free call."),
+     "That depends on how it's set up. Alex can size it for your busiest times, so callers aren't left hanging during a rush. "
+     "He'll go over how many calls at once on a free call."),
 ]
 ROUND12 = [
     (re.compile(r"\b(galler(y|ies)|client photos|photo albums?)\b"),
@@ -139,7 +139,7 @@ ROUND12 = [
      "Yes, a receptionist like me can ask each caller the questions you choose, like the car, the problem, and the address, "
      "and send it all to you. Alex sets up the questions with you on a free call."),
     (re.compile(r"\b(in stock|inventory|have (it|that) in stock|stock (check|lookup)|what'?s in stock)\b"),
-     "Yes, Alex can connect me to your product list, so I can tell callers what's in stock. He sets that up with you on a free call."),
+     "Alex can connect a receptionist to your product list, so it can tell callers what's in stock. He sets that up with you on a free call."),
     (re.compile(r"\b(evenings?|tonight|after work)\b"),
      "My calendar has daytime slots, up to five p m. I can note that you'd prefer an evening, and Alex can let you know "
      "if that works. Would you like me to take that message, or would a daytime time work?"),

@@ -28,7 +28,7 @@ def test_greeting_demo(brain):
     ("Could one receptionist answer for both of my locations?", "location"),
     ("Can it take pizza orders by phone?", "order"),
     ("Can it take claim information after hours?", "claim"),
-    ("Can it handle a bunch of calls at once on a Friday rush?", "same time"),
+    ("Can it handle a bunch of calls at once on a Friday rush?", "busiest"),
 ])
 def test_receptionist_capabilities(brain, q, want):
     r = talk(brain, q)[0]
