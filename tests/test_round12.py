@@ -93,3 +93,12 @@ def test_asr_stutter_call_is_understood(brain):
     r = talk(brain, "H8 Thai. AIIW want AW website.", "FF for my BB Barbershop.")
     assert any("thousand" in said(x) or "website" in said(x) for x in r)
     assert not any(x.action == "hangup" for x in r)
+
+
+def test_garbled_number_is_not_a_booking(brain):
+    r = talk(brain, "HIT Thai. AIIW 1 A. On W website.")
+    assert r[0].action not in SLOTS
+
+
+def test_real_day_and_time_still_books(brain):
+    assert talk(brain, "Tuesday at 2 works for me")[0].action in SLOTS
