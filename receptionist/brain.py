@@ -212,6 +212,8 @@ ES = {
     "speaks": "Sí, yo le atiendo en español con mucho gusto, y le paso todo a Alex con los detalles. ¿En qué le puedo ayudar?",
     "recep": ("Una recepcionista como yo contesta sus llamadas, en inglés o en español, toma mensajes y agenda citas. "
               "El precio es flexible, según el tamaño de su negocio. Alex se lo explica en una llamada gratis."),
+    "recep_price": ("El precio es flexible, según el tamaño de su negocio y cuántas llamadas recibe. "
+                    "Buen servicio, a buen precio. Alex le da un número exacto en una llamada gratis."),
     "tools": "Alex puede conectar la mayoría de los sistemas, como Square, y le confirma el suyo en la llamada gratis.",
     "order": "Sí, Alex puede hacer pedidos en línea, para que sus clientes ordenen y paguen desde su página.",
     "repeat_number": "Disculpe, creo que me faltó un número. ¿Me lo repite despacio, por favor?",
@@ -787,7 +789,7 @@ class Brain:
         if ES_ORDER.search(low):
             return say("order", "knowledge")
         if ES_PRICE.search(low):
-            return say("recep" if m.get("topic") == "recep" else "price", "knowledge")
+            return say("recep_price" if m.get("topic") == "recep" else "price", "knowledge")
         if m.get("want") == "body" and len(low.split()) >= 3:
             m["body"] = text.strip()
             save()

@@ -46,7 +46,7 @@ CONVERSATIONS = [
     ("message", ["Can you take a message?", "Kim Tran, 201 555 0177", "Tell him my site is down, it's urgent", "That's it, thanks"],
      [(1, "two oh one"), (2, "message"), (3, "take care")]),
     ("one_breath", ["Have Alex call me, 973 555 0142, Walter Brennan", "About a website for my woodworking"], [(0, "walter"), (1, "walter")]),
-    ("book", ["Can I book a call with Alex {day} at {hour}?", "Yes", "Dana Morales"], [(1, "all set"), (2, "dana")]),
+    ("book", ["Can I book a call with Alex {day} at {hour}?", "Yes", "Dana Morales"], [(1, "code"), (2, "dana")]),
     ("book_bye", ["Can I book something {day2} at {hour2}?", "Okay perfect, thanks, bye"], [(1, "take care")]),
     ("slower", ["How much is a website?", "Could you say that slower?"], [(1, "thousand")]),
     ("spam", ["This is a call about your car's extended warranty, press 1"], [(0, "goodbye")]),
