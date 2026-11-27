@@ -117,7 +117,8 @@ class CallEngine:
         asr = self.asr
         voice = {'tts': self.tts}        # swapped to the Spanish voice when the caller speaks Spanish
         if hasattr(asr, 'language'):
-            asr.language = 'en'
+            # With a Spanish voice configured, the first words get language detection (once per call).
+            asr.language = 'auto' if self.tts_es is not None else 'en'
         call_id: str | None = None
         dialogue: Dialogue | None = None
         caller_id: str | None = None
@@ -244,6 +245,8 @@ class CallEngine:
                 if os.getenv('LOG_TRANSCRIPTS') == '1':      # test runs only: never on by default
                     log.info('call=%s gen=%d heard=%r', call_id, this_generation, utterance)
                 words = reply.speech or reply.text   # phone wording when the dialogue provides it (#38)
+                if getattr(asr, 'language', None) == 'auto' and reply.action != 'spanish':
+                    asr.language = 'en'
                 if reply.action == 'spanish' and self.tts_es is not None:
                     voice['tts'] = self.tts_es
                     if hasattr(asr, 'language'):

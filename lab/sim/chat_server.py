@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import tempfile
 import threading
@@ -45,22 +46,29 @@ class Lab:
             raise SystemExit("brain bundle did not load (check BRAIN_DIR)")
         self.sessions: dict[str, object] = {}
         self.lock = threading.Lock()
-        self.ears_lock = threading.Lock()      # one whisper run at a time on the Pi
+        self.ears_lock = threading.Lock()
+        self.heard_once: set[str] = set()      # one whisper run at a time on the Pi
 
     def hear(self, text: str, lang: str = "en") -> str:
         """Phone path. A call the brain has switched to Spanish is heard like production would:
         a Spanish caller voice, the multilingual model, language fixed to es."""
         import asr_sweep
-        es = lang == "es" and os.path.exists(WHISPER_ES) and os.path.exists(VOICE_ES)
+        bilingual = os.path.exists(WHISPER_ES) and os.path.exists(VOICE_ES)
+        # The simulated caller's own voice follows what they say.
+        spanish_caller = bilingual and bool(re.search(r"[áéíóúñ¿¡]|\b(hola|necesito|quiero|gracias|cuánto|bueno|mira)\b", text, re.I))
         with self.ears_lock, tempfile.TemporaryDirectory() as d:
-            mulaw = asr_sweep.synth(text, Path(d), VOICE_ES if es else None)
-            heard, *_ = asr_sweep.transcribe(WHISPER_ES if es else WHISPER, mulaw, "adaptive", True, lang="es" if es else "en")
+            mulaw = asr_sweep.synth(text, Path(d), VOICE_ES if spanish_caller else None)
+            # Production with Spanish on: one multilingual model, first words auto-detected.
+            model = WHISPER_ES if bilingual else WHISPER
+            heard, *_ = asr_sweep.transcribe(model, mulaw, "adaptive", True, lang=lang if bilingual else "en")
         return heard
 
     def turn(self, session: str, text: str, ears: bool) -> dict:
         with self.lock:
             brain = self.sessions.setdefault(session, self.factory())
-        lang = getattr(brain, "_lang", {}).get(session, "en")
+        first = session not in self.heard_once
+        self.heard_once.add(session)
+        lang = "auto" if first else getattr(brain, "_lang", {}).get(session, "en")
         heard = self.hear(text, lang) if ears else text
         t0 = time.monotonic()
         r = brain.handle(heard, session, caller_id="+15550001000")

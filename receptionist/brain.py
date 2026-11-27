@@ -173,6 +173,10 @@ def spoken_number_es(digits: str) -> str:
     return ", ".join(" ".join(ES_DIGITS[int(c)] for c in g) for g in groups if g)
 
 
+# What English-only ears make of Spanish ("Ola, Fiono, Mira, Nesocito una pajino"): sound-alikes.
+SPANISH_GARBLE = re.compile(r"\b(h?ola|mira|ne[sc]+[eio]s?[aeiou]?[ct]i?to|pa[gjh]in[ao]|[ck]u?[ae]?nto|[ck]ust?a|quier?o|quiro|"
+                            r"gra[cs]ias|bueno|se[nñ]or[ae]?|por favor|resta?u?rante|tarante|numero|minumo|"
+                            r"llamo|milamo|pagar\w*|dep[oó]sito|bizzito|pedido|padido|linya|l[ií]nea|una|para)\b", re.I)
 SPANISH_LEAD = ("Hola, gracias por llamar. Con gusto le ayudo. Alex le puede llamar. "
                 "¿Me dice su nombre y su número de teléfono, por favor?")
 SPANISH = re.compile(r"\b(spanish|espa[nñ]ol|habla)\b")
@@ -928,7 +932,8 @@ class Brain:
                 body = " ".join(parts[:2]) if len(parts) > 2 else (parts[0] if len(parts) > 1 else body)
                 return Reply(body, "repeat_back", speech=f"Sure. {body}")
             return Reply(body, "repeat_back", speech=f"Of course. {body}")
-        if SPANISH.search(low) or len(SPANISH_WORDS & set(low.split())) >= 2:
+        if SPANISH.search(low) or len(SPANISH_WORDS & set(low.split())) >= 2 \
+                or len(set(m.group(0).lower() for m in SPANISH_GARBLE.finditer(low))) >= 3:
             # Spanish speakers are a big part of the customers: greet in Spanish and get a callback.
             self._msg.pop(session_id, None)
             self._lang[session_id] = "es"

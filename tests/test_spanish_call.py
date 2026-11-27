@@ -63,7 +63,7 @@ def test_next_call_starts_in_english_again(tmp_path):
     s = [CallStart("C1", "+15550000001"), *[AudioIn(LOUD)] * 10, *[AudioIn(QUIET)] * 20, 0.6]
     asyncio.run(eng.run(FakeTransport(s)))
     asyncio.run(eng.run(FakeTransport([CallStart("C2", "+15550000002"), 0.1])))
-    assert asr.language == "en"
+    assert asr.language == "auto"          # a fresh call detects again, never stuck in Spanish
 
 
 def test_spanish_voice_only_when_configured():
