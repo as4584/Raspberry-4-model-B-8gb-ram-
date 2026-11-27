@@ -132,3 +132,17 @@ def test_spanish_call_sends_the_language_and_drops_noise_tags(tmp_path):
     asr.language = "es"
     text = run(asr, asr.transcribe(bytes([0xFF]) * 8000))
     assert log.read_text().strip().endswith("|es") and "Música" not in text and "Hola" in text
+
+
+def test_short_turn_asks_for_the_prompt_long_turn_does_not(tmp_path):
+    script = tmp_path / "fake_p.py"
+    script.write_text(FAKE_LANG, encoding="utf-8")
+    log = tmp_path / "p.log"
+    asr = WhisperDaemonASR([sys.executable, str(script), str(log)])
+    asr.prompt_short = True
+    run(asr, asr.transcribe(bytes([0xFF]) * 8000))            # 1 s
+    asr2 = WhisperDaemonASR([sys.executable, str(script), str(log)])
+    asr2.prompt_short = True
+    run(asr2, asr2.transcribe(bytes([0xFF]) * 8000 * 4))      # 4 s
+    lines = log.read_text().strip().splitlines()
+    assert lines[0].endswith("|en|p") and not lines[1].endswith("p")

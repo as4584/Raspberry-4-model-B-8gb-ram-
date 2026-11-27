@@ -75,6 +75,7 @@ def select_asr_factory(env) -> tuple[Callable[[],object],str]:
         return (lambda: MockASR()),'mock'
     if env.get('WHISPER_DAEMON'):
         shared=WhisperDaemonASR([env['WHISPER_DAEMON'],env['WHISPER_MODEL'],env.get('WHISPER_THREADS','4')])
+        shared.prompt_short=bool(env.get('WD_PROMPT_EN') or env.get('WD_PROMPT_ES'))
         return (lambda: shared),'daemon'
     return (lambda: WhisperCppASR(env.get('WHISPER_CLI','whisper-cli'),env['WHISPER_MODEL'])),'cli'
 

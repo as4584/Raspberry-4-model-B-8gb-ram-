@@ -73,6 +73,9 @@ def transcribe(model, mulaw, ctx, greedy, threads=4, timeout=120, lang="en"):
             w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000)
             w.writeframes(audio.resample_pcm16(audio.pcm16_from_mulaw(mulaw), 8000, 16000))
         args = [os.environ["WHISPER_CLI"], "-m", model, "-f", str(wav), "-t", str(threads), "-l", lang, "-nt"]
+        prompt = os.environ.get(f"WD_PROMPT_{lang.upper()}")
+        if prompt and len(mulaw) / 8000 < 2.0:      # like production: short turns only
+            args += ["--prompt", prompt]
         if ctx == "adaptive":
             args += ["-ac", str(audio.audio_ctx_for(len(mulaw) / 8000))]
         if greedy:

@@ -170,6 +170,7 @@ class WhisperDaemonASR:
         self.tokens_per_s,self.extra_tokens=tokens_per_s,extra_tokens
         self._proc=None;self._lock=None
         self.language='en'   # 'es' for a Spanish caller (multilingual model only)
+        self.prompt_short=False   # with WD_PROMPT_* set: short turns use the vocabulary prompt
     @property
     def pid(self):return self._proc.pid if self._proc else None
     async def _ensure(self):
@@ -198,7 +199,9 @@ class WhisperDaemonASR:
                 cap=math.ceil(seconds*self.tokens_per_s)+self.extra_tokens
                 try:
                     proc=await self._ensure()
-                    lang='' if self.language=='en' else f'\t{self.language}'
+                    # Short turns ("Ten.", "A las diez.") get the vocabulary prompt; long ones don't (slower, loops).
+                    short=seconds<2.0 and self.prompt_short
+                    lang=('' if self.language=='en' and not short else f'\t{self.language}')+('\tp' if short else '')
                     proc.stdin.write(f'{raw}\t{audio_ctx_for(seconds)}\t{cap}{lang}\n'.encode())
                     await proc.stdin.drain()
                     line=await asyncio.wait_for(proc.stdout.readline(),self.timeout)

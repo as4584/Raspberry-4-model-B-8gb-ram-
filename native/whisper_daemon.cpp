@@ -1,3 +1,4 @@
+#include <cctype>
 // Resident whisper for phone turns (#28). Loads the model once, then per stdin line
 //   <raw s16le 16 kHz mono path>\t<audio_ctx>\t<max_tokens>
 // prints exactly one line: the transcript (newlines removed), or "ERR <reason>".
@@ -40,8 +41,11 @@ int main(int argc, char ** argv) {
         path = line.substr(0, a); ac = line.substr(a + 1, b - a - 1); mt = line.substr(b + 1);
         // Optional 4th field: language ("en", "es"); a multilingual model needs it, base.en ignores it.
         std::string lang = "en";
+        bool use_prompt = false;                  // optional 5th field "p": use the vocabulary prompt
         size_t c = mt.find('	');
         if (c != std::string::npos) { lang = mt.substr(c + 1); mt = mt.substr(0, c); }
+        size_t d = lang.find('	');
+        if (d != std::string::npos) { use_prompt = lang.substr(d + 1) == "p"; lang = lang.substr(0, d); }
         std::vector<float> pcm;
         if (!read_pcm(path, pcm) || pcm.empty()) { std::printf("ERR no audio\n"); std::fflush(stdout); continue; }
 
@@ -56,6 +60,12 @@ int main(int argc, char ** argv) {
         p.audio_ctx = std::atoi(ac.c_str());
         p.max_tokens = std::atoi(mt.c_str());
         p.suppress_nst = std::getenv("WD_SNS") != nullptr;
+        // Optional vocabulary prompt per language (WD_PROMPT_EN / WD_PROMPT_ES), only when the request asks
+        // for it: it fixes short turns ("A las diez" was "Alas pies") but slows long ones and loops them.
+        std::string key = "WD_PROMPT_" + lang;
+        for (char & ch : key) ch = (char) std::toupper((unsigned char) ch);
+        const char * prompt = std::getenv(key.c_str());
+        if (use_prompt && prompt && *prompt) p.initial_prompt = prompt;
 
         // Fresh decoder state per utterance: reusing one state across calls with a
         // changing audio_ctx made identical audio decode differently (Pi, 2026-11-18).
