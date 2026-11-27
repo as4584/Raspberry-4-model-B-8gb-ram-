@@ -144,6 +144,35 @@ LEGIT_SPEECH = ("Fair question. We keep client work private, so we don't share a
                 "is a free call, with no commitment, where he talks through your idea and how he'd build it.")
 SPANISH_WORDS = {"hola", "bueno", "mira", "necesito", "quiero", "página", "pagina", "por", "favor", "gracias", "señora",
                  "habla", "hablar", "español", "espanol", "usted", "tengo", "negocio", "restaurante", "llamar", "número"}
+ES_DIGITS = ["cero", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve"]
+ES_NAME = re.compile(r"\b(?:me llamo|mi nombre es|soy|habla|le habla)\s+([A-ZÁÉÍÓÚÑa-záéíóúñ]+(?:\s+(?!mi\b|y\b|de\b)[A-ZÁÉÍÓÚÑa-záéíóúñ]+)?)", re.I)
+ES_BYE = re.compile(r"\b(adi[oó]s|chao|bye|eso es todo|es todo|nada m[aá]s|hasta luego)\b")
+ES_PRICE = re.compile(r"\b(cu[aá]nto|precio|cuesta|cobran|costo)\b")
+ES_DEPOSIT = re.compile(r"\b(dep[oó]sito|pagos|plazos|adelanto|anticipo)\b")
+ES_BOOK = re.compile(r"\b(cita|reuni[oó]n|agendar|hablar con alex|llamada)\b")
+ES_TIME = re.compile(r"\b(cu[aá]nto tiempo|cu[aá]ndo est[aá]|r[aá]pido|demora|tarda)\b")
+ES = {
+    "ask_details": "Con gusto. ¿Me dice su nombre y su número de teléfono, por favor?",
+    "got_details": "Gracias, {name}. Tengo el {number}. ¿Qué le digo a Alex?",
+    "got_number": "Gracias. Tengo el {number}. ¿Y su nombre?",
+    "saved": ("Perfecto{name}. Le paso su mensaje a Alex, y él le va a llamar lo antes posible. "
+              "¿Le puedo ayudar con algo más?"),
+    "price": ("Una página web empieza en mil dólares, y luego son diez dólares al mes para mantenerla. "
+              "Alex le puede dar un precio exacto en una llamada gratis."),
+    "deposit": "No tenemos planes de pago. Para empezar se paga un depósito del cincuenta por ciento, y el resto al terminar.",
+    "time": "Depende del proyecto. Una página sencilla puede estar lista en veinticuatro horas, y una más grande hasta en un mes.",
+    "book": "Con gusto. Alex le va a llamar para hablar de su idea. ¿Me dice su nombre y su número?",
+    "lost": "Disculpe, no le entendí bien. ¿Me puede decir su nombre y su número, y Alex le llama?",
+    "bye": "Gracias por llamar{name}. ¡Que le vaya muy bien!",
+}
+
+
+def spoken_number_es(digits: str) -> str:
+    d = digits[1:] if len(digits) == 11 and digits[0] == "1" else digits
+    groups = [d[:3], d[3:6], d[6:]] if len(d) == 10 else [d]
+    return ", ".join(" ".join(ES_DIGITS[int(c)] for c in g) for g in groups if g)
+
+
 SPANISH_LEAD = ("Hola, gracias por llamar. Con gusto le ayudo. Alex le puede llamar. "
                 "¿Me dice su nombre y su número de teléfono, por favor?")
 SPANISH = re.compile(r"\b(spanish|espa[nñ]ol|habla)\b")
@@ -306,6 +335,8 @@ class Brain:
         self._utter: dict[str, str] = {}
         self._callbacks: dict[str, str] = {}
         self._nowhere: dict[str, int] = {}
+        self._lang: dict[str, str] = {}            # "es" once the caller speaks Spanish
+        self._es: dict[str, dict] = {}             # the Spanish call's message in progress
         self._topic: dict[str, str] = {}           # what the call is about ("receptionist" after the pitch)
         self._real: dict[str, bool] = {}           # the caller has said something real this call         # turns in a row that went nowhere
         self._given: dict[str, dict[str, str]] = {}   # answer text -> the question it first answered
@@ -405,6 +436,9 @@ class Brain:
             self._msg.pop(s, None)
             self.dialogue._pending.pop(s, None)
             return Reply("Goodbye.", "hangup", speech=SPAM_SPEECH)
+        if self._lang.get(s) == "es":
+            # Spanish calls answer in Spanish; the English rephrasing below doesn't apply.
+            return self._handle(utterance, session_id, caller_id)
         r = self._handle(utterance, session_id, caller_id)
         if r.action in ("offer_slots", "confirm_required") and re.match(r"^(is|does|do|can|could|will|would) (it|this|that|you|your|she)\b", low) \
                 and not BOOK_WORDS.search(low) and not any(vars(parse_when(utterance, self.clock())).values()):
@@ -526,6 +560,59 @@ class Brain:
                 and "'" not in dedup[1] and dedup[1].lower() not in NOT_A_NAME | {"my", "i", "and", "i'm"}:
             name.append(dedup[1])
         return " ".join(w[0].upper() + w[1:] for w in name)
+
+    def _spanish(self, text: str, low: str, s: str, caller_id: str | None) -> Reply:
+        """A Spanish call: name and number, the message, a few facts, goodbye. Saved like any message."""
+        m = self._es[s]
+        num, rest = phone_in(text)
+        got = ES_NAME.search(text)
+        name = got.group(1).strip() if got else None
+        if name:
+            name = " ".join(w[0].upper() + w[1:] for w in name.split())
+        if num:
+            m["callback"] = num
+        if name:
+            m["name"] = name
+        def say(key, action, **kw):
+            words = ES[key].format(**kw)
+            return Reply(words, action, speech=words)
+        def save():
+            body = m.get("body") or ("Llamada en español: " + m.get("first", ""))
+            self._last_msg[s] = self.store.add_message(m.get("name"), m.get("callback") or caller_id,
+                                                       "[ES] " + body, caller_id=caller_id)
+            if self.on_message:
+                try:
+                    self.on_message({"name": m.get("name"), "callback": m.get("callback") or caller_id})
+                except Exception:
+                    pass
+            m["saved"] = True
+        if ES_BYE.search(low) and (len(low.split()) <= 6):
+            if (m.get("callback") or m.get("name")) and not m.get("saved"):
+                save()
+            n = f", {m['name'].split()[0]}" if m.get("name") else ""
+            return say("bye", "goodbye", name=n)
+        if num or name:
+            if m.get("name") and m.get("callback"):
+                m["step"] = "body"
+                return say("got_details", "ask_message", name=m["name"].split()[0], number=spoken_number_es(m["callback"]))
+            if m.get("callback"):
+                return say("got_number", "ask_name", number=spoken_number_es(m["callback"]))
+            return say("ask_details", "ask_number")
+        if m.get("step") == "body" and len(low.split()) >= 3 and not ES_PRICE.search(low):
+            m["body"] = text.strip()
+            save()
+            m["step"] = None
+            n = f", {m['name'].split()[0]}" if m.get("name") else ""
+            return say("saved", "message_taken", name=n)
+        if ES_DEPOSIT.search(low):
+            return say("deposit", "knowledge")
+        if ES_PRICE.search(low):
+            return say("price", "knowledge")
+        if ES_TIME.search(low):
+            return say("time", "knowledge")
+        if ES_BOOK.search(low):
+            return say("book", "ask_name")
+        return say("lost", "unknown")
 
     def _lead_name(self, rest: str) -> str | None:
         """A name said next to a number: 'Kim, Bella Rose Boutique, <number>' / '<number>, Walter Brennan'."""
@@ -723,6 +810,8 @@ class Brain:
         if not re.search(r"[a-z]{2,}|[0-9]", low) or re.search(r"(\w{2,4})\1{3,}", low):
             return Reply("Sorry, I didn't catch that.", "repeat",
                          speech="Sorry, I didn't catch that. Could you say that again?")
+        if self._lang.get(session_id) == "es":
+            return self._spanish(utterance, low, session_id, caller_id)
         flow = self._msg.get(session_id)
         if flow and not closing(low):
             r = self._message_step(flow, text, low, session_id, caller_id)
@@ -841,7 +930,9 @@ class Brain:
             return Reply(body, "repeat_back", speech=f"Of course. {body}")
         if SPANISH.search(low) or len(SPANISH_WORDS & set(low.split())) >= 2:
             # Spanish speakers are a big part of the customers: greet in Spanish and get a callback.
-            self._msg[session_id] = {"step": "name", "body": "Spanish-speaking caller: " + text, "name_tries": 1}
+            self._msg.pop(session_id, None)
+            self._lang[session_id] = "es"
+            self._es[session_id] = {"first": text}
             words = SPANISH_LEAD if len(SPANISH_WORDS & set(low.split())) >= 2 else (
                 "I speak English best right now, but I'm happy to help. Hablo un poco de español: "
                 "Alex le puede llamar. ¿Me dice su nombre y su número, por favor?")
