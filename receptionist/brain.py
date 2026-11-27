@@ -1208,8 +1208,39 @@ class Brain:
                 return None                       # they moved on; handle the turn normally
             self._names[s] = name
             self.store.set_name(flow["ref"], name, caller_id)
-            words = f"Thanks, {name}! {ANYTHING_ELSE}"
+            # Phone audio garbles names ("Talvato" for "Delgado"): read it back so they can fix it.
+            self._msg[s] = {"step": "name_check", "ref": flow["ref"], "name": name}
+            words = f"Thanks! I have your name as {name}. Did I get that right?"
             return Reply(words, "name_taken", speech=words)
+        if step in ("name_check", "name_spell"):
+            raw = self._raw.get(s, text).strip()
+            if step == "name_check" and AFFIRM.match(low):
+                self._msg.pop(s, None)
+                words = f"Great, thanks {flow['name'].split()[0]}! {ANYTHING_ELSE}"
+                return Reply(words, "name_taken", speech=words)
+            spelled = collapse_repeats(raw)
+            fixed = None
+            m = re.match(r"^\W*(?:no+|nope|not quite)\W*(?:it'?s\s+|my name is\s+|i'?m\s+)?(.*)$", spelled, re.I)
+            rest = (m.group(1) if m else spelled).strip(" .,!")
+            if rest:
+                words_ = [w for w in re.findall(r"[A-Za-z][A-Za-z'-]*", rest)]
+                if 1 <= len(words_) <= 3 and words_[0].lower() not in NOT_A_NAME:
+                    caps = [w[0].upper() + w[1:] for w in words_]
+                    if step == "name_spell" and len(caps) == 1 and len(flow["name"].split()) > 1:
+                        caps = flow["name"].split()[:1] + caps        # spelled the last name only
+                    fixed = " ".join(caps)
+            if fixed:
+                self._msg.pop(s, None)
+                self._names[s] = fixed
+                self.store.set_name(flow["ref"], fixed, caller_id)
+                words = f"Got it, {fixed}. Thanks, and sorry about that! {ANYTHING_ELSE}"
+                return Reply(words, "name_fixed", speech=words)
+            if step == "name_check" and NEGATE.match(low):
+                flow["step"] = "name_spell"
+                words = "Sorry about that. Could you spell it for me?"
+                return Reply(words, "ask_name", speech=words)
+            self._msg.pop(s, None)
+            return None                           # they moved on
         if step == "name":
             num, rest = phone_in(text)
             if num:
