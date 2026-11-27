@@ -42,3 +42,14 @@ def test_spanish_pick_from_offered(brain):
 def test_spanish_garble_while_booking_isnt_a_name(brain):
     r = talk(brain, "Hola, buenos días", "Quiero una cita el jueves por la mañana", "Alofties")
     assert "alofties" not in said(r[2]) and "hora" in said(r[2])
+
+
+def test_buen_dia_then_booking_on_the_switch_turn(brain):
+    r = talk(brain, "Por la buen día.")
+    assert r[0].action == "spanish"
+
+
+def test_first_spanish_turn_asking_for_a_cita_books(brain):
+    r = talk(brain, "Quiero una cita el jueves por la mañana.", "A las diez.")
+    assert r[0].action in SLOTS and "jueves" in said(r[0])
+    assert r[1].action in ("confirm_required", "booked")

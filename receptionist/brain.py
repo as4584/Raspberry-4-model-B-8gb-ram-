@@ -340,7 +340,8 @@ PORTFOLIO_SPEECH = ("We keep client work private, so we don't share a portfolio.
                     "is a free call, with no commitment, where he talks through your idea and how he'd build it.")
 LEGIT_SPEECH = ("Fair question. The best way to see what Alex can do is a free call, with no commitment, "
                 "where he talks through your idea and exactly how he'd build it, before you pay anything.")
-SPANISH_WORDS = {"hola", "bueno", "mira", "necesito", "quiero", "página", "pagina", "por", "favor", "gracias", "señora",
+SPANISH_WORDS = {"cita", "lunes", "martes", "miércoles", "jueves", "viernes", "mañana", "tarde", "por", "una", "quisiera",
+                 "hola","bueno", "mira", "necesito", "quiero", "página", "pagina", "por", "favor", "gracias", "señora",
                  "habla", "hablar", "español", "espanol", "usted", "tengo", "negocio", "restaurante", "llamar", "número"}
 ES_DIGITS = ["cero", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve"]
 ES_NAME = re.compile(r"\b(?:me llamo|mi nombre es|soy|habla|le habla)\s+([A-ZÁÉÍÓÚÑa-záéíóúñ]+(?:\s+(?!mi\b|y\b|de\b)[A-ZÁÉÍÓÚÑa-záéíóúñ]+)?)", re.I)
@@ -456,7 +457,7 @@ def spoken_number_es(digits: str) -> str:
 SPANISH_GARBLE = re.compile(r"\b(h?ola|mira|ne[sc]+[eio]s?[aeiou]?[ct]i?to|pa[gjh]in[ao]|[ck]u?[ae]?nto|[ck]ust?a|quier?o|quiro|"
                             r"gra[cs]ias|bueno|se[nñ]or[ae]?|por favor|resta?u?rante|tarante|numero|minumo|"
                             r"llamo|milamo|pagar\w*|dep[oó]sito|bizzito|pedido|padido|linya|l[ií]nea|una|para)\b", re.I)
-SPANISH_GREET = re.compile(r"\b(buen[oa]s? (d[ií]as|tardes|noches)|buenas|al[oó]|diga(me)?|qu[eé] tal)\b")
+SPANISH_GREET = re.compile(r"\b(buen[oa]?s? (d[ií]as?|tardes|noches)|buenas|al[oó]|diga(me)?|qu[eé] tal)\b")
 SPANISH_LEAD = ("Hola, gracias por llamar. Habla la recepcionista virtual de LexMakesIt, el negocio de Alex. "
                 "Con gusto le atiendo en español. ¿En qué le puedo ayudar?")
 SPANISH = re.compile(r"\b(spanish|espa[nñ]ol|habla)\b")
@@ -773,7 +774,7 @@ class Brain:
             and not re.search(r"\b(for me|me in|me a|us in|us a)\b.*\b(tomorrow|today|monday|tuesday|wednesday|thursday|friday)\b", low)
         offered_call = any(w in (self._last_speech.get(s) or "") for w in ("free call", "book")) \
             and bool(AFFIRM.match(low) or re.search(r"\b(let'?s|go over|sounds good|sure)\b", low))
-        if r.action in ("offer_slots", "confirm_required", "closed_day") and not in_booking and not offered_call \
+        if r.action in ("offer_slots", "confirm_required", "closed_day") and not in_booking and not offered_call and self._lang.get(s) != "es" \
                 and (capability or not WANTS_BOOKING.search(low)):
             # They didn't ask to book ("what's 2+2?", "client portal charges?"): answer, don't schedule.
             hit = self.knowledge.best(utterance) if self.knowledge is not None else None
@@ -1527,6 +1528,10 @@ class Brain:
             self._lang[session_id] = "es"
             self._es[session_id] = {"first": text, "want": "details",
                                     "name": self._names.get(session_id), "callback": self._callbacks.get(session_id)}
+            if not self._last.get(session_id) and ES_BOOK.search(low) and re.search(r"\b(cita|agendar|reservar)\b", low):
+                # "Quiero una cita el jueves por la mañana" as the first words: greet and book in one go.
+                r = self._spanish_booking(utterance, low, session_id, caller_id)
+                return Reply(r.text, r.action, r.committed_id, speech="Hola. " + r.speech)
             asked = len(low.split()) >= 5 and (ES_SITE.search(low) or ES_PRICE.search(low) or ES_RECEP.search(low)
                                                or ES_DEPOSIT.search(low) or ES_TIME.search(low) or ES_ORDER.search(low))
             if not self._last.get(session_id) and asked:
