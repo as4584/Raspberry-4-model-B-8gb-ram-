@@ -234,3 +234,8 @@ class BookingStore:
     def set_message_callback(self, message_id: int, callback: str) -> None:
         with self._session() as db:
             db.execute("UPDATE messages SET callback=? WHERE id=?", (callback, message_id))
+
+    def append_message(self, message_id: int, more: str) -> None:
+        """Add a detail the caller gave after the message was saved ('mornings are best')."""
+        with self._session() as db:
+            db.execute("UPDATE messages SET body=body || ? WHERE id=?", (" " + more, message_id))

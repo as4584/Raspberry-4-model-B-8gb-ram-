@@ -103,11 +103,39 @@ WANTS_BOOKING = re.compile(r"\b(book|appointment|schedul\w*|reserve|set up a (ca
                            r"available|availability|free call|slot|opening|open|free|come in|see alex|talk (to|with) (alex|someone|somebody)|"
                            r"consultation|what (do you have|times|days)|when (are|is|can|could)|let'?s (do|go|set)|go over|"
                            r"sounds good|works for me|is fine|that works|lessons?|sessions?)\b")
+CALL_TIME = re.compile(r"\b(mornings?|afternoons?|evenings?|nights?|weekdays?|weekends?|anytime|any time|"
+                       r"after \w+|before \w+|between \w+|early|late|lunch ?time|best (time )?is|today)\b")
+ROUND10 = [
+    (re.compile(r"\b(reviews?|testimonials?|ratings?|yelp|google reviews?)\b"),
+     "I don't have reviews to read you, but Alex is happy to answer anything directly on a free call, "
+     "with no commitment, so you can decide for yourself."),
+    (re.compile(r"\b(tell|know|spot|recogni[sz]e)\b.*\b(emergenc\w*|urgent)\b|\b(text|alert|notify|call|page)\b (me )?(about |for |with )?(the )?(urgent|emergenc\w*)"),
+     "Yes. When a caller says it's urgent, like no heat or a leak, I mark the message urgent, so you can get it right away "
+     "and call them back first. Routine calls get a regular message or a booking."),
+    (re.compile(r"\b(food pantry|pantry|nonprofit|non-profit|charity|church|ministry|volunteer)\b.*\b(little|small|tight|no|not much)\b.*\b(money|budget|funds)\b"),
+     "That's wonderful work. Alex works with nonprofits, and he'll keep it simple and within your budget. "
+     "What would you like the site to do?"),
+    (re.compile(r"\b(sign ?-?up|contact|volunteer|registration|intake|order|request|lead|quote) forms?\b"),
+     "Yes, Alex can add a form like that, so people fill it out right on your site and you get their information."),
+    (re.compile(r"\b(qualif\w*|pre-?qualif\w*|screen\w*)\b.*\b(sellers?|buyers?|leads?|callers?|clients?|tenants?|patients?)\b|"
+                r"\bask (them|callers|sellers|buyers|people) (for |the |their )?\w+"),
+     "Yes, a receptionist like me can ask each caller the questions you choose, like the property address and their timeline, "
+     "and pass it all to you. Alex sets up the questions with you on a free call."),
+    (re.compile(r"\b(how (fast|soon|quick(ly)?)|launch\w*|go live|turnaround|up and running)\b"),
+     "It depends on what you need. A simple site can be ready in about twenty four hours, and a bigger project can take up to a month. "
+     "Alex gives you a real timeline on the free call."),
+    (re.compile(r"\b(ten|10)( dollars?| bucks)?( a| per| each)? month\b.*\b(cover|for|include|stop|cancel|quit)\b|"
+                r"\bmonthly (fee|charge|cost)\b.*\b(cover|for|stop|cancel)\b"),
+     "The ten dollars a month covers keeping your site running and managed, so you don't have to touch it. "
+     "There's no contract, so you can stop anytime, and the site goes off at the end of that month."),
+    (re.compile(r"\b(nda|non-?disclosure|confidentiality agreement)\b"),
+     "Alex can talk through a confidentiality agreement with you on the free call."),
+]
 POLICY = [
     (re.compile(r"\b(money back|refund\w*|get (my|a) refund)\b"),
      "There's no contract, so you can cancel anytime, and your website stays up until the end of that month. "
      "We don't offer refunds, which is why the first call is free, so you can be sure before you start."),
-    (re.compile(r"\bwhy\b.*\bdeposit\b|\bdeposit\b.*\bwhy\b|\bwhat'?s the deposit for\b"),
+    (re.compile(r"\bwhy\b.*\bdeposit\b|\bdeposit\b.*\bwhy\b|\bwhat'?s the deposit for\b|\b(so much|half) (up ?front|deposit)\b"),
      "The deposit gets your project started, and the rest is due when it's done. "
      "On the free call, Alex walks you through exactly what you'll get first."),
     (re.compile(r"\b(recorded|recording|record (this|the|my) calls?|train(ed|ing)? (the |an |any )?(ai|a i|model)|used to train)\b"),
@@ -562,10 +590,12 @@ class Brain:
         low = " ".join(re.sub(r"[.!?,]+", " ", utterance.lower()).split())
         in_booking = self._last.get(s) in BOOKING_STEPS or s in self.dialogue._pending or bool(self._calls.get(s) and self._calls[s].offered)
         r = self._handle(utterance, session_id, caller_id)
+        capability = bool(re.match(r"^(so |and |but |well )?(can|could|would|will|does|do) (it|she|this|that|the receptionist|your system|a receptionist|you guys) ", low)) \
+            and not re.search(r"\b(for me|me in|me a|us in|us a)\b.*\b(tomorrow|today|monday|tuesday|wednesday|thursday|friday)\b", low)
         offered_call = any(w in (self._last_speech.get(s) or "") for w in ("free call", "book")) \
             and bool(AFFIRM.match(low) or re.search(r"\b(let'?s|go over|sounds good|sure)\b", low))
         if r.action in ("offer_slots", "confirm_required", "closed_day") and not in_booking and not offered_call \
-                and not WANTS_BOOKING.search(low):
+                and (capability or not WANTS_BOOKING.search(low)):
             # They didn't ask to book ("what's 2+2?", "client portal charges?"): answer, don't schedule.
             hit = self.knowledge.best(utterance) if self.knowledge is not None else None
             timed = any(vars(parse_when(utterance, self.clock())).values()) and not re.search(r"\b(plus|minus|times|divided)\b", low)
@@ -624,6 +654,9 @@ class Brain:
                           speech=f"{body} Can I get your name, so Alex knows who he's talking to?")
         if r.action in ("faq", "knowledge") and not in_booking:
             r = self._both(utterance, r, s, caller_id)
+        if r.action == "faq" and "teaching sessions" in (r.speech or "") and not re.search(r"\b(lesson|session|class|teach|automation)", low):
+            sp = " ".join(x for x in re.split(r"(?<=\.)\s+", r.speech) if "teaching sessions" not in x)
+            r = Reply(r.text, r.action, r.committed_id, speech=sp)
         r = self._vary(r)
         if DISTRESS.search(low) and r.action != "goodbye":
             r = self._acknowledge(r, low, s)
@@ -698,11 +731,12 @@ class Brain:
 
     def _both(self, utterance: str, r: Reply, s: str, caller_id: str | None) -> Reply:
         """'How much is it and how long does it take?': answer each question, not just one."""
-        parts = [x.strip() for x in re.split(r"\band (how|what|do|does|can|is|who|when|where)\b", utterance, flags=re.I) if x and x.strip()]
+        parts = [x.strip() for x in re.split(r"\band (how|what|do|does|can|is|who|when|where|would|will|could|are)\b", utterance, flags=re.I) if x and x.strip()]
         qs, i = [], 0
         while i < len(parts):
             word = parts[i]
-            if word.lower() in ("how", "what", "do", "does", "can", "is", "who", "when", "where") and i + 1 < len(parts):
+            if word.lower() in ("how", "what", "do", "does", "can", "is", "who", "when", "where", "would", "will", "could", "are") \
+                    and i + 1 < len(parts):
                 word = word + " " + parts[i + 1]
                 i += 1
             if len(word.split()) >= 3:
@@ -714,6 +748,10 @@ class Brain:
         for q in qs:
             other = self._handle(q, s + "#both", caller_id)
             self._calls.pop(s + "#both", None)
+            if other.action not in ("faq", "knowledge") and self.knowledge is not None:
+                hit = self.knowledge.best(q)
+                if hit:
+                    other = Reply(hit[1], "knowledge", speech=hit[1])
             text = other.speech or other.text
             if other.action in ("faq", "knowledge") and text and all(text[:40] not in x for x in said):
                 said.append(text)
@@ -1069,7 +1107,7 @@ class Brain:
                 words = "I'm sorry, I can't reach the pharmacy from here. The number is on your pill bottle. Take care of yourself."
             return Reply(words, "wrong_number", speech=words)
         burned = [x for x in ROUND7 if "sorry that happened" in x[1]]
-        for pat, words in burned + POLICY + ROUND8 + ROUND7:
+        for pat, words in burned + ROUND10[:-1] + POLICY + ROUND10[-1:] + ROUND8 + ROUND7:
             if pat.search(low):
                 if "isn't the pharmacy" in words:
                     self._topic[session_id] = "wrong_number"
@@ -1135,6 +1173,11 @@ class Brain:
                 self.store.set_message_callback(self._last_msg[session_id], fixed)
             words = f"Thanks for catching that. I've got {spoken_number(fixed)}. {ANYTHING_ELSE}"
             return Reply(words, "number_fixed", speech=words)
+        if self._last.get(session_id) == "message_taken" and self._last_msg.get(session_id) and CALL_TIME.search(low) \
+                and len(low.split()) <= 10 and not QUESTION.search(low):
+            self.store.append_message(self._last_msg[session_id], f"(Best time: {text.strip().rstrip('.')})")
+            words = f"Got it, I'll let Alex know {text.strip().rstrip('.').lower()}. {ANYTHING_ELSE}"
+            return Reply(words, "message_detail", speech=words)
         num, rest = phone_in(text)
         if num and pending and re.search(r"\b(call me|call me back|callback|call back|have (him|alex) call)\b", low):
             self.dialogue._pending.pop(session_id, None)
