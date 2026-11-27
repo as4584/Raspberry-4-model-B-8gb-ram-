@@ -120,6 +120,9 @@ def run() -> dict:
         checks["stayed"] = (not real) or not any(a == "hangup" for a in acts)
         if sum(ch.isdigit() for t in turns for ch in t) >= 7 and real:   # a phone number was given
             checks["kept_lead"] = any(w in " ".join(texts) for w in ("oh", "nine", "two", "nueve", "dos", "all set"))
+        if "slot_taken" in acts:
+            rows.append({"name": name, "checks": {}, "misses": ["(time already booked in the lab; skipped)"], "actions": acts})
+            continue
         misses = [f"t{i}:{want}" for i, want in expects if want not in texts[i]]
         checks["expect"] = not misses
         for k, v in checks.items():
