@@ -46,14 +46,14 @@ def call(tmp_path, texts):
 
 def test_spanish_switches_voice_and_ears(tmp_path):
     asr, en, es = call(tmp_path, ["hola necesito", "gracias"])
-    assert asr.seen == ["en", "es"]
+    assert asr.seen == ["auto", "es"]       # first words: language detected; then Spanish
     assert "Hola, gracias por llamar." in es.said and "Muy bien." in es.said
     assert not any("Hola" in s for s in en.said)
 
 
 def test_english_call_stays_english(tmp_path):
     asr, en, es = call(tmp_path, ["hello", "thanks"])
-    assert asr.seen == ["en", "en"] and not es.said
+    assert asr.seen == ["auto", "en"] and not es.said
 
 
 def test_next_call_starts_in_english_again(tmp_path):

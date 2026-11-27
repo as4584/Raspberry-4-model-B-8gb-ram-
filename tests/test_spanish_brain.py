@@ -26,3 +26,14 @@ def test_spanish_price_and_deposit(brain):
 def test_spanish_never_falls_back_to_english(brain):
     r = talk(brain, "Hola, necesito ayuda", "blorf zibba")
     assert "sorry" not in said(r[1]) and "disculpe" in said(r[1])
+
+
+def test_english_ears_garbling_spanish_is_still_spanish(brain):
+    # What base.en made of "Hola, bueno, mira, necesito una página web para mi restaurante" on the Pi.
+    r = talk(brain, "Ola, Fiono, Mira, Nesocito una pajino whi paramiras tarante.")
+    assert r[0].action == "spanish"
+
+
+def test_garbled_spanish_is_never_hung_up_on(brain):
+    r = talk(brain, "Qanto Kusta.", "Hey Qui-Pagarin de Bizzito.", "Quiro Una Pajina-Khan Padido")
+    assert not any(x.action == "hangup" for x in r)
