@@ -1015,6 +1015,20 @@ class Brain:
                 save()
             n = f", {first(m['name'])}" if m.get("name") else ""
             return say("bye", "goodbye", name=n)
+        fix = re.match(r"^\W*(?i:no)\W+(?:(?i:es|soy|me llamo)\s+)?([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)?)\W*$", text.strip()) \
+            if m.get("name") and not name else None
+        if fix and fix.group(1).split()[0].lower() not in NOT_A_NAME:
+            name = fix.group(1)                      # "No, Rosa": she misheard the name
+        if name and m.get("name") and name != m["name"] and re.match(r"^\W*no\b", low):
+            m["name"] = name
+            self._names[s] = name
+            if self._booked.get(s):
+                self.store.set_name(self._booked[s], name, caller_id)
+            words = f"Perdón, {name.split()[0]}. Ya lo corregí."
+            if m.get("want") == "number" or not m.get("callback"):
+                words += " ¿Y su número de teléfono?"
+            m["last"] = words
+            return Reply(words, "name_fixed", speech=words)
         if name:
             m["name"] = name
             self._names[s] = name

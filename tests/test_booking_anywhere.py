@@ -59,3 +59,11 @@ def test_spanish_name_after_booking_is_saved_on_it(brain):
     talk(brain, "Hola, buenos días", "¿Me puede hacer una cita el martes a las dos de la tarde?", "Sí, por favor")
     talk(brain, "Me llamo Rosa Martínez")
     assert brain.store.active()[0].get("name") == "Rosa Martínez"
+
+
+def test_spanish_name_correction(brain):
+    talk(brain, "Hola, buenos días", "Me llamo Casa Martínez")
+    r = talk(brain, "No, me llamo Rosa Martínez")
+    assert "rosa" in said(r[0]) and "casa" not in said(r[0])
+    r = talk(brain, "No, Rosa")
+    assert "rosa" in said(r[0])
