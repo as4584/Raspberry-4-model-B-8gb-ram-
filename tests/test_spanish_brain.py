@@ -37,3 +37,8 @@ def test_english_ears_garbling_spanish_is_still_spanish(brain):
 def test_garbled_spanish_is_never_hung_up_on(brain):
     r = talk(brain, "Qanto Kusta.", "Hey Qui-Pagarin de Bizzito.", "Quiro Una Pajina-Khan Padido")
     assert not any(x.action == "hangup" for x in r)
+
+
+def test_heard_variants_of_deposit_and_goodbye(brain):
+    r = talk(brain, "Hola, necesito una página web", "Hay que pagar un depositó", "No gracias, Dios.")
+    assert "cincuenta" in said(r[1]) and r[2].action == "goodbye"

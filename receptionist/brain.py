@@ -146,9 +146,9 @@ SPANISH_WORDS = {"hola", "bueno", "mira", "necesito", "quiero", "página", "pagi
                  "habla", "hablar", "español", "espanol", "usted", "tengo", "negocio", "restaurante", "llamar", "número"}
 ES_DIGITS = ["cero", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve"]
 ES_NAME = re.compile(r"\b(?:me llamo|mi nombre es|soy|habla|le habla)\s+([A-ZÁÉÍÓÚÑa-záéíóúñ]+(?:\s+(?!mi\b|y\b|de\b)[A-ZÁÉÍÓÚÑa-záéíóúñ]+)?)", re.I)
-ES_BYE = re.compile(r"\b(adi[oó]s|chao|bye|eso es todo|es todo|nada m[aá]s|hasta luego)\b")
+ES_BYE = re.compile(r"^(no,? )?(muchas )?gracias\W*$|\bdios\W*$|\b(adi[oó]s|chao|bye|eso es todo|es todo|nada m[aá]s|hasta luego)\b")
 ES_PRICE = re.compile(r"\b(cu[aá]nto|precio|cuesta|cobran|costo)\b")
-ES_DEPOSIT = re.compile(r"\b(dep[oó]sito|pagos|plazos|adelanto|anticipo)\b")
+ES_DEPOSIT = re.compile(r"\b(dep[oó]sit\w*|pagos|plazos|adelanto|anticipo)\b")
 ES_BOOK = re.compile(r"\b(cita|reuni[oó]n|agendar|hablar con alex|llamada)\b")
 ES_TIME = re.compile(r"\b(cu[aá]nto tiempo|cu[aá]ndo est[aá]|r[aá]pido|demora|tarda)\b")
 ES = {
