@@ -61,7 +61,7 @@ MISHEARD = [(re.compile(p, re.I), w) for p, w in (
     (r"\b(into|in to|to) ?more\b(?! than)", "tomorrow"), (r"\bto morrow\b", "tomorrow"),
     (r"\bpoint ?meant\b", "appointment"), (r"\bhour\b(?= *\?| on| today)", "hours"),
     (r"\b(puff?ake|pasaic|passaick|passay it|pass a ick)\b", "Passaic"),
-    (r"\bto (?=p\.? ?m\b|a\.? ?m\b)", "two "), (r"\bto (a )?o?'? ?clock\b", "two o'clock"))]
+    (r"\bto (?=p\.? ?m\b|a\.? ?m\b)", "two "), (r"\b(shutter|satur|sader|sadder)day\b", "Saturday"), (r"\bto (a )?o?'? ?clock\b", "two o'clock"))]
 DATE_Q = re.compile(r"\bwhat('?s| is)? (the )?(day|date|time)( is it| today)?\b|\btoday'?s date\b|\bwhat day is (it|today)\b")
 UNKNOWN_MATCH = 0.6           # an unplaced question takes a checked answer only when it's a fair match
 STRONG_MATCH = 0.75          # override a keyword FAQ hit only when clearly closer (Pi: good 0.85+, wrong 0.61)
@@ -109,6 +109,17 @@ CALL_TIME = re.compile(r"\b(mornings?|afternoons?|evenings?|nights?|weekdays?|we
                        r"after \w+|before \w+|between \w+|early|late|lunch ?time|best (time )?is|today)\b")
 ON_TOPIC = re.compile(r"\b(website|site|web|app|price|cost|how much|book\w*|appointment|business|shop|store|salon|"
                       r"barber\w*|restaurant|alex|receptionist|phone|calls?|message|help|need|want)\b")
+ROUND17 = [
+    (re.compile(r"\b(you|she|it) can book (an )?appointments?\b.*\b(for (my|our)|customers?|clients?|salon|manicure|patients?)\b|"
+                r"\bbook (appointments?|customers?|clients?) for (my|our) (salon|shop|business|office|customers|clients)\b"),
+     "You're actually talking to one right now! I can book your customers into your calendar, answer their questions, "
+     "and take messages, day or night. "
+     "Alex sets it up with your services and hours on a free call."),
+    (re.compile(r"\b(pipe|pipes|basement|water heater|furnace|heat|ac|toilet)\b.*\b(burst\w*|flood\w*|leak\w*|broke|out|stopped)\b.*\b(\d{1,2} ?a\.? ?m|night|midnight|middle of the night)\b|"
+                r"\b(\d{1,2} ?a\.? ?m|night|midnight)\b.*\b(burst\w*|flood\w*|leak\w*)\b"),
+     "If a caller has an emergency, I mark the message urgent and get their name, number and what's happening, "
+     "and Alex can set it up so it reaches you right away, day or night."),
+]
 ROUND16 = [
     (re.compile(r"\b(flood\w*|burst|leak\w*|no heat|emergenc\w*|broke down|overflow\w*)\b.*\bwhat (do|does|would|will) (you|it|she) do\b|"
                 r"\bhow (do|does|would) (you|it|she) handle (an )?emergenc"),
@@ -652,6 +663,7 @@ class Brain:
         self._utter: dict[str, str] = {}
         self._callbacks: dict[str, str] = {}
         self._nowhere: dict[str, int] = {}
+        self._raw: dict[str, str] = {}             # this turn's words as heard, original case
         self._lang: dict[str, str] = {}            # "es" once the caller speaks Spanish
         self._es: dict[str, dict] = {}             # the Spanish call's message in progress
         self._topic: dict[str, str] = {}           # what the call is about ("receptionist" after the pitch)
@@ -850,6 +862,10 @@ class Brain:
         if r.action == "faq" and "teaching sessions" in (r.speech or "") and not re.search(r"\b(lesson|session|class|teach|automation)", low):
             sp = " ".join(x for x in re.split(r"(?<=\.)\s+", r.speech) if "teaching sessions" not in x)
             r = Reply(r.text, r.action, r.committed_id, speech=sp)
+        if r.action == "pitch":
+            self._topic.setdefault(s, "receptionist")
+        if "future appointment time" in (r.speech or r.text or ""):
+            r = Reply(r.text, "ask_day", speech="Sorry, that time has already passed. Which day works for you?")
         r = self._vary(r)
         if DISTRESS.search(low) and r.action != "goodbye":
             r = self._acknowledge(r, low, s)
@@ -1181,8 +1197,8 @@ class Brain:
         step = flow["step"]
         if step == "booking_name":
             self._msg.pop(s, None)
-            first_bit = re.split(r"[.,;:!?]", text.strip())[0]
-            name = self._name_from(first_bit) if len(first_bit.split()) <= 4 else None
+            first_bit = re.split(r"[.,;:!?]", self._raw.get(s, text).strip())[0]   # original case: names need capitals
+            name = self._name_from(first_bit) if len(first_bit.split()) <= 4 or SAID_NAME.search(first_bit) else None
             if not name:
                 return None                       # they moved on; handle the turn normally
             self._names[s] = name
@@ -1345,6 +1361,7 @@ class Brain:
 
     def _handle(self, utterance: str, session_id: str, caller_id: str | None = None) -> Reply:
         text = " ".join(utterance.strip().split())
+        self._raw[session_id] = text
         # Words phone-quality ASR mishears for common booking words.
         for heard, meant in MISHEARD:
             text = heard.sub(meant, text)
@@ -1357,7 +1374,7 @@ class Brain:
         st = self._calls.setdefault(session_id, _Call())
         pending = session_id in self.dialogue._pending
         # Whisper garbage (a decode loop like "[inainain...") or nothing intelligible: ask again.
-        if not re.search(r"[a-z]{2,}|[0-9]", low) or re.search(r"(\w{2,4})\1{3,}", low):
+        if not re.search(r"[a-záéíóúñü]{2,}|[0-9]", low) or re.search(r"(\w{2,4})\1{3,}", low):
             return Reply("Sorry, I didn't catch that.", "repeat",
                          speech="Sorry, I didn't catch that. Could you say that again?")
         if self._lang.get(session_id) == "es" and re.search(r"\b(english|ingl[eé]s)\b", low) and not re.search(r"\bno\b.*\bingl", low):
@@ -1406,7 +1423,7 @@ class Brain:
             return Reply(words, "wrong_number", speech=words)
         burned = [x for x in ROUND7 if "sorry that happened" in x[1]]
         texts = [x for x in ROUND14 if "like a text" in x[1]]
-        for pat, words in burned + ROUND16 + ROUND15 + [x for x in ROUND14 if x not in texts] + ROUND13 + ROUND12 + texts + ROUND11 + ROUND10[:-1] + POLICY + ROUND10[-1:] + ROUND8 + ROUND7:
+        for pat, words in burned + ROUND17 + ROUND16 + ROUND15 + [x for x in ROUND14 if x not in texts] + ROUND13 + ROUND12 + texts + ROUND11 + ROUND10[:-1] + POLICY + ROUND10[-1:] + ROUND8 + ROUND7:
             if words == "__PITCH__":
                 words = PITCH_SPEECH
             if pat.search(low):
@@ -1419,7 +1436,7 @@ class Brain:
                     if words == self._last_speech.get(session_id):
                         words = "Of course. I've noted it, and nobody will contact you. Sorry again for the trouble."
                     return Reply(words, "do_not_contact", speech=words)
-                return Reply(words, "knowledge", speech=words)
+                return Reply(words, "pitch" if words.startswith("You're actually talking") else "knowledge", speech=words)
         if re.search(r"\b(what'?s|what is|give me|can i (get|have)) (the|your|his|alex'?s) (phone )?number\b", low):
             contact = (self.profile.get("faq") or {}).get("contact") if self.profile else None
             if contact:
@@ -1629,6 +1646,12 @@ class Brain:
             return Reply(words or REAL_PERSON, "knowledge", speech=words or REAL_PERSON)
         # Waiting for yes/no and heard a short word that is neither (Ryan voice: "Yes." -> "Just"):
         # a person asks again rather than guessing either way.
+        if pending and len(low.split()) <= 4 and not NEGATE.match(low) and not AFFIRM.match(low):
+            nm = self._lead_name(utterance) if utterance[:1].isupper() else None
+            if nm and nm.split()[0].lower() not in NOT_A_NAME and not any(vars(parse_when(text, self.clock())).values()):
+                self._names[session_id] = nm         # "Mike Kowalski" before the yes: keep it, ask again kindly
+                words = f"Thanks, {nm.split()[0]}. Should I go ahead and book that time for you?"
+                return Reply("Confirm the booking?", "confirm_required", speech=words)
         if pending and len(low.split()) <= 2 and not NEGATE.match(low) \
                 and not any(vars(parse_when(text, self.clock())).values()) and not GOODBYE.search(low):
             return Reply("Sorry, was that a yes?", "confirm_again", speech="Sorry, was that a yes?")
@@ -1656,7 +1679,7 @@ class Brain:
                     pick = st.offered[i]
                     return self._book(f"{pick:%Y-%m-%d %H:%M}", session_id, caller_id=caller_id)
         bare = AFFIRM.match(low) and not pending and not any(vars(parse_when(text, now)).values())
-        if bare and st.date and st.time:          # "yes" to a single time we just proposed
+        if bare and st.date and st.time and self._last.get(session_id) in ("confirm_required", "offer_slots", "ask_which", "ask_time"):
             return self._book(f"{datetime.combine(st.date, st.time):%Y-%m-%d %H:%M}", session_id,
                                         caller_id=caller_id)
         if bare:
