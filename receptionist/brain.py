@@ -107,6 +107,24 @@ CALL_TIME = re.compile(r"\b(mornings?|afternoons?|evenings?|nights?|weekdays?|we
                        r"after \w+|before \w+|between \w+|early|late|lunch ?time|best (time )?is|today)\b")
 ON_TOPIC = re.compile(r"\b(website|site|web|app|price|cost|how much|book\w*|appointment|business|shop|store|salon|"
                       r"barber\w*|restaurant|alex|receptionist|phone|calls?|message|help|need|want)\b")
+ROUND13 = [
+    (re.compile(r"\b(how (would|will|does) (it|she|you) (greet|answer|sound)|show me how|hear how|what would (it|she|you) say|demo of the greeting|example greeting)\b"),
+     "Sure! For your business I'd answer something like: Thank you for calling, this is the virtual receptionist. "
+     "How can I help you today? Then I'd answer questions, take a message, or book an appointment. "
+     "Alex sets the exact words and tone with you, so it sounds just right."),
+    (re.compile(r"\b(both|two|multiple|several|all|each of) (of )?(my |our )?(locations|shops|stores|offices|branches)\b|\bmore than one (location|shop|store|office)\b"),
+     "Yes, one receptionist can answer for more than one location. I can ask which location the caller wants, "
+     "and send each message to the right place. Alex sets it up with you on a free call."),
+    (re.compile(r"\btake (pizza |food |phone |their |customer )?orders\b|\borders? by phone\b|\bphone orders?\b"),
+     "Yes, a receptionist like me can take orders by phone, reading back each order and sending it to you. "
+     "Alex sets up your menu and how orders reach you on a free call."),
+    (re.compile(r"\bclaims?\b"),
+     "Yes, I can take claim information after hours, like the caller's name, policy number, and what happened, "
+     "in a calm, professional way, and send it to you right away. Alex sets up the exact questions with you."),
+    (re.compile(r"\b(a bunch of|several|multiple|many|lots of|two|three) calls (at once|at the same time)\b|\bcalls at (once|the same time)\b|\brush\b"),
+     "Yes, a receptionist like me can answer more than one call at the same time, so nobody waits on hold during a rush. "
+     "Alex sizes it for your busiest times on a free call."),
+]
 ROUND12 = [
     (re.compile(r"\b(galler(y|ies)|client photos|photo albums?)\b"),
      "Yes, Alex can build private client galleries, password protected, so each client only sees their own photos. "
@@ -114,7 +132,7 @@ ROUND12 = [
     (re.compile(r"\bstorage\b|\b(thousands|lots) of (high[- ]res |hi[- ]res )?(photos|pictures|images|videos)\b"),
      "Alex sizes the storage for how many photos you have, so it fits your business. He can give you the details on a free call."),
     (re.compile(r"\b(take|collect|charge|get) (a |the )?deposits?\b.*\b(cash ?app|square|stripe|venmo|zelle|paypal|online|card|clients?|customers?|they)\b|"
-                r"\b(cash ?app|square|stripe|venmo|zelle|paypal)\b.*\bdeposits?\b|\bno[- ]show"),
+                r"\b(cash ?app|square|stripe|venmo|zelle|paypal)\b.*\bdeposits?\b|\bdeposits?\b.*\b(cash ?app|square|stripe|venmo|zelle|paypal)\b|\bno[- ]show"),
      "Yes, Alex can set your site up to take deposits and payments online, with something like Square or Stripe, "
      "so clients pay when they book and no-shows drop."),
     (re.compile(r"\b(can|could|would|will) (the )?(robot|she|it|you|receptionist)\b.*\b(ask|get|take)\b.*\b(car|problem|address|details|job|info\w*|location)\b"),
@@ -646,6 +664,13 @@ class Brain:
             # Spanish calls answer in Spanish; the English rephrasing below doesn't apply.
             return self._handle(utterance, session_id, caller_id)
         utterance = collapse_repeats(utterance)
+        after_evening = "prefer an evening" in (self._last_speech.get(s) or "")
+        if re.search(r"\b(set up|schedule|arrange|get) (a |me a )?(call|time|meeting) with (alex|him)\b|\bset (up )?a call\b", utterance, re.I) \
+                and not any(vars(parse_when(utterance, self.clock())).values()) \
+                or (after_evening and re.search(r"\b(daytime|day time|what do you have|what times|okay|ok|sure|fine)\b", utterance, re.I)
+                    and not re.search(r"\b(message|tell him)\b", utterance, re.I)):
+            # "Can I set up a call with Alex?" / "okay, daytime works, what do you have?": show the times.
+            utterance = "What times do you have open?"
         # "No, wait, a website for my barbershop": a restart, not a no.
         utterance = re.sub(r"^\s*(no+|nah)\W+(wait|hold on|sorry|i mean)\W+(?=\S+(\s+\S+){2,})", "", utterance, flags=re.I)
         utterance = re.sub(r"\b(book|schedule|set up|get)( me)? (a|an) (demo|demonstration)\b", r"\1 a call", utterance, flags=re.I)
@@ -1180,7 +1205,7 @@ class Brain:
                 words = "I'm sorry, I can't reach the pharmacy from here. The number is on your pill bottle. Take care of yourself."
             return Reply(words, "wrong_number", speech=words)
         burned = [x for x in ROUND7 if "sorry that happened" in x[1]]
-        for pat, words in burned + ROUND12 + ROUND11 + ROUND10[:-1] + POLICY + ROUND10[-1:] + ROUND8 + ROUND7:
+        for pat, words in burned + ROUND13 + ROUND12 + ROUND11 + ROUND10[:-1] + POLICY + ROUND10[-1:] + ROUND8 + ROUND7:
             if pat.search(low):
                 if "isn't the pharmacy" in words:
                     self._topic[session_id] = "wrong_number"
@@ -1263,36 +1288,18 @@ class Brain:
             self.dialogue._pending.pop(session_id, None)
             self._calls[session_id] = _Call()
             pending = False
-        if not num and pending and session_id not in self._msg and 7 <= len(spoken_digits(text)) <= 9 \
-                and self._lead_name(phone_in(utterance)[1] if False else re.sub(r"[\d\s,.-]+$", "", utterance)):
-            # "Jenny Park, 732 550 198": a yes with details, one digit lost on the line.
-            name = self._lead_name(re.sub(r"[\d\s,.-]+$", "", utterance))
-            r = self.dialogue.handle("yes", session_id, caller_id=caller_id)
-            if r.action == "booked" and r.committed_id:
-                self._booked[session_id] = r.committed_id
+        if pending and session_id not in self._msg and (num or 7 <= len(spoken_digits(text)) <= 9):
+            # "Dana Morales, 973..." while "want me to book it?" is open: keep the details, ask for the yes.
+            name = self._lead_name(re.sub(r"[\d\s,.-]+$", "", phone_in(utterance)[1])) or self._names.get(session_id)
+            if name:
                 self._names[session_id] = name
-                self.store.set_name(r.committed_id, name, caller_id)
-                body = (r.speech or r.text).replace(ANYTHING_ELSE, "").strip()
-                words = (f"Thanks, {name}. {body} I think I missed a digit of your number, though. "
-                         "Could you say it once more, slowly?")
-                self._msg[session_id] = {"step": "number", "name": name, "body": "Booked a call.", "tries": 1}
-                return Reply(r.text, r.action, r.committed_id, speech=words)
-            return r
-        if num and pending and session_id not in self._msg:
-            # "Dana Morales, 973..." in answer to "want me to book it?": that's a yes, with details.
-            name = self._lead_name(phone_in(utterance)[1]) or self._names.get(session_id)
-            r = self.dialogue.handle("yes", session_id, caller_id=caller_id)
-            self._callbacks[session_id] = num
-            if r.action == "booked" and r.committed_id:
-                self._booked[session_id] = r.committed_id
-                if name:
-                    self._names[session_id] = name
-                    self.store.set_name(r.committed_id, name, caller_id)
-                body = (r.speech or r.text).replace(ANYTHING_ELSE, "").strip()
-                words = (f"Thanks{', ' + name if name else ''}. {body} Alex will call you at {spoken_number(num)}. "
-                         f"{ANYTHING_ELSE}")
-                return Reply(r.text, r.action, r.committed_id, speech=words)
-            return r
+            if num:
+                self._callbacks[session_id] = num
+                got = f"I have your number as {spoken_number(num)}."
+            else:
+                got = "I think I missed a digit of your number, so I'll ask for it again in a moment."
+            words = f"Thanks{', ' + name if name else ''}. {got} Should I go ahead and book that time for you?"
+            return Reply("Confirm the booking?", "confirm_required", speech=words)
         if num and session_id not in self._msg and not pending:
             name = self._lead_name(phone_in(utterance)[1]) or self._names.get(session_id)
             if name:
