@@ -1017,6 +1017,9 @@ class Brain:
             return say("bye", "goodbye", name=n)
         if name:
             m["name"] = name
+            self._names[s] = name
+            if self._booked.get(s):
+                self.store.set_name(self._booked[s], name, caller_id)   # "Me llamo Rosa" after the booking
         if num:
             m["callback"] = num
         elif len(digits) >= 5 and m.get("want") in ("number", "details", None):

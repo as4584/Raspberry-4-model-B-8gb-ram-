@@ -53,3 +53,9 @@ def test_first_spanish_turn_asking_for_a_cita_books(brain):
     r = talk(brain, "Quiero una cita el jueves por la mañana.", "A las diez.")
     assert r[0].action in SLOTS and "jueves" in said(r[0])
     assert r[1].action in ("confirm_required", "booked")
+
+
+def test_spanish_name_after_booking_is_saved_on_it(brain):
+    talk(brain, "Hola, buenos días", "¿Me puede hacer una cita el martes a las dos de la tarde?", "Sí, por favor")
+    talk(brain, "Me llamo Rosa Martínez")
+    assert brain.store.active()[0].get("name") == "Rosa Martínez"
