@@ -77,6 +77,15 @@ SPAM_SPEECH = "Thanks, but we're not interested. Please remove this number from 
 NOWHERE_SPEECH = ("I'm sorry, I'm having trouble understanding, so I'll let you go for now. "
                   "Please call back anytime. Goodbye.")
 UNPRODUCTIVE = {"repeat", "unknown", "lost", "ask_again", "confirm_again"}
+PRODUCT_Q = re.compile(r"\b(answer|pick up|take|handle) (my|our|the) (phone|phones|calls?)\b|"
+                       r"\b(receptionist|something|someone|one) like you\b|"
+                       r"\b(do|set up|make|build) (this|that|one of these|something like this) for (my|our)\b|"
+                       r"\bcan (it|she) (book|fill|handle|schedule|cancel|take|answer|text)\b|"
+                       r"\b(calls?|phones?) for (my|our) (business|shop|salon|restaurant|office|store|company)\b", re.I)
+PITCH_SPEECH = ("You're actually talking to one right now! A receptionist like me can answer your calls any time, "
+                "answer questions about your business, book appointments, take messages, and hang up on spam calls. "
+                "Any business can get one, and the price is flexible based on your size. "
+                "Would you like a free call with Alex to set one up?")
 LOST_SPEECH = "I'm sorry, I didn't quite follow all of that. What would you like help with today?"
 # Never "outside what I can help with": an honest "I don't want to guess" plus a real next step.
 UNKNOWN_SPEECH = ("That's a good question, and I don't want to guess. I can book you a free call with Alex "
@@ -668,6 +677,10 @@ class Brain:
             r = self._message_step(flow, text, low, session_id, caller_id)
             if r is not None:
                 return r
+        if PRODUCT_Q.search(low) and not self._booked.get(session_id):
+            self._calls[session_id] = _Call()
+            self.dialogue._pending.pop(session_id, None)
+            return Reply(PITCH_SPEECH, "pitch", speech=PITCH_SPEECH)
         ref = self._booked.get(session_id)
         if ref and STATUS_Q.search(low):
             row = next((b for b in self.store.active() if b["id"] == ref), None)

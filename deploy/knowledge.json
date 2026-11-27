@@ -347,6 +347,98 @@
     "do you sell this phone system"
    ],
    "a": "Yes, any business can get a receptionist like me. The price is flexible and based on the size of your business, because we want it to work for you. Great service, at a great deal. I can book a free call with Alex to set it up."
+  },
+  {
+   "id": "privacy",
+   "q": [
+    "is your system HIPAA compliant",
+    "is it HIPAA compliant",
+    "who owns the call recordings and the data",
+    "is my customers' data private",
+    "where does the data go",
+    "do you record calls",
+    "is it secure"
+   ],
+   "a": "Good question. I run on a small computer in the office, not in the cloud, so calls stay local. I'm not HIPAA certified, though, so if you handle patient information, Alex can go over exactly what's protected on a free call."
+  },
+  {
+   "id": "integrations",
+   "q": [
+    "do you work with Square",
+    "can it connect to our scheduling software",
+    "does it work with my booking app",
+    "can it sync with my calendar",
+    "does it integrate with Dentrix",
+    "can it use Google Calendar"
+   ],
+   "a": "Alex can connect most tools, and he'll check yours on the free call so you know for sure before you pay anything."
+  },
+  {
+   "id": "lead_alerts",
+   "q": [
+    "do the leads get texted to my phone",
+    "will I get a text when someone calls",
+    "does it send me the messages",
+    "how do I get the messages",
+    "do I get notified"
+   ],
+   "a": "Yes, the idea is you get the caller's name, number, and message right away, so you never miss a lead. Alex can set it up the way you like on a free call."
+  },
+  {
+   "id": "maintenance",
+   "q": [
+    "do I need to know computers to keep it up",
+    "do I have to update the website myself",
+    "who takes care of the site",
+    "is it hard to manage",
+    "I'm not good with computers"
+   ],
+   "a": "Not at all. The ten dollars a month covers managing it for you, so you don't need to know anything about computers."
+  },
+  {
+   "id": "haggle",
+   "q": [
+    "my nephew does websites for three hundred, can you do seven hundred",
+    "can you do it cheaper",
+    "can you lower the price",
+    "that's too expensive",
+    "can you give me a discount",
+    "can you do it for less"
+   ],
+   "a": "I understand, and the price matters. Websites start at one thousand dollars, and that includes building it right and keeping it running. On a free call, Alex can look at what you really need and keep it within your budget."
+  },
+  {
+   "id": "online_ordering",
+   "q": [
+    "can customers order online for pickup",
+    "do you do online ordering",
+    "can people order food from my website",
+    "can my customers pay with a card online",
+    "can I take orders online"
+   ],
+   "a": "Yes, Alex can build online ordering, so customers order and pay from your website. He can go over how it would work for your restaurant on a free call."
+  },
+  {
+   "id": "solo",
+   "q": [
+    "is it just one guy",
+    "what if he gets hit by a bus",
+    "is it just one person",
+    "how big is your company",
+    "who would I be working with"
+   ],
+   "a": "LexMakesIt is Alex's business, so you work with him directly, the person who actually builds it. Your domain is always yours, and you can buy the code if you ever want it."
+  },
+  {
+   "id": "want_site",
+   "q": [
+    "I want a website for my woodworking",
+    "I need a website for my business",
+    "my daughter says I should have a website",
+    "I'd like a website for my shop",
+    "I need a site for my restaurant"
+   ],
+   "a": "That's wonderful, I'd love to help with that. Websites start at one thousand dollars, plus ten dollars a month, and Alex takes care of everything. Would you like a free call with him to talk about your idea?"
   }
  ]
 }
