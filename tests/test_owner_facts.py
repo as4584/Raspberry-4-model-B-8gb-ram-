@@ -34,7 +34,11 @@ def test_owner_fact_answered(q, want):
 
 @pytest.fixture
 def brain(tmp_path):
-    return Brain(BookingStore(str(tmp_path / "o.sqlite")), intents=FakeIntents(), clock=lambda: NOW, knowledge=kb())
+    from pathlib import Path
+    from receptionist.profile import load_profile
+    prof = load_profile(str(Path(__file__).resolve().parents[1] / "deploy" / "business_profile.json"))
+    return Brain(BookingStore(str(tmp_path / "o.sqlite")), intents=FakeIntents(), clock=lambda: NOW, knowledge=kb(),
+                 profile=prof)
 
 
 def test_deposit_beats_one_time_or_monthly(brain):
@@ -44,7 +48,7 @@ def test_deposit_beats_one_time_or_monthly(brain):
 
 def test_receptionist_price_is_the_sales_answer(brain):
     r = brain.handle("How much would it cost to get a receptionist like you for my salon?", "c", caller_id=CALLER)
-    assert "any business" in r.speech
+    assert "any business" in r.speech.lower()
 
 
 def test_stop_paying_reaches_cancel_answer():

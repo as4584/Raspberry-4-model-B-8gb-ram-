@@ -302,7 +302,11 @@
     "do you give refunds",
     "what's your refund policy",
     "am I locked in",
-    "can I get my money back"
+    "can I get my money back",
+    "if I stop paying do I lose my website",
+    "what if I stop paying",
+    "does my site go away if I cancel",
+    "am I locked into a year"
    ],
    "a": "There's no contract, so you can cancel whenever you want. If you cancel, your website stays up until the end of that month, then it's turned off. We don't offer refunds."
   },

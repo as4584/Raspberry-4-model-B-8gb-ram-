@@ -638,7 +638,7 @@ class Brain:
                 self.store.set_message_callback(self._last_msg[session_id], fixed)
             words = f"Thanks for catching that. I've got {spoken_number(fixed)}. {ANYTHING_ELSE}"
             return Reply(words, "number_fixed", speech=words)
-        if PRICE_SHAPE.search(low):
+        if PRICE_SHAPE.search(low) and not re.search(r"\b(deposit|payment plans?|installments?|split)\b", low):
             return Reply(PRICE_SHAPE_SPEECH, "knowledge", speech=PRICE_SHAPE_SPEECH)
         if MONTHLY_Q.search(low):
             return Reply(MONTHLY_SPEECH, "knowledge", speech=MONTHLY_SPEECH)

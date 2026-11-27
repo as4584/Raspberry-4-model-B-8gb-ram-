@@ -60,6 +60,10 @@ def answer(profile: dict | None, text: str) -> tuple[str, str | None]:
     faq = (profile or {}).get("faq") or {}
     # The site prices only websites and teaching; any other product's price is a quote,
     # never the website figure.
+    if any(w in t for w in TOPICS["price"]) and "receptionist" in t:
+        return "price", ("Any business can get a receptionist like me. The price is flexible and based on the size of "
+                         "your business, because we want it to work for you. Great service, at a great deal. "
+                         "I can book a free call with Alex to set it up.")
     if any(w in t for w in TOPICS["price"]) and any(w in t for w in PRICED_PER_PROJECT) \
             and not any(w in t for w in ("website", "web site", "teaching", "lesson", "class")):
         return "price", ("That's priced for each business after a free conversation with Alex. "
