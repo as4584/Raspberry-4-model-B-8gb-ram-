@@ -660,7 +660,9 @@ class Brain:
                 and (capability or not WANTS_BOOKING.search(low)):
             # They didn't ask to book ("what's 2+2?", "client portal charges?"): answer, don't schedule.
             hit = self.knowledge.best(utterance) if self.knowledge is not None else None
-            timed = any(vars(parse_when(utterance, self.clock())).values()) and not re.search(r"\b(plus|minus|times|divided)\b", low)
+            timed = any(vars(parse_when(utterance, self.clock())).values()) and not re.search(r"\b(plus|minus|times|divided)\b", low) \
+                and bool(re.search(r"\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow|morning|"
+                                   r"afternoon|evening|next week|o'?clock|noon|\d{1,2} ?(a\.? ?m|p\.? ?m)\b)", low))
             if hit:
                 r = Reply(hit[1], "knowledge", speech=hit[1])
             elif not timed:
