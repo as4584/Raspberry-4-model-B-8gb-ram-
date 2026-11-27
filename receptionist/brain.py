@@ -109,6 +109,12 @@ CALL_TIME = re.compile(r"\b(mornings?|afternoons?|evenings?|nights?|weekdays?|we
                        r"after \w+|before \w+|between \w+|early|late|lunch ?time|best (time )?is|today)\b")
 ON_TOPIC = re.compile(r"\b(website|site|web|app|price|cost|how much|book\w*|appointment|business|shop|store|salon|"
                       r"barber\w*|restaurant|alex|receptionist|phone|calls?|message|help|need|want)\b")
+ROUND16 = [
+    (re.compile(r"\b(flood\w*|burst|leak\w*|no heat|emergenc\w*|broke down|overflow\w*)\b.*\bwhat (do|does|would|will) (you|it|she) do\b|"
+                r"\bhow (do|does|would) (you|it|she) handle (an )?emergenc"),
+     "If a caller has an emergency, I mark the message urgent and get their name, number and what's happening, "
+     "and Alex can set it up so it reaches you right away, day or night."),
+]
 ROUND15 = [
     (re.compile(r"\bemergenc\w*\b.*\btext\w*\b|\btext\w*\b.*\bemergenc\w*\b"),
      "Yes. When a caller says it's an emergency, I mark it urgent, and Alex can set it up so it reaches you right away, "
@@ -829,6 +835,15 @@ class Brain:
                 self._msg[s] = {"step": "booking_name", "ref": r.committed_id}
                 r = Reply(r.text, r.action, r.committed_id,
                           speech=f"{body} Can I get your name, so Alex knows who he's talking to?")
+        if r.action in ("offer_slots", "confirm_required", "booked") and s not in self._names:
+            tail = re.split(r"[,.;]", utterance)[-1].strip() if "," in utterance or "." in utterance.strip()[:-1] else ""
+            tail = re.sub(r"^(i'?m|i am|my name is|name'?s|this is|it'?s)\s+", "", tail, flags=re.I)
+            w = tail.split()
+            if 1 <= len(w) <= 3 and all(x[:1].isupper() for x in w) and not re.search(r"\d", tail) \
+                    and w[0].lower() not in NOT_A_NAME:
+                self._names[s] = " ".join(w)
+                if r.action == "booked" and r.committed_id:
+                    self.store.set_name(r.committed_id, self._names[s], caller_id)
         if r.action in ("faq", "knowledge") and not in_booking:
             r = self._both(utterance, r, s, caller_id)
         if r.action == "faq" and "teaching sessions" in (r.speech or "") and not re.search(r"\b(lesson|session|class|teach|automation)", low):
@@ -1373,7 +1388,7 @@ class Brain:
             return Reply(words, "wrong_number", speech=words)
         burned = [x for x in ROUND7 if "sorry that happened" in x[1]]
         texts = [x for x in ROUND14 if "like a text" in x[1]]
-        for pat, words in burned + ROUND15 + [x for x in ROUND14 if x not in texts] + ROUND13 + ROUND12 + texts + ROUND11 + ROUND10[:-1] + POLICY + ROUND10[-1:] + ROUND8 + ROUND7:
+        for pat, words in burned + ROUND16 + ROUND15 + [x for x in ROUND14 if x not in texts] + ROUND13 + ROUND12 + texts + ROUND11 + ROUND10[:-1] + POLICY + ROUND10[-1:] + ROUND8 + ROUND7:
             if words == "__PITCH__":
                 words = PITCH_SPEECH
             if pat.search(low):
@@ -1673,6 +1688,10 @@ class Brain:
             self._calls[session_id] = _Call()
             return Reply("I can't do that, but I'm happy to help you book or answer a question.", "refuse",
                          speech="Sorry, I can't do that. But I'm happy to help you book, or answer a question.")
+        if intent == "human" and when.date and (when.time or when.part):
+            # "I'd like to talk to Alex Monday at 2": that's booking a call with him.
+            return self._handle(re.sub(r"\b(talk|speak) (to|with) alex\b", "book a call", text, flags=re.I)
+                                if TALK_TO.search(low) else "book " + text, session_id, caller_id)
         if intent in ("human", "emergency"):
             if intent == "emergency" and REAL_EMERGENCY.search(low):
                 return Reply("If this is an emergency, please hang up and dial 911.", "handoff",

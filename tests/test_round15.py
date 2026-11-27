@@ -62,3 +62,18 @@ def test_round15_answers(brain, q, want):
 def test_spanish_phone_orders_and_receptionist_price(brain):
     r = talk(brain, "Hola, ¿habla español?", "¿Puede tomar pedidos de pasteles por teléfono?", "¿Cuánto cuesta?")
     assert "teléfono" in said(r[1]) and "flexible" in said(r[2])
+
+
+def test_talk_to_alex_day_time_with_name_books(brain):
+    r = talk(brain, "I'd like to talk to Alex Monday at 2, Karen Whitfield")
+    assert r[0].action in SLOTS and "five five one" not in said(r[0])
+
+
+def test_name_after_the_time_is_kept(brain):
+    r = talk(brain, "Thursday at 4, Mike Russo", "Yes")
+    assert r[1].action == "booked" and "can i get your name" not in said(r[1])
+
+
+def test_emergency_what_do_you_do(brain):
+    r = talk(brain, "Say a basement is flooding at 2 AM, what does it do?")
+    assert r[0].action not in SLOTS and "urgent" in said(r[0])
