@@ -38,11 +38,15 @@ int main(int argc, char ** argv) {
         size_t a = line.find('\t'), b = line.find('\t', a == std::string::npos ? a : a + 1);
         if (a == std::string::npos || b == std::string::npos) { std::printf("ERR bad request\n"); std::fflush(stdout); continue; }
         path = line.substr(0, a); ac = line.substr(a + 1, b - a - 1); mt = line.substr(b + 1);
+        // Optional 4th field: language ("en", "es"); a multilingual model needs it, base.en ignores it.
+        std::string lang = "en";
+        size_t c = mt.find('	');
+        if (c != std::string::npos) { lang = mt.substr(c + 1); mt = mt.substr(0, c); }
         std::vector<float> pcm;
         if (!read_pcm(path, pcm) || pcm.empty()) { std::printf("ERR no audio\n"); std::fflush(stdout); continue; }
 
         whisper_full_params p = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
-        p.n_threads = threads; p.language = "en"; p.translate = false;
+        p.n_threads = threads; p.language = lang.c_str(); p.translate = false;
         p.no_context = true; p.single_segment = std::getenv("WD_SINGLE") != nullptr;
         // Timestamps are left on as in whisper-cli: no_timestamps changes decoding, not just printing.
         p.no_timestamps = std::getenv("WD_NO_TS") != nullptr;
