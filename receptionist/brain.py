@@ -413,6 +413,11 @@ def phone_in(text: str) -> tuple[str | None, str]:
 def collapse_repeats(text: str) -> str:
     """Phone ASR sometimes loops a sentence ('How much? How much? How much?'): keep one.
     A stutter ('I-I-I w-w-want a w-website') keeps the whole word."""
+    # Phone ASR writes a stutter as capital letters before the word ("BB Barbershop", "AW website").
+    def _drop(m):
+        tok = m.group(1).replace("-", "")
+        return "" if len(tok) >= 2 and tok[-1].lower() == m.group(2)[0].lower() else m.group(0)
+    text = re.sub(r"\b([A-Z](?:-?[A-Z]){0,3})\s+(?=(\w+))", _drop, text)
     text = re.sub(r"\b(?:(\w{1,3})-)+(\w+)", lambda m: m.group(2) if m.group(2).lower().startswith(m.group(1).lower()[:1]) else m.group(0), text)
     parts = re.split(r"(?<=[.!?])\s+", text.strip())
     out = []

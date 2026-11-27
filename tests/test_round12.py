@@ -80,3 +80,16 @@ def test_quien_habla(brain):
 def test_spanish_stock(brain):
     r = talk(brain, "Aló, buenos días", "¿Cómo sabe si tengo leche o pan?")
     assert "productos" in said(r[1]) or "lista" in said(r[1])
+
+
+@pytest.mark.parametrize("heard,want", [("H8 Thai. AIIW want AW website.", "want website"),
+                                        ("FF for my BB Barbershop.", "for my Barbershop"),
+                                        ("And in no, W-W website for my BB barbershop.", "website for my barbershop")])
+def test_asr_stutter_letters_dropped(heard, want):
+    assert want in collapse_repeats(heard)
+
+
+def test_asr_stutter_call_is_understood(brain):
+    r = talk(brain, "H8 Thai. AIIW want AW website.", "FF for my BB Barbershop.")
+    assert any("thousand" in said(x) or "website" in said(x) for x in r)
+    assert not any(x.action == "hangup" for x in r)
