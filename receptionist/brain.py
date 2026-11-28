@@ -685,6 +685,7 @@ class Brain:
         self._nowhere: dict[str, int] = {}
         self._raw: dict[str, str] = {}
         self._answers: dict[str, int] = {}
+        self._funnel: dict[str, int] = {}           # misses turned into an offer this call
         self._last_real: dict[str, str] = {}        # last real answer (not "take your time")          # answers given with no booking/message yet
         self._offered_follow: dict[str, bool] = {}  # offered the next step already
         self._asked_before_bye: dict[str, bool] = {}             # this turn's words as heard, original case
@@ -940,6 +941,38 @@ class Brain:
             r = Reply(r.text, r.action, r.committed_id, speech=again)
         if fragment:
             r = Reply(r.text, r.action, speech="Sorry, I didn't quite catch that. Could you say it again?")
+        elif (r.action in ("unknown", "lost") or (r.action == "reply" and (r.speech or "").endswith("What can I help you with?")
+                                                     and len(low.split()) >= 4)) \
+                and (not in_booking or self._funnel.get(s)) and not self._msg.get(s) and not self._booked.get(s) \
+                and self._lang.get(s) != "es" and r.speech and "?" in r.speech[-3:]:
+            # Guided design: never a dead end. First miss -> a real time with Alex; then a message too.
+            n = self._funnel.get(s, 0)
+            self._funnel[s] = n + 1
+            # Keep any feelings-first line ("Oh no, I'm sorry...") and drop only the dead-end sentence.
+            keep = r.speech
+            for dead in (UNKNOWN_SPEECH, LOST_SPEECH, NOT_FOLLOW_SPEECH,
+                         "I'm not sure on that one either, I'm sorry. Alex would know, though. Should I take a message for him, or book you a free call?"):
+                keep = keep.replace(dead, "")
+            keep = keep.strip()
+            if keep and keep[-1] not in ".!?":
+                keep += "."
+            about = re.search(r"\b(tell me|know|learn|hear)\b.*\babout\b|\bmore about (the|your) (business|company)\b", low)
+            lead = ""
+            if re.search(r"\bweb ?sites?\b|\bsite\b", low) and not about:
+                lead = "I'd love to help with a website. They start at one thousand dollars, plus ten dollars a month. "
+            elif about:
+                lead = ((self.profile.get("faq") or {}).get("services") or "").split(" What kind")[0] + " " if self.profile else ""
+            times = self._soonest_times(s, caller_id) if n == 0 else None
+            if times:
+                ask = "Would one of those work?" if re.search(r",| or ", times) else "Would that work?"
+                offer = (f"Alex can go over the details with you on a quick free call, and I can book it right now. "
+                         f"The soonest I have is {times}. {ask}") if about else (
+                         f"Good question! I can book you a quick free call with Alex to go over that. "
+                         f"The soonest I have is {times}. {ask}")
+            else:
+                offer = "No problem. I can book you a free call with Alex, or take a message for him. Which would you prefer?"
+            words = " ".join(x for x in (keep, lead.strip(), offer) if x)
+            r = Reply(r.text, r.action, speech=words)
         has_lead = bool(self._booked.get(s) or self._last_msg.get(s) or self._msg.get(s) or self._callbacks.get(s))
         if r.action in ("faq", "knowledge", "pitch") and not has_lead and self._lang.get(s) != "es":
             self._answers[s] = self._answers.get(s, 0) + 1
@@ -1004,6 +1037,15 @@ class Brain:
                 and "'" not in dedup[1] and dedup[1].lower() not in NOT_A_NAME | {"my", "i", "and", "i'm"}:
             name.append(dedup[1])
         return " ".join(w[0].upper() + w[1:] for w in name)
+
+    def _soonest_times(self, s: str, caller_id: str | None) -> str | None:
+        """'today at ten a m, eleven a m, or two p m' (and those slots stay on offer), or None."""
+        slots = self._handle("What times do you have open?", s, caller_id)
+        st = self._calls.get(s)
+        if slots.action != "offer_slots" or not (st and st.offered):
+            return None
+        times = re.sub(r"^(?:\w+[.!]\s+)?(?:the soonest i have is |[a-z]+ i have )", "", (slots.speech or ""), flags=re.I)
+        return re.split(r"\. ", times)[0].rstrip(".")
 
     def _steer_low_effort(self, utterance: str, s: str, caller_id: str | None) -> str | None:
         """'Close an appointment for the dumbest of users' (owner): rewrite vague turns into what they mean."""

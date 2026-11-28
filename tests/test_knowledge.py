@@ -78,8 +78,9 @@ def test_close_checked_answer_beats_a_keyword_hit(lexkb):
 
 
 def test_off_topic_is_declined_politely_not_sent_to_alex(lexkb):
-    s = lexkb.handle("purple elephant quantum soup", "c", caller_id=CALLER).speech
-    assert "LexMakesIt" in s and "go over it" not in s
+    # Guided design (owner, 2026-11-27): no dead end; she offers the easiest next step.
+    s = lexkb.handle("purple elephant quantum soup", "c", caller_id=CALLER).speech.lower()
+    assert not any(d in s for d in ("not sure i follow", "don't want to guess", "didn't quite follow", "not sure on that one")) and ("free call" in s or "message" in s)
 
 
 @pytest.mark.parametrize("q", ["Am I speaking with a real person right now?", "Are you a real person?", "Is this a human?"])

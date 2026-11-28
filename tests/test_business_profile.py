@@ -35,7 +35,7 @@ def profile(tmp_path, **over):
 
 def test_greeting_uses_the_business_name_and_stays_cacheable(tmp_path):
     g = greeting_for(profile(tmp_path))
-    assert g == "Hi, thanks for calling LexMakesIt. How can I help you today?"
+    assert g.startswith("Hi, thanks for calling LexMakesIt.") and "free call" in g and "message" in g
     assert all(len(s) <= 40 for s in g.split(". "))
 
 

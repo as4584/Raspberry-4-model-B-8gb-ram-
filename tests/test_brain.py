@@ -464,10 +464,9 @@ def test_a_long_ramble_it_cannot_place_gets_a_human_check_in(brain):
     said = ("I'm not going to do anything for me. Oh, it's not going to be anything, and it's a great "
             "experience of brain and then the whole day. I've just been afraid right over it.")
     r = brain.handle(said, "c", caller_id=CALLER)
-    if r.action == "lost":
-        assert "didn't quite follow" in r.speech.lower() and "outside" not in r.speech.lower()
-    else:
-        assert r.action not in ("unknown",)
+    # Guided design (owner, 2026-11-27): no dead end, the easiest next step instead.
+    sp = r.speech.lower()
+    assert "outside" not in sp and ("free call" in sp or "message" in sp or r.action not in ("unknown", "lost"))
 
 
 @pytest.mark.parametrize("said", ["Talk soon.", "Okay, talk to you soon.", "Alright, take care.", "See ya."])

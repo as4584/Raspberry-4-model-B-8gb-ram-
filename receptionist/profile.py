@@ -50,8 +50,10 @@ def load_profile(path: str) -> dict:
 
 def greeting_for(profile: dict | None) -> str:
     name = (profile or {}).get("name")
-    return f"Hi, thanks for calling {name}. How can I help you today?" if name else \
-        "Hi, thanks for calling. How can I help you today?"
+    # A menu, so every caller knows what to ask for (guided design, owner 2026-11-27).
+    # Short sentences: each is cached as its own audio clip.
+    menu = "I can tell you our prices. I can book a free call with Alex. Or I can take a message. What would you like?"
+    return f"Hi, thanks for calling {name}. {menu}" if name else f"Hi, thanks for calling. {menu}"
 
 
 def answer(profile: dict | None, text: str) -> tuple[str, str | None]:
