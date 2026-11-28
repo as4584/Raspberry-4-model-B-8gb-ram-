@@ -967,7 +967,8 @@ class Brain:
                 ask = "Would one of those work?" if re.search(r",| or ", times) else "Would that work?"
                 offer = (f"Alex can go over the details with you on a quick free call, and I can book it right now. "
                          f"The soonest I have is {times}. {ask}") if about else (
-                         f"Good question! I can book you a quick free call with Alex to go over that. "
+                         f"{'Good question! ' if QUESTION.search(low) or '?' in utterance else 'No problem! '}"
+                         f"I can book you a quick free call with Alex to go over that. "
                          f"The soonest I have is {times}. {ask}")
             else:
                 offer = "No problem. I can book you a free call with Alex, or take a message for him. Which would you prefer?"
